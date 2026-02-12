@@ -403,14 +403,20 @@ export default function FunnelDashboard() {
   const [dimension, setDimension] = useState<
     "utmChannel" | "productFranchise" | "contentType"
   >("utmChannel");
+  const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
 
   const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
   const rows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
 
   const filtered = useMemo(() => {
-    if (stageFilter === "ALL") return rows;
-    return rows.filter((r) => r.stage === stageFilter);
-  }, [rows, stageFilter]);
+    const stageFiltered =
+      stageFilter === "ALL" ? rows : rows.filter((r) => r.stage === stageFilter);
+
+    if (contentTypeFilter === "ALL") return stageFiltered;
+    return stageFiltered.filter(
+      (r) => (r.contentType || "(unattributed)") === contentTypeFilter,
+    );
+  }, [rows, stageFilter, contentTypeFilter]);
 
   const byStage = useMemo(() => {
     const groups: Record<FunnelStage, NormalizedRow[]> = {
@@ -454,6 +460,12 @@ export default function FunnelDashboard() {
 
   const totalRows = rows.length;
   const unknownCount = byStage.UNKNOWN.length;
+
+  const contentTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) set.add(r.contentType || "(unattributed)");
+    return ["ALL", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows]);
 
   const topByStage: TopByStage = useMemo(() => {
     const compute = (stage: StageKey) => {
@@ -781,6 +793,29 @@ export default function FunnelDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Content type</span>
+                    <Select value={contentTypeFilter} onValueChange={setContentTypeFilter}>
+                      <SelectTrigger
+                        className="h-9 w-[220px] rounded-xl"
+                        data-testid="select-content-type"
+                      >
+                        <SelectValue placeholder="All types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contentTypeOptions.map((opt) => (
+                          <SelectItem
+                            key={opt}
+                            value={opt}
+                            data-testid={`option-content-type-${opt.replace(/\s+/g, "-").toLowerCase()}`}
+                          >
+                            {opt === "ALL" ? "All types" : opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Breakdown</span>
                     <Select
                       value={dimension}
@@ -821,7 +856,7 @@ export default function FunnelDashboard() {
                       className="rounded-xl"
                       data-testid="badge-rows"
                     >
-                      {totalRows} rows
+                      {filtered.length} rows
                     </Badge>
                     <Badge
                       variant="secondary"
