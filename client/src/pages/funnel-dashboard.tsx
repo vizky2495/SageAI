@@ -59,8 +59,17 @@ type NormalizedRow = {
   contentType?: string;
   engagedSessions?: number;
   sessions?: number;
+  pageViews?: number;
+  timeSpentSeconds?: number;
+  scrollDepth?: number;
+  newUsers?: number;
+  returningUsers?: number;
+  newsletterSignups?: number;
+  nextContentViews?: number;
   newContacts?: number;
+  formSubmissions?: number;
   mqls?: number;
+  qdcs?: number;
   sqos?: number;
   leadScore?: number;
 };
@@ -226,6 +235,56 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       pickFirst(r, ["sessions", "visits", "traffic", "visitors"]),
     );
 
+    const pageViews = toNumber(
+      pickFirst(r, ["pageviews", "page_views", "views", "page_views_total"]),
+    );
+
+    const timeSpentSeconds = toNumber(
+      pickFirst(r, [
+        "avg_time_on_page",
+        "time_on_page",
+        "time_spent_seconds",
+        "avg_time_seconds",
+      ]),
+    );
+
+    const scrollDepth = toNumber(
+      pickFirst(r, [
+        "scroll_depth",
+        "avg_scroll_depth",
+        "max_scroll_depth",
+      ]),
+    );
+
+    const newUsers = toNumber(
+      pickFirst(r, [
+        "new_users",
+        "new_user",
+        "first_time_users",
+        "first_time_contacts",
+      ]),
+    );
+
+    const returningUsers = toNumber(
+      pickFirst(r, ["returning_users", "returning_user"]),
+    );
+
+    const newsletterSignups = toNumber(
+      pickFirst(r, [
+        "newsletter_signups",
+        "newsletter_opt_ins",
+        "newsletter_subscriptions",
+      ]),
+    );
+
+    const nextContentViews = toNumber(
+      pickFirst(r, [
+        "next_content_views",
+        "subsequent_pageviews",
+        "secondary_content_views",
+      ]),
+    );
+
     const newContacts = toNumber(
       pickFirst(r, [
         "new_contacts",
@@ -236,7 +295,27 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       ]),
     );
 
+    const formSubmissions = toNumber(
+      pickFirst(r, [
+        "form_submissions",
+        "form_submission",
+        "submissions",
+        "forms_submitted",
+      ]),
+    );
+
     const mqls = toNumber(pickFirst(r, ["mqls", "mql", "mql_flag", "is_mql"]));
+
+    const qdcs = toNumber(
+      pickFirst(r, [
+        "qdc",
+        "qdcs",
+        "qdc_flag",
+        "qdc_count",
+        "qualified_discovery_calls",
+      ]),
+    );
+
     const sqos = toNumber(
       pickFirst(r, ["sqos", "sqo", "sqo_flag", "is_sqo", "sql"]),
     );
@@ -259,8 +338,17 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       contentType,
       engagedSessions,
       sessions,
+      pageViews,
+      timeSpentSeconds,
+      scrollDepth,
+      newUsers,
+      returningUsers,
+      newsletterSignups,
+      nextContentViews,
       newContacts,
+      formSubmissions,
       mqls,
+      qdcs,
       sqos,
       leadScore,
     };
@@ -297,16 +385,16 @@ const stageMeta: Record<FunnelStage, { label: string; tone: string }> = {
   UNKNOWN: { label: "UNKNOWN", tone: "bg-muted text-muted-foreground border-border" },
 };
 
-const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,NEW_CONTACTS,MQL_FLAG,SQO_FLAG,FORM_SCORE1
-TOFU_Cloud_Security_101,Organic,Search,CloudShield,Blog,NCA,980,1520,64,0,0,18
-TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Landing Page,NCA,720,1200,51,0,0,22
-MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Webinar,NCA,410,620,44,21,2,51
-MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Whitepaper,NCA,330,470,39,17,1,47
-BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Landing Page,NCA,120,200,28,14,9,72
-BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Case Study,NCA,140,210,19,9,7,68
-TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Blog,NCA,640,980,41,0,0,16
-MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Landing Page,NCA,260,420,25,10,1,44
-BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Landing Page,NCA,90,140,10,6,4,66`;
+const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,PAGEVIEWS,AVG_TIME_ON_PAGE,AVG_SCROLL_DEPTH,NEW_USERS,RETURNING_USERS,NEWSLETTER_SIGNUPS,NEXT_CONTENT_VIEWS,NEW_CONTACTS,FORM_SUBMISSIONS,MQL_FLAG,QDC_COUNT,SQO_FLAG,FORM_SCORE1
+TOFU_Cloud_Security_101,Organic,Search,CloudShield,Blog,NCA,980,1520,4200,64,58,510,210,22,380,64,18,0,0,0,18
+TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Landing Page,NCA,720,1200,3100,49,52,402,160,19,240,51,16,0,0,0,22
+MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Webinar,NCA,410,620,1200,71,63,180,110,8,120,44,44,21,6,2,51
+MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Whitepaper,NCA,330,470,1400,83,66,190,120,11,150,39,39,17,4,1,47
+BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Landing Page,NCA,120,200,640,58,50,70,60,2,44,28,28,14,7,9,72
+BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Case Study,NCA,140,210,880,92,71,90,75,4,62,19,19,9,3,7,68
+TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Blog,NCA,640,980,2600,61,56,350,180,14,190,41,10,0,0,0,16
+MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Landing Page,NCA,260,420,1100,77,65,140,95,9,130,25,25,10,2,1,44
+BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Landing Page,NCA,90,140,520,44,47,55,45,1,38,10,10,6,2,4,66`;
 
 export default function FunnelDashboard() {
   const [csvText, setCsvText] = useState<string>(mockCSV);
@@ -341,15 +429,20 @@ export default function FunnelDashboard() {
 
   const tofuEngaged = sum(tofuBase, "engagedSessions");
   const tofuSessions = sum(tofuBase, "sessions");
+  const tofuNewUsers = sum(tofuBase, "newUsers");
   const tofuNewContacts = sum(tofuBase, "newContacts");
+  const tofuHero = tofuNewUsers || tofuNewContacts;
   const tofuDenom = tofuEngaged || tofuSessions;
-  const tofuConv = pct(tofuNewContacts, tofuDenom);
+  const tofuConv = pct(tofuHero, tofuDenom);
 
+  const mofuContacts = sum(mofuBase, "formSubmissions") || sum(mofuBase, "newContacts");
   const mofuNewContacts = sum(mofuBase, "newContacts");
   const mofuMqls = sum(mofuBase, "mqls");
-  const mofuConv = pct(mofuMqls, mofuNewContacts || 0);
+  const mofuQdcs = sum(mofuBase, "qdcs");
+  const mofuConv = pct(mofuMqls, mofuContacts || mofuNewContacts || 0);
 
   const bofuSqos = sum(bofuBase, "sqos");
+  const bofuQdcs = sum(bofuBase, "qdcs");
 
   const qualityMqlScores = mofuBase
     .filter((r) => (r.mqls ?? 0) > 0 && typeof r.leadScore === "number")
@@ -366,7 +459,11 @@ export default function FunnelDashboard() {
     const compute = (stage: StageKey) => {
       const base = byStage[stage];
       const metricKey: keyof NormalizedRow =
-        stage === "TOFU" ? "engagedSessions" : stage === "MOFU" ? "mqls" : "sqos";
+        stage === "TOFU"
+          ? (sum(base, "newUsers") ? "newUsers" : "newContacts")
+          : stage === "MOFU"
+            ? "mqls"
+            : "sqos";
 
       const roll = new Map<
         string,
@@ -411,16 +508,40 @@ export default function FunnelDashboard() {
   const dimensionData = useMemo(() => {
     const roll = new Map<
       string,
-      { key: string; engaged: number; contacts: number; mqls: number; sqos: number }
+      {
+        key: string;
+        engaged: number;
+        views: number;
+        newUsers: number;
+        returningUsers: number;
+        contacts: number;
+        mqls: number;
+        qdcs: number;
+        sqos: number;
+      }
     >();
 
     for (const r of filtered) {
       const key = (r[dimension] as string | undefined) || "(unattributed)";
       const cur =
-        roll.get(key) || { key, engaged: 0, contacts: 0, mqls: 0, sqos: 0 };
+        roll.get(key) || {
+          key,
+          engaged: 0,
+          views: 0,
+          newUsers: 0,
+          returningUsers: 0,
+          contacts: 0,
+          mqls: 0,
+          qdcs: 0,
+          sqos: 0,
+        };
       cur.engaged += r.engagedSessions ?? 0;
-      cur.contacts += r.newContacts ?? 0;
+      cur.views += r.pageViews ?? 0;
+      cur.newUsers += r.newUsers ?? 0;
+      cur.returningUsers += r.returningUsers ?? 0;
+      cur.contacts += r.formSubmissions ?? r.newContacts ?? 0;
       cur.mqls += r.mqls ?? 0;
+      cur.qdcs += r.qdcs ?? 0;
       cur.sqos += r.sqos ?? 0;
       roll.set(key, cur);
     }
@@ -428,8 +549,8 @@ export default function FunnelDashboard() {
     return Array.from(roll.values())
       .sort(
         (a, b) =>
-          b.mqls + b.sqos + b.contacts + b.engaged -
-          (a.mqls + a.sqos + a.contacts + a.engaged),
+          b.sqos + b.mqls + b.contacts + b.newUsers + b.views + b.engaged -
+          (a.sqos + a.mqls + a.contacts + a.newUsers + a.views + a.engaged),
       )
       .slice(0, 10);
   }, [filtered, dimension]);
@@ -550,29 +671,19 @@ export default function FunnelDashboard() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs text-muted-foreground">TOFU</div>
-                    <div
-                      className="mt-1 text-2xl font-[650] tracking-tight"
-                      data-testid="text-tofu-engaged"
-                    >
-                      {formatCompact(tofuEngaged)}
+                    <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-tofu-hero">
+                      {formatCompact(tofuHero)}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      Engaged sessions
+                      New users / contacts
                     </div>
                   </div>
-                  <Badge
-                    className={`border ${stageMeta.TOFU.tone}`}
-                    data-testid="badge-tofu"
-                  >
-                    {formatPct(tofuConv)} contact rate
+                  <Badge className={`border ${stageMeta.TOFU.tone}`} data-testid="badge-tofu">
+                    {formatPct(tofuConv)} new-user rate
                   </Badge>
                 </div>
-                <div
-                  className="mt-3 text-xs text-muted-foreground"
-                  data-testid="text-tofu-notes"
-                >
-                  Using {tofuEngaged ? "engaged sessions" : "sessions"} as
-                  denominator.
+                <div className="mt-3 text-xs text-muted-foreground" data-testid="text-tofu-notes">
+                  Hero metric uses {tofuNewUsers ? "new users" : "new contacts"}. Denominator uses {tofuEngaged ? "engaged sessions" : "sessions"}.
                 </div>
               </Card>
 
@@ -580,10 +691,7 @@ export default function FunnelDashboard() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs text-muted-foreground">MOFU</div>
-                    <div
-                      className="mt-1 text-2xl font-[650] tracking-tight"
-                      data-testid="text-mofu-mqls"
-                    >
+                    <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-mofu-mqls">
                       {formatCompact(mofuMqls)}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">MQLs</div>
@@ -595,13 +703,11 @@ export default function FunnelDashboard() {
                     {formatPct(mofuConv)} MQL rate
                   </Badge>
                 </div>
-                <div
-                  className="mt-3 text-xs text-muted-foreground"
-                  data-testid="text-mofu-notes"
-                >
+                <div className="mt-3 text-xs text-muted-foreground" data-testid="text-mofu-notes">
                   {avgMqlScore !== undefined
                     ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
                     : "Lead score not available"}
+                  {mofuQdcs ? ` \u00b7 QDCs: ${formatCompact(mofuQdcs)}` : " \u00b7 QDC not tracked"}
                 </div>
               </Card>
 
@@ -617,18 +723,12 @@ export default function FunnelDashboard() {
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">SQOs</div>
                   </div>
-                  <Badge
-                    className={`border ${stageMeta.BOFU.tone}`}
-                    data-testid="badge-bofu"
-                  >
-                    QDC not tracked
+                  <Badge className={`border ${stageMeta.BOFU.tone}`} data-testid="badge-bofu">
+                    {bofuQdcs ? `${formatCompact(bofuQdcs)} QDCs` : "QDC not tracked"}
                   </Badge>
                 </div>
-                <div
-                  className="mt-3 text-xs text-muted-foreground"
-                  data-testid="text-bofu-notes"
-                >
-                  QDC → SQO conversion is skipped (no QDC data).
+                <div className="mt-3 text-xs text-muted-foreground" data-testid="text-bofu-notes">
+                  {bofuQdcs ? `QDC \u2192 SQO: ${formatPct(pct(bofuSqos, bofuQdcs))}` : "QDC \u2192 SQO conversion is skipped (no QDC data)."}
                 </div>
               </Card>
             </div>
@@ -888,8 +988,8 @@ export default function FunnelDashboard() {
                       <ReTooltip />
                       <Area
                         type="monotone"
-                        dataKey="contacts"
-                        name="New Contacts"
+                        dataKey="mqls"
+                        name="MQLs"
                         stroke="hsl(var(--chart-1))"
                         fill="url(#g1)"
                         strokeWidth={2}
@@ -909,6 +1009,8 @@ export default function FunnelDashboard() {
                         <span>{formatCompact(d.contacts)} contacts</span>
                         <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
                         <span>{formatCompact(d.mqls)} MQLs</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span>{formatCompact(d.qdcs)} QDCs</span>
                         <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
                         <span>{formatCompact(d.sqos)} SQOs</span>
                       </div>
