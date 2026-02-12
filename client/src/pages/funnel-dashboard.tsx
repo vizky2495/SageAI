@@ -620,14 +620,14 @@ export default function FunnelDashboard() {
                       className="text-balance text-2xl font-[650] tracking-tight"
                       data-testid="text-title"
                     >
-                      FunnelScope
+                      Content Intelligence Analyst
                     </h1>
                     <Badge
                       variant="secondary"
                       className="border bg-card/70 backdrop-blur"
                       data-testid="badge-mode"
                     >
-                      Daily CSV funnel analytics
+                      CIA dashboard
                     </Badge>
                   </div>
                   <p
