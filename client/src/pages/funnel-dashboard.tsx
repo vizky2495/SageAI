@@ -1,3 +1,4 @@
+import TopNav from "@/components/top-nav";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -460,13 +461,14 @@ export default function FunnelDashboard() {
 
   return (
     <div className="min-h-screen">
+      <TopNav />
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,hsl(var(--chart-1)/0.16),transparent_58%),radial-gradient(900px_circle_at_80%_0%,hsl(var(--chart-2)/0.14),transparent_62%),radial-gradient(900px_circle_at_75%_80%,hsl(var(--chart-3)/0.12),transparent_58%)]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/40" />
         <div className="absolute inset-0 grain" />
       </div>
 
-      <div className="mx-auto w-full max-w-6xl px-4 py-10">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
