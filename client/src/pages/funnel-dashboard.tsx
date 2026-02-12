@@ -1,0 +1,1132 @@
+import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  FileUp,
+  Filter,
+  LineChart,
+  Sparkles,
+  Table as TableIcon,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip as ReTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+type FunnelStage = "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
+
+type ParsedRow = Record<string, string | number | null | undefined>;
+
+type NormalizedRow = {
+  id: string;
+  content: string;
+  stage: FunnelStage;
+  utmChannel?: string;
+  utmMedium?: string;
+  utmContent?: string;
+  productFranchise?: string;
+  objective?: string;
+  contentType?: string;
+  engagedSessions?: number;
+  sessions?: number;
+  newContacts?: number;
+  mqls?: number;
+  sqos?: number;
+  leadScore?: number;
+};
+
+type TopContentRow = {
+  content: string;
+  product: string;
+  channel: string;
+  value: number;
+  newContacts: number;
+};
+
+type StageKey = Exclude<FunnelStage, "UNKNOWN">;
+
+type TopByStage = Record<StageKey, TopContentRow[]>;
+
+function toNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const s = String(value).trim();
+  if (!s) return undefined;
+  const n = Number(s.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function normalizeKey(key: string) {
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function pickFirst(row: ParsedRow, keys: string[]) {
+  for (const k of keys) {
+    const v = row[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return undefined;
+}
+
+function classifyStage(contentRaw: string, explicitStage?: string): FunnelStage {
+  const exp = (explicitStage || "").toUpperCase();
+  if (exp.includes("BOFU")) return "BOFU";
+  if (exp.includes("MOFU")) return "MOFU";
+  if (exp.includes("TOFU")) return "TOFU";
+
+  const s = (contentRaw || "").toUpperCase();
+  const hasTOFU = s.includes("TOFU");
+  const hasMOFU = s.includes("MOFU");
+  const hasBOFU = s.includes("BOFU");
+  if (hasBOFU) return "BOFU";
+  if (hasMOFU) return "MOFU";
+  if (hasTOFU) return "TOFU";
+  return "UNKNOWN";
+}
+
+function parseCSV(text: string): ParsedRow[] {
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const parseLine = (line: string) => {
+    const out: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      const next = line[i + 1];
+
+      if (c === '"') {
+        if (inQuotes && next === '"') {
+          cur += '"';
+          i++;
+          continue;
+        }
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (c === "," && !inQuotes) {
+        out.push(cur);
+        cur = "";
+        continue;
+      }
+
+      cur += c;
+    }
+
+    out.push(cur);
+    return out;
+  };
+
+  const headersRaw = parseLine(lines[0]);
+  const headers = headersRaw.map((h) => normalizeKey(h));
+
+  const rows: ParsedRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = parseLine(lines[i]);
+    const row: ParsedRow = {};
+    for (let c = 0; c < headers.length; c++) {
+      row[headers[c]] = cells[c] ?? "";
+    }
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
+  return rows.map((r, idx) => {
+    const content = String(
+      pickFirst(r, ["content", "utm_content", "name", "url_path_only", "url"]) ??
+        "",
+    ).trim();
+
+    const explicitStage = String(
+      pickFirst(r, ["funnel_stage", "stage", "funnel", "lifecycle_stage"]) ?? "",
+    ).trim();
+
+    const stage = classifyStage(content, explicitStage);
+
+    const utmChannel =
+      String(pickFirst(r, ["utm_channel", "channel"]) ?? "").trim() || undefined;
+    const utmMedium =
+      String(pickFirst(r, ["utm_medium", "medium"]) ?? "").trim() || undefined;
+    const utmContent =
+      String(pickFirst(r, ["utm_content", "utmcontent"]) ?? "").trim() ||
+      undefined;
+
+    const productFranchise =
+      String(
+        pickFirst(r, [
+          "product_franchise__c",
+          "product_franchise",
+          "product",
+        ]) ?? "",
+      ).trim() || undefined;
+
+    const objective =
+      String(pickFirst(r, ["objective", "campaign_objective"]) ?? "").trim() ||
+      undefined;
+
+    const contentType =
+      String(
+        pickFirst(r, ["typecampaignmember__c", "content_type", "type"]) ?? "",
+      ).trim() || undefined;
+
+    const engagedSessions = toNumber(
+      pickFirst(r, [
+        "engaged_sessions",
+        "engaged_session",
+        "sessions_engaged",
+        "engagedsession",
+      ]),
+    );
+
+    const sessions = toNumber(
+      pickFirst(r, ["sessions", "visits", "traffic", "visitors"]),
+    );
+
+    const newContacts = toNumber(
+      pickFirst(r, [
+        "new_contacts",
+        "contacts_created",
+        "new_leads",
+        "first_time_contacts",
+        "new_contact",
+      ]),
+    );
+
+    const mqls = toNumber(pickFirst(r, ["mqls", "mql", "mql_flag", "is_mql"]));
+    const sqos = toNumber(
+      pickFirst(r, ["sqos", "sqo", "sqo_flag", "is_sqo", "sql"]),
+    );
+
+    const leadScore = toNumber(
+      pickFirst(r, ["lead_score", "form_score1", "score", "leadscore"]),
+    );
+
+    const id = `${idx + 1}`;
+
+    return {
+      id,
+      content,
+      stage,
+      utmChannel,
+      utmMedium,
+      utmContent,
+      productFranchise,
+      objective,
+      contentType,
+      engagedSessions,
+      sessions,
+      newContacts,
+      mqls,
+      sqos,
+      leadScore,
+    };
+  });
+}
+
+function sum(rows: NormalizedRow[], key: keyof NormalizedRow) {
+  return rows.reduce(
+    (acc, r) => acc + (typeof r[key] === "number" ? (r[key] as number) : 0),
+    0,
+  );
+}
+
+function pct(n: number, d: number) {
+  if (!d) return 0;
+  return (n / d) * 100;
+}
+
+function formatCompact(n: number) {
+  return Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
+}
+
+function formatPct(n: number) {
+  return `${n.toFixed(1)}%`;
+}
+
+const stageMeta: Record<FunnelStage, { label: string; tone: string }> = {
+  TOFU: { label: "TOFU", tone: "bg-chart-1/12 text-chart-1 border-chart-1/20" },
+  MOFU: { label: "MOFU", tone: "bg-chart-2/12 text-chart-2 border-chart-2/20" },
+  BOFU: { label: "BOFU", tone: "bg-chart-3/12 text-chart-3 border-chart-3/20" },
+  UNKNOWN: { label: "UNKNOWN", tone: "bg-muted text-muted-foreground border-border" },
+};
+
+const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,NEW_CONTACTS,MQL_FLAG,SQO_FLAG,FORM_SCORE1
+TOFU_Cloud_Security_101,Organic,Search,CloudShield,Blog,NCA,980,1520,64,0,0,18
+TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Landing Page,NCA,720,1200,51,0,0,22
+MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Webinar,NCA,410,620,44,21,2,51
+MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Whitepaper,NCA,330,470,39,17,1,47
+BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Landing Page,NCA,120,200,28,14,9,72
+BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Case Study,NCA,140,210,19,9,7,68
+TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Blog,NCA,640,980,41,0,0,16
+MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Landing Page,NCA,260,420,25,10,1,44
+BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Landing Page,NCA,90,140,10,6,4,66`;
+
+export default function FunnelDashboard() {
+  const [csvText, setCsvText] = useState<string>(mockCSV);
+  const [fileName, setFileName] = useState<string>("sample.csv");
+  const [stageFilter, setStageFilter] = useState<FunnelStage | "ALL">("ALL");
+  const [dimension, setDimension] = useState<
+    "utmChannel" | "productFranchise" | "contentType"
+  >("utmChannel");
+
+  const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
+  const rows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
+
+  const filtered = useMemo(() => {
+    if (stageFilter === "ALL") return rows;
+    return rows.filter((r) => r.stage === stageFilter);
+  }, [rows, stageFilter]);
+
+  const byStage = useMemo(() => {
+    const groups: Record<FunnelStage, NormalizedRow[]> = {
+      TOFU: [],
+      MOFU: [],
+      BOFU: [],
+      UNKNOWN: [],
+    };
+    for (const r of rows) groups[r.stage].push(r);
+    return groups;
+  }, [rows]);
+
+  const tofuBase = byStage.TOFU;
+  const mofuBase = byStage.MOFU;
+  const bofuBase = byStage.BOFU;
+
+  const tofuEngaged = sum(tofuBase, "engagedSessions");
+  const tofuSessions = sum(tofuBase, "sessions");
+  const tofuNewContacts = sum(tofuBase, "newContacts");
+  const tofuDenom = tofuEngaged || tofuSessions;
+  const tofuConv = pct(tofuNewContacts, tofuDenom);
+
+  const mofuNewContacts = sum(mofuBase, "newContacts");
+  const mofuMqls = sum(mofuBase, "mqls");
+  const mofuConv = pct(mofuMqls, mofuNewContacts || 0);
+
+  const bofuSqos = sum(bofuBase, "sqos");
+
+  const qualityMqlScores = mofuBase
+    .filter((r) => (r.mqls ?? 0) > 0 && typeof r.leadScore === "number")
+    .map((r) => r.leadScore as number);
+  const avgMqlScore =
+    qualityMqlScores.length > 0
+      ? qualityMqlScores.reduce((a, b) => a + b, 0) / qualityMqlScores.length
+      : undefined;
+
+  const totalRows = rows.length;
+  const unknownCount = byStage.UNKNOWN.length;
+
+  const topByStage: TopByStage = useMemo(() => {
+    const compute = (stage: StageKey) => {
+      const base = byStage[stage];
+      const metricKey: keyof NormalizedRow =
+        stage === "TOFU" ? "engagedSessions" : stage === "MOFU" ? "mqls" : "sqos";
+
+      const roll = new Map<
+        string,
+        { row: NormalizedRow; value: number; newContacts: number }
+      >();
+
+      for (const r of base) {
+        const k = r.content || "(no content)";
+        const v = typeof r[metricKey] === "number" ? (r[metricKey] as number) : 0;
+        const nc = typeof r.newContacts === "number" ? r.newContacts : 0;
+        const prev = roll.get(k);
+        if (!prev) {
+          roll.set(k, { row: r, value: v, newContacts: nc });
+        } else {
+          roll.set(k, {
+            row: prev.row,
+            value: prev.value + v,
+            newContacts: prev.newContacts + nc,
+          });
+        }
+      }
+
+      return Array.from(roll.values())
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8)
+        .map((x) => ({
+          content: x.row.content || "(no content)",
+          product: x.row.productFranchise || "—",
+          channel: x.row.utmChannel || "—",
+          value: x.value,
+          newContacts: x.newContacts,
+        }));
+    };
+
+    return {
+      TOFU: compute("TOFU"),
+      MOFU: compute("MOFU"),
+      BOFU: compute("BOFU"),
+    };
+  }, [byStage]);
+
+  const dimensionData = useMemo(() => {
+    const roll = new Map<
+      string,
+      { key: string; engaged: number; contacts: number; mqls: number; sqos: number }
+    >();
+
+    for (const r of filtered) {
+      const key = (r[dimension] as string | undefined) || "(unattributed)";
+      const cur =
+        roll.get(key) || { key, engaged: 0, contacts: 0, mqls: 0, sqos: 0 };
+      cur.engaged += r.engagedSessions ?? 0;
+      cur.contacts += r.newContacts ?? 0;
+      cur.mqls += r.mqls ?? 0;
+      cur.sqos += r.sqos ?? 0;
+      roll.set(key, cur);
+    }
+
+    return Array.from(roll.values())
+      .sort(
+        (a, b) =>
+          b.mqls + b.sqos + b.contacts + b.engaged -
+          (a.mqls + a.sqos + a.contacts + a.engaged),
+      )
+      .slice(0, 10);
+  }, [filtered, dimension]);
+
+  const funnelSeries = useMemo(() => {
+    return [
+      {
+        stage: "TOFU",
+        engagedSessions: tofuEngaged,
+        newContacts: tofuNewContacts,
+      },
+      {
+        stage: "MOFU",
+        engagedSessions: sum(mofuBase, "engagedSessions"),
+        newContacts: mofuNewContacts,
+        mqls: mofuMqls,
+      },
+      {
+        stage: "BOFU",
+        sqos: bofuSqos,
+      },
+    ];
+  }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos]);
+
+  function onPickFile(file: File) {
+    setFileName(file.name);
+    file.text().then((t) => setCsvText(t));
+  }
+
+  return (
+    <div className="min-h-screen">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,hsl(var(--chart-2)/0.12),transparent_55%),radial-gradient(900px_circle_at_80%_0%,hsl(var(--chart-1)/0.14),transparent_60%),radial-gradient(900px_circle_at_75%_80%,hsl(var(--chart-3)/0.10),transparent_55%)]" />
+        <div className="absolute inset-0 grain" />
+      </div>
+
+      <div className="mx-auto w-full max-w-6xl px-4 py-10">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="flex flex-col gap-6"
+        >
+          <header className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl border bg-card shadow-sm">
+                  <LineChart className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1
+                      className="text-balance text-2xl font-[650] tracking-tight"
+                      data-testid="text-title"
+                    >
+                      FunnelScope
+                    </h1>
+                    <Badge
+                      variant="secondary"
+                      className="border bg-card/70 backdrop-blur"
+                      data-testid="badge-mode"
+                    >
+                      Daily CSV funnel analytics
+                    </Badge>
+                  </div>
+                  <p
+                    className="mt-1 max-w-2xl text-sm text-muted-foreground"
+                    data-testid="text-subtitle"
+                  >
+                    Upload your daily export and get a TOFU/MOFU/BOFU view with
+                    stage KPIs, top content, and drilldowns by channel, product,
+                    and content type.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 md:items-end">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-card/70 px-3 py-2 text-sm shadow-sm backdrop-blur hover:shadow"
+                    data-testid="button-upload"
+                  >
+                    <FileUp className="h-4 w-4" />
+                    <span className="font-medium">Upload CSV</span>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) onPickFile(f);
+                      }}
+                      data-testid="input-file"
+                    />
+                  </label>
+
+                  <Button
+                    variant="secondary"
+                    className="rounded-xl"
+                    onClick={() => setCsvText(mockCSV)}
+                    data-testid="button-load-sample"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Load sample
+                  </Button>
+                </div>
+                <div className="text-xs text-muted-foreground" data-testid="text-filename">
+                  Currently loaded:{" "}
+                  <span className="font-medium text-foreground">{fileName}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">TOFU</div>
+                    <div
+                      className="mt-1 text-2xl font-[650] tracking-tight"
+                      data-testid="text-tofu-engaged"
+                    >
+                      {formatCompact(tofuEngaged)}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Engaged sessions
+                    </div>
+                  </div>
+                  <Badge
+                    className={`border ${stageMeta.TOFU.tone}`}
+                    data-testid="badge-tofu"
+                  >
+                    {formatPct(tofuConv)} contact rate
+                  </Badge>
+                </div>
+                <div
+                  className="mt-3 text-xs text-muted-foreground"
+                  data-testid="text-tofu-notes"
+                >
+                  Using {tofuEngaged ? "engaged sessions" : "sessions"} as
+                  denominator.
+                </div>
+              </Card>
+
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">MOFU</div>
+                    <div
+                      className="mt-1 text-2xl font-[650] tracking-tight"
+                      data-testid="text-mofu-mqls"
+                    >
+                      {formatCompact(mofuMqls)}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">MQLs</div>
+                  </div>
+                  <Badge
+                    className={`border ${stageMeta.MOFU.tone}`}
+                    data-testid="badge-mofu"
+                  >
+                    {formatPct(mofuConv)} MQL rate
+                  </Badge>
+                </div>
+                <div
+                  className="mt-3 text-xs text-muted-foreground"
+                  data-testid="text-mofu-notes"
+                >
+                  {avgMqlScore !== undefined
+                    ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
+                    : "Lead score not available"}
+                </div>
+              </Card>
+
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">BOFU</div>
+                    <div
+                      className="mt-1 text-2xl font-[650] tracking-tight"
+                      data-testid="text-bofu-sqos"
+                    >
+                      {formatCompact(bofuSqos)}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">SQOs</div>
+                  </div>
+                  <Badge
+                    className={`border ${stageMeta.BOFU.tone}`}
+                    data-testid="badge-bofu"
+                  >
+                    QDC not tracked
+                  </Badge>
+                </div>
+                <div
+                  className="mt-3 text-xs text-muted-foreground"
+                  data-testid="text-bofu-notes"
+                >
+                  QDC → SQO conversion is skipped (no QDC data).
+                </div>
+              </Card>
+            </div>
+
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <div className="text-sm font-medium" data-testid="text-filters">
+                    Filters & views
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Stage</span>
+                    <Select
+                      value={stageFilter}
+                      onValueChange={(v) =>
+                        setStageFilter(v as FunnelStage | "ALL")
+                      }
+                    >
+                      <SelectTrigger
+                        className="h-9 w-[160px] rounded-xl"
+                        data-testid="select-stage"
+                      >
+                        <SelectValue placeholder="All stages" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL" data-testid="option-stage-all">
+                          All stages
+                        </SelectItem>
+                        <SelectItem value="TOFU" data-testid="option-stage-tofu">
+                          TOFU
+                        </SelectItem>
+                        <SelectItem value="MOFU" data-testid="option-stage-mofu">
+                          MOFU
+                        </SelectItem>
+                        <SelectItem value="BOFU" data-testid="option-stage-bofu">
+                          BOFU
+                        </SelectItem>
+                        <SelectItem
+                          value="UNKNOWN"
+                          data-testid="option-stage-unknown"
+                        >
+                          UNKNOWN
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Breakdown</span>
+                    <Select
+                      value={dimension}
+                      onValueChange={(v) => setDimension(v as typeof dimension)}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-[200px] rounded-xl"
+                        data-testid="select-dimension"
+                      >
+                        <SelectValue placeholder="Dimension" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="utmChannel"
+                          data-testid="option-dim-channel"
+                        >
+                          UTM Channel
+                        </SelectItem>
+                        <SelectItem
+                          value="productFranchise"
+                          data-testid="option-dim-product"
+                        >
+                          Product
+                        </SelectItem>
+                        <SelectItem
+                          value="contentType"
+                          data-testid="option-dim-type"
+                        >
+                          Content type
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="hidden items-center gap-2 md:flex">
+                    <Badge
+                      variant="secondary"
+                      className="rounded-xl"
+                      data-testid="badge-rows"
+                    >
+                      {totalRows} rows
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="rounded-xl"
+                      data-testid="badge-unknown"
+                    >
+                      {unknownCount} unknown
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </header>
+
+          <div className="grid gap-4 lg:grid-cols-5">
+            <Card className="lg:col-span-3 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" data-testid="text-funnel-title">
+                    Funnel overview
+                  </div>
+                  <div
+                    className="mt-1 text-xs text-muted-foreground"
+                    data-testid="text-funnel-subtitle"
+                  >
+                    Stage volumes and progression signals (sample visualization;
+                    add date column for time series).
+                  </div>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className="rounded-xl"
+                  data-testid="badge-funnel"
+                >
+                  {stageFilter === "ALL" ? "All stages" : stageFilter}
+                </Badge>
+              </div>
+              <div className="mt-4 h-[280px]" data-testid="chart-funnel">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={funnelSeries} barCategoryGap={18}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.35} />
+                    <XAxis dataKey="stage" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ReTooltip />
+                    <Legend />
+                    <Bar
+                      dataKey="engagedSessions"
+                      name="Engaged Sessions"
+                      fill="hsl(var(--chart-1))"
+                      radius={[10, 10, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="newContacts"
+                      name="New Contacts"
+                      fill="hsl(var(--chart-2))"
+                      radius={[10, 10, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="mqls"
+                      name="MQLs"
+                      fill="hsl(var(--chart-3))"
+                      radius={[10, 10, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="sqos"
+                      name="SQOs"
+                      fill="hsl(var(--chart-4))"
+                      radius={[10, 10, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            <Card className="lg:col-span-2 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" data-testid="text-mix-title">
+                    Stage mix
+                  </div>
+                  <div
+                    className="mt-1 text-xs text-muted-foreground"
+                    data-testid="text-mix-subtitle"
+                  >
+                    Row distribution by classified stage.
+                  </div>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className="rounded-xl"
+                  data-testid="badge-mix"
+                >
+                  {formatCompact(totalRows)} rows
+                </Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {([
+                  "TOFU",
+                  "MOFU",
+                  "BOFU",
+                  "UNKNOWN",
+                ] as FunnelStage[]).map((s) => (
+                  <button
+                    key={s}
+                    className="group flex items-center justify-between rounded-2xl border bg-card/60 px-3 py-3 text-left shadow-sm transition hover:shadow"
+                    onClick={() => setStageFilter((prev) => (prev === s ? "ALL" : s))}
+                    data-testid={`button-stage-${s.toLowerCase()}`}
+                  >
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        {stageMeta[s].label}
+                      </div>
+                      <div
+                        className="mt-1 text-lg font-[650] tracking-tight"
+                        data-testid={`text-stage-count-${s.toLowerCase()}`}
+                      >
+                        {byStage[s].length}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-xs ${stageMeta[s].tone}`}
+                    >
+                      {Math.round(pct(byStage[s].length, totalRows))}%
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium" data-testid="text-dim-title">
+                    Breakdown: {dimension}
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="badge-breakdown"
+                  >
+                    Top {dimensionData.length}
+                  </Badge>
+                </div>
+                <div className="h-[190px]" data-testid="chart-dimension">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dimensionData}>
+                      <defs>
+                        <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+                          <stop
+                            offset="0%"
+                            stopColor="hsl(var(--chart-1))"
+                            stopOpacity={0.35}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="hsl(var(--chart-1))"
+                            stopOpacity={0.03}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                      <XAxis dataKey="key" hide />
+                      <YAxis hide />
+                      <ReTooltip />
+                      <Area
+                        type="monotone"
+                        dataKey="contacts"
+                        name="New Contacts"
+                        stroke="hsl(var(--chart-1))"
+                        fill="url(#g1)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid gap-2">
+                  {dimensionData.slice(0, 6).map((d) => (
+                    <div
+                      key={d.key}
+                      className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2"
+                      data-testid={`row-dimension-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <div className="truncate text-sm font-medium">{d.key}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatCompact(d.contacts)} contacts</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span>{formatCompact(d.mqls)} MQLs</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span>{formatCompact(d.sqos)} SQOs</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <Tabs defaultValue="top-content" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+              <TabsTrigger
+                value="top-content"
+                className="rounded-xl"
+                data-testid="tab-top-content"
+              >
+                <TableIcon className="mr-2 h-4 w-4" />
+                Top content
+              </TabsTrigger>
+              <TabsTrigger
+                value="data"
+                className="rounded-xl"
+                data-testid="tab-data"
+              >
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Raw CSV
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="top-content" className="mt-4">
+              <div className="grid gap-4 lg:grid-cols-3">
+                {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((s) => {
+                  const metricLabel =
+                    s === "TOFU" ? "Engaged Sessions" : s === "MOFU" ? "MQLs" : "SQOs";
+
+                  return (
+                    <Card
+                      key={s}
+                      className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur"
+                      data-testid={`card-top-${s.toLowerCase()}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div
+                            className="text-sm font-medium"
+                            data-testid={`text-top-title-${s.toLowerCase()}`}
+                          >
+                            Top {s} content
+                          </div>
+                          <div
+                            className="mt-1 text-xs text-muted-foreground"
+                            data-testid={`text-top-subtitle-${s.toLowerCase()}`}
+                          >
+                            Ranked by {metricLabel}.
+                          </div>
+                        </div>
+                        <Badge
+                          className={`border ${stageMeta[s].tone}`}
+                          data-testid={`badge-top-${s.toLowerCase()}`}
+                        >
+                          {metricLabel}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3">
+                        <div className="rounded-2xl border bg-card/60">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[46%]">Content</TableHead>
+                                <TableHead className="w-[26%]">Product</TableHead>
+                                <TableHead className="text-right">Value</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {topByStage[s].map((r: TopContentRow, idx: number) => (
+                                <TableRow
+                                  key={`${r.content}-${idx}`}
+                                  className="hover:bg-muted/30"
+                                  data-testid={`row-top-${s.toLowerCase()}-${idx}`}
+                                >
+                                  <TableCell>
+                                    <div
+                                      className="max-w-[240px] truncate text-sm font-medium"
+                                      data-testid={`text-content-${s.toLowerCase()}-${idx}`}
+                                    >
+                                      {r.content}
+                                    </div>
+                                    <div
+                                      className="mt-0.5 text-xs text-muted-foreground"
+                                      data-testid={`text-channel-${s.toLowerCase()}-${idx}`}
+                                    >
+                                      {r.channel}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell
+                                    className="text-sm"
+                                    data-testid={`text-product-${s.toLowerCase()}-${idx}`}
+                                  >
+                                    {r.product}
+                                  </TableCell>
+                                  <TableCell
+                                    className="text-right text-sm font-[650]"
+                                    data-testid={`text-value-${s.toLowerCase()}-${idx}`}
+                                  >
+                                    {formatCompact(r.value)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="data" className="mt-4">
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium" data-testid="text-raw-title">
+                      CSV text
+                    </div>
+                    <div
+                      className="mt-1 text-xs text-muted-foreground"
+                      data-testid="text-raw-subtitle"
+                    >
+                      Paste your CSV here, or upload a file above.
+                    </div>
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="badge-rows-raw"
+                  >
+                    {rows.length} parsed
+                  </Badge>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-5">
+                  <div className="lg:col-span-3">
+                    <textarea
+                      value={csvText}
+                      onChange={(e) => setCsvText(e.target.value)}
+                      className="min-h-[260px] w-full resize-y rounded-2xl border bg-card/60 px-3 py-3 font-mono text-xs leading-relaxed shadow-sm outline-none focus:ring-2 focus:ring-ring/30"
+                      data-testid="textarea-csv"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <div className="rounded-2xl border bg-card/60 p-3">
+                      <div className="text-sm font-medium" data-testid="text-schema-title">
+                        Detected columns
+                      </div>
+                      <div
+                        className="mt-1 text-xs text-muted-foreground"
+                        data-testid="text-schema-subtitle"
+                      >
+                        Normalized keys from your header row.
+                      </div>
+                      <Separator className="my-3" />
+                      <ScrollArea className="h-[210px] pr-3" data-testid="scroll-columns">
+                        <div className="flex flex-wrap gap-2">
+                          {Object.keys(parsedRows[0] || {}).map((k) => (
+                            <Badge
+                              key={k}
+                              variant="secondary"
+                              className="rounded-xl border bg-card"
+                              data-testid={`badge-col-${k}`}
+                            >
+                              {k}
+                            </Badge>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+
+                    <div className="mt-3 rounded-2xl border bg-card/60 p-3">
+                      <div className="text-sm font-medium" data-testid="text-mapping-title">
+                        Metric mapping (preview)
+                      </div>
+                      <div
+                        className="mt-1 text-xs text-muted-foreground"
+                        data-testid="text-mapping-subtitle"
+                      >
+                        What the dashboard is currently using, based on your CSV.
+                      </div>
+                      <Separator className="my-3" />
+                      <div className="grid gap-2 text-sm">
+                        <div className="flex items-center justify-between" data-testid="map-engaged">
+                          <span className="text-muted-foreground">Engaged sessions</span>
+                          <span className="font-medium">engaged_sessions → engagedSessions</span>
+                        </div>
+                        <div className="flex items-center justify-between" data-testid="map-new-contacts">
+                          <span className="text-muted-foreground">New contacts</span>
+                          <span className="font-medium">new_contacts → newContacts</span>
+                        </div>
+                        <div className="flex items-center justify-between" data-testid="map-mql">
+                          <span className="text-muted-foreground">MQLs</span>
+                          <span className="font-medium">mql_flag → mqls</span>
+                        </div>
+                        <div className="flex items-center justify-between" data-testid="map-sqo">
+                          <span className="text-muted-foreground">SQOs</span>
+                          <span className="font-medium">sqo_flag → sqos</span>
+                        </div>
+                        <div className="flex items-center justify-between" data-testid="map-score">
+                          <span className="text-muted-foreground">Lead score</span>
+                          <span className="font-medium">form_score1 → leadScore</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
