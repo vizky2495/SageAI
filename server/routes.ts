@@ -1,8 +1,10 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPromptVersionSchema, insertCollaboratorSchema } from "@shared/schema";
 import { z } from "zod";
+import https from "https";
+import http from "http";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -213,6 +215,87 @@ export async function registerRoutes(
     res.json({ diff, from: previous.tag, to: current.tag });
   });
 
+  app.get("/api/proxy", async (req: Request, res: Response) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl || !isValidUrl(targetUrl)) {
+      return res.status(400).json({ message: "Missing or invalid url parameter" });
+    }
+
+    const fullUrl = targetUrl.startsWith("http") ? targetUrl : `https://${targetUrl}`;
+
+    try {
+      const parsed = new URL(fullUrl);
+
+      if (!isAllowedProxyHost(parsed.hostname)) {
+        return res.status(403).json({ message: "This domain is not allowed for preview" });
+      }
+
+      const maxRedirects = 5;
+      let currentUrl = fullUrl;
+
+      for (let i = 0; i <= maxRedirects; i++) {
+        const result = await proxyFetch(currentUrl);
+
+        if (result.redirect) {
+          if (i === maxRedirects) {
+            return res.status(502).json({ message: "Too many redirects" });
+          }
+          currentUrl = result.redirect;
+          continue;
+        }
+
+        const { contentType, body } = result;
+        const isPdf = contentType.includes("application/pdf");
+        const isHtml = contentType.includes("text/html");
+
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=300");
+
+        if (isPdf) {
+          res.setHeader("Content-Disposition", "inline");
+          return res.send(body);
+        }
+
+        if (!isHtml) {
+          return res.send(body);
+        }
+
+        let html = body.toString("utf-8");
+        const p = new URL(currentUrl);
+        const baseUrl = `${p.protocol}//${p.host}`;
+
+        html = html.replace(
+          /<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi,
+          "",
+        );
+
+        html = html.replace(
+          /(<head[^>]*>)/i,
+          `$1<base href="${baseUrl}/">`,
+        );
+
+        html = html.replace(
+          /(href|src|action)=(["'])\//g,
+          `$1=$2${baseUrl}/`,
+        );
+
+        html = html.replace(
+          /(href|src|action)=(["'])\/\//g,
+          `$1=$2https://`,
+        );
+
+        html = html.replace(
+          /url\(\s*(['"]?)\//g,
+          `url($1${baseUrl}/`,
+        );
+
+        return res.send(html);
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: "Proxy error: " + (err.message || "Unknown error") });
+    }
+  });
+
   return httpServer;
 }
 
@@ -255,6 +338,85 @@ function classifyStageServer(contentId: string, row: any): "TOFU" | "MOFU" | "BO
   if (clientId || (pv && pv > 0) || (time && time > 0)) return "TOFU";
 
   return "UNKNOWN";
+}
+
+const BLOCKED_IP_PREFIXES = [
+  "127.", "0.", "10.", "192.168.", "169.254.", "172.16.", "172.17.",
+  "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
+  "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
+  "172.30.", "172.31.", "::1", "fc00:", "fe80:", "fd",
+];
+
+function isAllowedProxyHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  if (lower === "localhost" || lower === "0.0.0.0") return false;
+  for (const prefix of BLOCKED_IP_PREFIXES) {
+    if (lower.startsWith(prefix)) return false;
+  }
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(lower)) return false;
+  return true;
+}
+
+const MAX_PROXY_SIZE = 10 * 1024 * 1024;
+
+function proxyFetch(
+  url: string,
+): Promise<{ redirect?: string; contentType: string; body: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const fetcher = parsed.protocol === "https:" ? https : http;
+
+    const req = fetcher.get(
+      url,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+        },
+        timeout: 15000,
+      },
+      (upstream) => {
+        if (
+          upstream.statusCode &&
+          upstream.statusCode >= 300 &&
+          upstream.statusCode < 400 &&
+          upstream.headers.location
+        ) {
+          const redirectUrl = new URL(upstream.headers.location, url).toString();
+          upstream.resume();
+          return resolve({ redirect: redirectUrl, contentType: "", body: Buffer.alloc(0) });
+        }
+
+        const contentType = upstream.headers["content-type"] || "text/html";
+        const chunks: Buffer[] = [];
+        let totalSize = 0;
+
+        upstream.on("data", (chunk: Buffer) => {
+          totalSize += chunk.length;
+          if (totalSize > MAX_PROXY_SIZE) {
+            upstream.destroy();
+            reject(new Error("Response too large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+
+        upstream.on("end", () => {
+          resolve({ contentType, body: Buffer.concat(chunks) });
+        });
+
+        upstream.on("error", (err: Error) => reject(err));
+      },
+    );
+
+    req.on("error", (err: Error) => reject(err));
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Request timed out"));
+    });
+  });
 }
 
 type DiffLine = { type: "add" | "del" | "ctx"; text: string };

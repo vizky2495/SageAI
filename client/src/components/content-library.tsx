@@ -51,7 +51,9 @@ function UrlPreview({
   onClose: () => void;
 }) {
   const [iframeError, setIframeError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const fullUrl = url.startsWith("http") ? url : `https://${url}`;
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(fullUrl)}`;
 
   return (
     <div
@@ -60,7 +62,7 @@ function UrlPreview({
       data-testid="url-preview-overlay"
     >
       <div
-        className="relative w-full max-w-3xl rounded-2xl border bg-card p-4 shadow-xl"
+        className="relative w-full max-w-4xl rounded-2xl border bg-card p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="url-preview-modal"
       >
@@ -92,9 +94,9 @@ function UrlPreview({
         </div>
         <Separator className="my-3" />
         {iframeError ? (
-          <div className="flex h-[400px] items-center justify-center rounded-xl border bg-muted/30 text-center text-sm text-muted-foreground" data-testid="preview-fallback">
+          <div className="flex h-[500px] items-center justify-center rounded-xl border bg-muted/30 text-center text-sm text-muted-foreground" data-testid="preview-fallback">
             <div>
-              <p>Preview not available due to site restrictions.</p>
+              <p>Preview not available for this page.</p>
               <a
                 href={fullUrl}
                 target="_blank"
@@ -107,24 +109,27 @@ function UrlPreview({
             </div>
           </div>
         ) : (
-          <iframe
-            src={fullUrl}
-            sandbox="allow-scripts allow-same-origin"
-            className="h-[400px] w-full rounded-xl border"
-            title="URL Preview"
-            onError={() => setIframeError(true)}
-            onLoad={(e) => {
-              try {
-                const frame = e.currentTarget;
-                if (!frame.contentDocument?.body?.innerHTML) {
-                  setIframeError(true);
-                }
-              } catch {
+          <div className="relative">
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-xl border bg-muted/30">
+                <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                  Loading preview…
+                </div>
+              </div>
+            )}
+            <iframe
+              src={proxyUrl}
+              className="h-[500px] w-full rounded-xl border"
+              title="URL Preview"
+              onError={() => {
                 setIframeError(true);
-              }
-            }}
-            data-testid="iframe-preview"
-          />
+                setLoading(false);
+              }}
+              onLoad={() => setLoading(false)}
+              data-testid="iframe-preview"
+            />
+          </div>
         )}
       </div>
     </div>
