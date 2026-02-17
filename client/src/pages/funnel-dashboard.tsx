@@ -1,7 +1,7 @@
 import TopNav from "@/components/top-nav";
 import ContentLibrary from "@/components/content-library";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -410,6 +410,22 @@ export default function FunnelDashboard() {
   const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
   const rows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
 
+  const queryClient = useQueryClient();
+  const ingestedRef = useRef<string>("");
+
+  useEffect(() => {
+    const key = csvText.slice(0, 200);
+    if (key === ingestedRef.current || parsedRows.length === 0) return;
+    ingestedRef.current = key;
+    fetch("/api/assets/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: parsedRows }),
+    })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/assets"] }))
+      .catch((err) => console.error("Ingest failed:", err));
+  }, [parsedRows, csvText, queryClient]);
+
   const filtered = useMemo(() => {
     const stageFiltered =
       stageFilter === "ALL" ? rows : rows.filter((r) => r.stage === stageFilter);
@@ -589,23 +605,9 @@ export default function FunnelDashboard() {
     ];
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos]);
 
-  const queryClient = useQueryClient();
-
   function onPickFile(file: File) {
     setFileName(file.name);
-    file.text().then((t) => {
-      setCsvText(t);
-      const rows = parseCSV(t);
-      fetch("/api/assets/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-      })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
-        })
-        .catch((err) => console.error("Ingest failed:", err));
-    });
+    file.text().then((t) => setCsvText(t));
   }
 
   return (
