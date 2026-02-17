@@ -3,7 +3,7 @@
 **Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV files containing marketing performance data, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards. It also includes a **Prompt Studio** for managing and versioning AI prompt configurations used by the Content Intelligence Analyst agent, with collaborator tracking.
 
 The app has two main pages:
-1. **Funnel Dashboard** (`/`) — Upload CSVs, visualize funnel metrics with charts and tables, filter by stage/product/channel.
+1. **Funnel Dashboard** (`/`) — Upload CSVs, visualize funnel metrics with charts and tables, filter by stage/product/channel. Includes a **Content Library** section with backend-aggregated content assets displayed in horizontal carousels per stage (TOFU/MOFU/BOFU), searchable by content ID, with infinite scroll and URL preview.
 2. **Prompt Studio** (`/prompt-studio`) — CRUD interface for prompt versions and collaborators, supporting version tagging, compiled prompt content, and risk-level tracking.
 
 # User Preferences
@@ -43,6 +43,7 @@ Preferred communication style: Simple, everyday language.
 - **Tables**:
   - `prompt_versions` — id (UUID), tag, author, summary, status (draft/released/latest), promptsCount, compiledSize, compiledContent, createdAt
   - `collaborators` — id (UUID), name, initials, file, focus, risk (low/medium/high), layerContent, lastEditedAt
+  - `assets_agg` — id (UUID), contentId, stage (TOFU/MOFU/BOFU/UNKNOWN), name, url, typecampaignmember, productFranchise, utmChannel, pageviewsSum, timeAvg, downloadsSum, uniqueLeads, sqoCount, formName, createdAt
 - **Custom Enums**: `version_status` (draft, released, latest), `risk_level` (low, medium, high)
 - **Migrations**: Drizzle Kit with `drizzle-kit push` command (`npm run db:push`). Migration output goes to `./migrations`
 - **Seeding**: `server/seed.ts` provides initial data for prompt versions and collaborators
