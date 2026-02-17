@@ -22,6 +22,7 @@ const stageTones: Record<string, { bg: string; text: string; border: string }> =
   TOFU: { bg: "bg-chart-1/12", text: "text-chart-1", border: "border-chart-1/20" },
   MOFU: { bg: "bg-chart-2/12", text: "text-chart-2", border: "border-chart-2/20" },
   BOFU: { bg: "bg-chart-3/12", text: "text-chart-3", border: "border-chart-3/20" },
+  UNKNOWN: { bg: "bg-chart-4/12", text: "text-chart-4", border: "border-chart-4/20" },
 };
 
 function formatCompact(n: number) {
@@ -228,7 +229,7 @@ function ContentCard({
               <div>
                 <div className="text-muted-foreground">Avg time</div>
                 <div className="mt-0.5 font-[650]">
-                  {asset.timeAvg > 0 ? `${(asset.timeAvg / 60).toFixed(1)}m` : "—"}
+                  {asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m"}
                 </div>
               </div>
               {asset.downloadsSum > 0 && (
@@ -244,7 +245,7 @@ function ContentCard({
               <div>
                 <div className="text-muted-foreground">Unique leads</div>
                 <div className="mt-0.5 font-[650]">
-                  {asset.uniqueLeads > 0 ? formatCompact(asset.uniqueLeads) : "—"}
+                  {formatCompact(asset.uniqueLeads)}
                 </div>
               </div>
               <div>
@@ -258,13 +259,13 @@ function ContentCard({
               <div>
                 <div className="text-muted-foreground">SQOs</div>
                 <div className="mt-0.5 font-[650]">
-                  {asset.sqoCount > 0 ? formatCompact(asset.sqoCount) : "—"}
+                  {formatCompact(asset.sqoCount)}
                 </div>
               </div>
               <div>
                 <div className="text-muted-foreground">Unique leads</div>
                 <div className="mt-0.5 font-[650]">
-                  {asset.uniqueLeads > 0 ? formatCompact(asset.uniqueLeads) : "—"}
+                  {formatCompact(asset.uniqueLeads)}
                 </div>
               </div>
               {asset.sqoCount === 0 && (
@@ -272,6 +273,20 @@ function ContentCard({
                   BOFU tag from CONTENT
                 </div>
               )}
+            </>
+          )}
+          {stage === "UNKNOWN" && (
+            <>
+              <div>
+                <div className="text-muted-foreground">Pageviews</div>
+                <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Unique leads</div>
+                <div className="mt-0.5 font-[650]">
+                  {formatCompact(asset.uniqueLeads)}
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -288,7 +303,7 @@ function StageCarousel({
   stage,
   search,
 }: {
-  stage: "TOFU" | "MOFU" | "BOFU";
+  stage: "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
   search: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -481,6 +496,7 @@ export default function ContentLibrary() {
       <StageCarousel stage="TOFU" search={debouncedSearch} />
       <StageCarousel stage="MOFU" search={debouncedSearch} />
       <StageCarousel stage="BOFU" search={debouncedSearch} />
+      <StageCarousel stage="UNKNOWN" search={debouncedSearch} />
     </div>
   );
 }

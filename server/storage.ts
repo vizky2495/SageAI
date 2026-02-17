@@ -114,7 +114,7 @@ export class DatabaseStorage implements IStorage {
     const where = conditions.length === 1 ? conditions[0] : and(...conditions);
 
     let orderCol;
-    if (opts.stage === "TOFU") {
+    if (opts.stage === "TOFU" || opts.stage === "UNKNOWN") {
       orderCol = desc(assetsAgg.pageviewsSum);
     } else if (opts.stage === "MOFU") {
       orderCol = desc(assetsAgg.uniqueLeads);

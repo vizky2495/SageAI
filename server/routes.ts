@@ -100,14 +100,14 @@ export async function registerRoutes(
         for (const [k, v] of Object.entries(rawRow)) {
           r[k.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")] = v;
         }
-        const contentId = str(r.content || r.utm_content || r.name || r.url_path_only || r.url || "");
+        const contentId = str(r.content || "");
         if (!contentId) continue;
 
         const stage = classifyStageServer(contentId, r);
         const key = contentId;
 
         if (!aggMap.has(key)) {
-          const rawUrl = str(r.url) || (str(r.url_prefix) && str(r.url_path_only) ? `${str(r.url_prefix)}${str(r.url_path_only)}` : "");
+          const rawUrl = str(r.url) || "";
           aggMap.set(key, {
             contentId,
             stage,
@@ -116,18 +116,21 @@ export async function registerRoutes(
             typecampaignmember: str(r.typecampaignmember__c) || str(r.typecampaignmember) || str(r.content_type) || null,
             productFranchise: str(r.product_franchise__c) || str(r.product_franchise) || str(r.product) || null,
             utmChannel: str(r.utm_channel) || str(r.channel) || null,
-            pageviewsSum: 0,
+            clientIds: new Set<string>(),
             timeTotal: 0,
             timeCount: 0,
             downloadsSum: 0,
             leadIds: new Set<string>(),
-            sqoCount: 0,
+            sqoLeadIds: new Set<string>(),
             formName: str(r.form_name) || null,
           });
         }
 
         const agg = aggMap.get(key)!;
-        agg.pageviewsSum += num(r.total_pageviews || r.pageviews || r.page_views) || 0;
+
+        const clientId = str(r.google_clientid1) || str(r.google_clientid) || str(r.clientid);
+        if (clientId) agg.clientIds.add(clientId);
+
         const timeVal = num(r.total_time_on_page_seconds || r.avg_time_on_page || r.time_on_page || r.time_spent_seconds);
         if (timeVal) {
           agg.timeTotal += timeVal;
@@ -138,8 +141,8 @@ export async function registerRoutes(
         const leadId = str(r.leadorcontactid) || str(r.leadid) || str(r.contactid) || str(r.lead_or_contact_id);
         if (leadId) agg.leadIds.add(leadId);
 
-        const sqo = num(r.is_sqo || r.sqo_flag || r.sqo || r.sqos);
-        if (sqo && sqo > 0) agg.sqoCount += 1;
+        const isSqo = num(r.is_sqo || r.sqo_flag || r.sqo || r.sqos);
+        if (isSqo && isSqo > 0 && leadId) agg.sqoLeadIds.add(leadId);
       }
 
       const assets = Array.from(aggMap.values()).map((a) => ({
@@ -150,11 +153,11 @@ export async function registerRoutes(
         typecampaignmember: a.typecampaignmember,
         productFranchise: a.productFranchise,
         utmChannel: a.utmChannel,
-        pageviewsSum: a.pageviewsSum,
-        timeAvg: a.timeCount > 0 ? a.timeTotal / a.timeCount : 0,
+        pageviewsSum: a.clientIds.size,
+        timeAvg: a.timeCount > 0 ? Math.round(a.timeTotal / a.timeCount) : 0,
         downloadsSum: a.downloadsSum,
         uniqueLeads: a.leadIds.size,
-        sqoCount: a.sqoCount,
+        sqoCount: a.sqoLeadIds.size,
         formName: a.formName,
       }));
 
@@ -217,9 +220,10 @@ function classifyStageServer(contentId: string, row: any): "TOFU" | "MOFU" | "BO
   const leadId = str(row.leadorcontactid) || str(row.leadid) || str(row.contactid);
   if (leadId) return "MOFU";
 
+  const clientId = str(row.google_clientid1) || str(row.google_clientid) || str(row.clientid);
   const pv = num(row.total_pageviews || row.pageviews);
   const time = num(row.total_time_on_page_seconds || row.avg_time_on_page);
-  if ((pv && pv > 0) || (time && time > 0)) return "TOFU";
+  if (clientId || (pv && pv > 0) || (time && time > 0)) return "TOFU";
 
   return "UNKNOWN";
 }
