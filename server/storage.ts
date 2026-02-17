@@ -3,11 +3,14 @@ import {
   type InsertPromptVersion,
   type Collaborator,
   type InsertCollaborator,
+  type AssetAgg,
+  type InsertAssetAgg,
   promptVersions,
   collaborators,
+  assetsAgg,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
 
 export interface IStorage {
   getPromptVersions(): Promise<PromptVersion[]>;
@@ -21,6 +24,15 @@ export interface IStorage {
   createCollaborator(c: InsertCollaborator): Promise<Collaborator>;
   updateCollaborator(id: string, c: Partial<InsertCollaborator>): Promise<Collaborator | undefined>;
   deleteCollaborator(id: string): Promise<boolean>;
+
+  clearAssets(): Promise<void>;
+  bulkInsertAssets(assets: InsertAssetAgg[]): Promise<void>;
+  getAssets(opts: {
+    stage: string;
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ data: AssetAgg[]; total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -74,6 +86,57 @@ export class DatabaseStorage implements IStorage {
   async deleteCollaborator(id: string): Promise<boolean> {
     const result = await db.delete(collaborators).where(eq(collaborators.id, id)).returning();
     return result.length > 0;
+  }
+
+  async clearAssets(): Promise<void> {
+    await db.delete(assetsAgg);
+  }
+
+  async bulkInsertAssets(assets: InsertAssetAgg[]): Promise<void> {
+    if (assets.length === 0) return;
+    const batchSize = 100;
+    for (let i = 0; i < assets.length; i += batchSize) {
+      await db.insert(assetsAgg).values(assets.slice(i, i + batchSize));
+    }
+  }
+
+  async getAssets(opts: {
+    stage: string;
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ data: AssetAgg[]; total: number }> {
+    const conditions = [eq(assetsAgg.stage, opts.stage as any)];
+    if (opts.search) {
+      conditions.push(ilike(assetsAgg.contentId, `%${opts.search}%`));
+    }
+
+    const where = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+    let orderCol;
+    if (opts.stage === "TOFU") {
+      orderCol = desc(assetsAgg.pageviewsSum);
+    } else if (opts.stage === "MOFU") {
+      orderCol = desc(assetsAgg.uniqueLeads);
+    } else {
+      orderCol = desc(assetsAgg.sqoCount);
+    }
+
+    const [data, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(assetsAgg)
+        .where(where)
+        .orderBy(orderCol)
+        .limit(opts.limit)
+        .offset(opts.offset),
+      db
+        .select({ total: count() })
+        .from(assetsAgg)
+        .where(where),
+    ]);
+
+    return { data, total };
   }
 }
 

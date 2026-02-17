@@ -86,6 +86,94 @@ export async function registerRoutes(
     res.json({ compiled, size, layerCount: layers.length });
   });
 
+  app.post("/api/assets/ingest", async (req, res) => {
+    try {
+      const { rows } = req.body as { rows: any[] };
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "No rows provided" });
+      }
+
+      const aggMap = new Map<string, any>();
+
+      for (const r of rows) {
+        const contentId = str(r.content || r.utm_content || r.name || r.url_path_only || r.url || "");
+        if (!contentId) continue;
+
+        const stage = classifyStageServer(contentId, r);
+        const key = contentId;
+
+        if (!aggMap.has(key)) {
+          const rawUrl = str(r.url) || (str(r.url_prefix) && str(r.url_path_only) ? `${str(r.url_prefix)}${str(r.url_path_only)}` : "");
+          aggMap.set(key, {
+            contentId,
+            stage,
+            name: str(r.name) || str(r.form_name) || null,
+            url: rawUrl || null,
+            typecampaignmember: str(r.typecampaignmember__c) || str(r.typecampaignmember) || str(r.content_type) || null,
+            productFranchise: str(r.product_franchise__c) || str(r.product_franchise) || str(r.product) || null,
+            utmChannel: str(r.utm_channel) || str(r.channel) || null,
+            pageviewsSum: 0,
+            timeTotal: 0,
+            timeCount: 0,
+            downloadsSum: 0,
+            leadIds: new Set<string>(),
+            sqoCount: 0,
+            formName: str(r.form_name) || null,
+          });
+        }
+
+        const agg = aggMap.get(key)!;
+        agg.pageviewsSum += num(r.total_pageviews || r.pageviews || r.page_views) || 0;
+        const timeVal = num(r.total_time_on_page_seconds || r.avg_time_on_page || r.time_on_page || r.time_spent_seconds);
+        if (timeVal) {
+          agg.timeTotal += timeVal;
+          agg.timeCount += 1;
+        }
+        agg.downloadsSum += num(r.total_downloads || r.downloads) || 0;
+
+        const leadId = str(r.leadorcontactid) || str(r.leadid) || str(r.contactid) || str(r.lead_or_contact_id);
+        if (leadId) agg.leadIds.add(leadId);
+
+        const sqo = num(r.is_sqo || r.sqo_flag || r.sqo || r.sqos);
+        if (sqo && sqo > 0) agg.sqoCount += 1;
+      }
+
+      const assets = Array.from(aggMap.values()).map((a) => ({
+        contentId: a.contentId,
+        stage: a.stage as "TOFU" | "MOFU" | "BOFU" | "UNKNOWN",
+        name: a.name,
+        url: a.url,
+        typecampaignmember: a.typecampaignmember,
+        productFranchise: a.productFranchise,
+        utmChannel: a.utmChannel,
+        pageviewsSum: a.pageviewsSum,
+        timeAvg: a.timeCount > 0 ? a.timeTotal / a.timeCount : 0,
+        downloadsSum: a.downloadsSum,
+        uniqueLeads: a.leadIds.size,
+        sqoCount: a.sqoCount,
+        formName: a.formName,
+      }));
+
+      await storage.clearAssets();
+      await storage.bulkInsertAssets(assets);
+
+      res.json({ ingested: assets.length });
+    } catch (err: any) {
+      console.error("Ingest error:", err);
+      res.status(500).json({ message: err.message || "Ingestion failed" });
+    }
+  });
+
+  app.get("/api/assets", async (req, res) => {
+    const stage = String(req.query.stage || "TOFU");
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const limit = Math.min(Number(req.query.limit) || 25, 100);
+    const offset = Number(req.query.offset) || 0;
+
+    const result = await storage.getAssets({ stage, search, limit, offset });
+    res.json(result);
+  });
+
   app.get("/api/diff/:versionId/:compareId", async (req, res) => {
     const [current, previous] = await Promise.all([
       storage.getPromptVersion(req.params.versionId),
@@ -100,6 +188,36 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+function str(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+function num(v: unknown): number | undefined {
+  if (v === null || v === undefined) return undefined;
+  const n = Number(String(v).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function classifyStageServer(contentId: string, row: any): "TOFU" | "MOFU" | "BOFU" | "UNKNOWN" {
+  const s = contentId.toUpperCase();
+  if (s.includes("BOFU")) return "BOFU";
+  if (s.includes("MOFU")) return "MOFU";
+  if (s.includes("TOFU")) return "TOFU";
+
+  const sqo = num(row.is_sqo || row.sqo_flag || row.sqo || row.sqos);
+  if (sqo && sqo > 0) return "BOFU";
+
+  const leadId = str(row.leadorcontactid) || str(row.leadid) || str(row.contactid);
+  if (leadId) return "MOFU";
+
+  const pv = num(row.total_pageviews || row.pageviews);
+  const time = num(row.total_time_on_page_seconds || row.avg_time_on_page);
+  if ((pv && pv > 0) || (time && time > 0)) return "TOFU";
+
+  return "UNKNOWN";
 }
 
 type DiffLine = { type: "add" | "del" | "ctx"; text: string };

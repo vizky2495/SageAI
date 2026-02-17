@@ -1,4 +1,6 @@
 import TopNav from "@/components/top-nav";
+import ContentLibrary from "@/components/content-library";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -587,9 +589,23 @@ export default function FunnelDashboard() {
     ];
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos]);
 
+  const queryClient = useQueryClient();
+
   function onPickFile(file: File) {
     setFileName(file.name);
-    file.text().then((t) => setCsvText(t));
+    file.text().then((t) => {
+      setCsvText(t);
+      const rows = parseCSV(t);
+      fetch("/api/assets/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+        })
+        .catch((err) => console.error("Ingest failed:", err));
+    });
   }
 
   return (
@@ -1265,6 +1281,15 @@ export default function FunnelDashboard() {
               </Card>
             </TabsContent>
           </Tabs>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.55 }}
+          className="mt-6"
+        >
+          <ContentLibrary />
         </motion.div>
       </div>
     </div>

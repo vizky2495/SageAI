@@ -1,0 +1,114 @@
+You are enhancing an existing Replit web app (“Content Impact Scorecard v1”) used by Sage Marketing stakeholders.
+
+NEW FEATURE: MAIN DASHBOARD CONTENT LIBRARY (MUST BUILD)
+We need to categorize content on the main dashboard by funnel stage (TOFU / MOFU / BOFU) and make it browseable in a stakeholder-friendly way.
+
+USER EXPERIENCE REQUIREMENTS
+1) Add a sticky search bar at the top of the dashboard:
+   - Search ONLY by Content ID, which is the CSV column named `CONTENT`.
+   - Filtering must be real-time (debounced).
+   - Match behavior: substring contains (case-insensitive).
+   - Add clear (X) button + “No results” state.
+
+2) Add a “Content Library” section with THREE horizontally scrollable carousels:
+   - TOFU carousel
+   - MOFU carousel
+   - BOFU carousel
+   Each carousel must support TRUE infinite scroll:
+   - Fetch/render results in pages (e.g., 25 cards at a time).
+   - When user scrolls near the right edge, automatically load the next page.
+   - Must not try to render all assets at once.
+   - Include left/right arrow buttons and mouse wheel/touch scroll.
+
+3) Each content card must show:
+   - Title: `CONTENT` (content ID) (truncate nicely)
+   - Secondary: `NAME` if present (campaign-friendly name), otherwise show `FORM_NAME` or `TYPECAMPAIGNMEMBER__C`
+   - URL: show a short URL label (domain + path truncated)
+   - Tags (if available): `TYPECAMPAIGNMEMBER__C`, `PRODUCT_FRANCHISE__C`, `UTM_CHANNEL`
+   - Stage badge (TOFU/MOFU/BOFU) using Sage tokens:
+       TOFU = sage-light, MOFU = sage-medium, BOFU = sage-dark
+
+4) Internal URL Preview on hover (REQUIRED):
+   - On hover over the URL (or a “Preview” icon), open an INTERNAL preview (not a new tab).
+   - Use a lightweight modal or popover containing:
+       - URL text
+       - an iframe preview (sandboxed)
+       - a button “Open in new tab”
+   - If iframe blocked by the site, show graceful fallback:
+       “Preview not available due to site restrictions. Open in new tab.”
+
+DATA / SCHEMA REQUIREMENTS (CSV IS SOURCE OF TRUTH)
+- Content ID column is `CONTENT`. Do not use Campaign ID for search.
+- URL preview should use:
+    - Prefer `URL` if present and non-empty
+    - Else build URL from `URL_PREFIX` + `URL_PATH_ONLY` if both exist
+- The dataset may have mixed types and missing values; handle robustly.
+
+FUNNEL STAGE CLASSIFICATION (IMPORTANT)
+Because in this dataset `CONTENT` often contains the funnel stage, use this rule order:
+
+A) Keyword rule (PRIMARY):
+- If CONTENT contains “BOFU” => stage=BOFU
+- Else if CONTENT contains “MOFU” => stage=MOFU
+- Else if CONTENT contains “TOFU” => stage=TOFU
+- Case-insensitive; if multiple found, prioritize BOFU > MOFU > TOFU
+
+B) Fallback behavioral rule (ONLY if no keyword found):
+- If “Is SQO” exists and >0 => BOFU
+- Else if lead id exists (LEADID/CONTACTID/LEADORCONTACTID) => MOFU
+- Else if engagement exists (TOTAL_PAGEVIEWS or TOTAL_TIME_ON_PAGE_SECONDS > 0) => TOFU
+- Else UNKNOWN (do not show UNKNOWN by default; add optional toggle)
+
+METRICS PREVIEW ON CARDS (STAGE-AWARE; SHOW ONLY WHAT EXISTS)
+We may not have full funnel metrics in this CSV. Use whichever columns exist:
+
+Engagement:
+- TOTAL_PAGEVIEWS
+- TOTAL_TIME_ON_PAGE_SECONDS (convert to minutes for display)
+- TOTAL_DOWNLOADS
+
+If lead fields exist:
+- Unique Leads = distinct LEADORCONTACTID (or LEADID/CONTACTID fallback)
+
+If SQO field exists:
+- SQOs = sum(Is SQO == 1) (or sum of boolean)
+
+Card metric rules:
+- TOFU cards: show Pageviews + Avg Time + Downloads (if present)
+- MOFU cards: show Unique Leads + Pageviews (small) if leads exist; else show available engagement
+- BOFU cards: show SQOs (if exists) + Unique Leads (small) if exists; else show available engagement with a warning label “BOFU tag from CONTENT”
+
+SORTING PER CAROUSEL
+- TOFU: sort by TOTAL_PAGEVIEWS desc (fallback time desc)
+- MOFU: if leads exist sort by unique leads desc else pageviews desc
+- BOFU: if SQO exists sort by SQOs desc else keep stable sort by pageviews desc
+
+BACKEND / PERFORMANCE (MUST)
+- Create an aggregated assets table keyed by CONTENT:
+   assets_agg(content_id, stage, name, url, typecampaignmember, product_franchise, utm_channel,
+              pageviews_sum, time_avg, downloads_sum, unique_leads, sqo_count)
+- Precompute this after CSV ingestion and store in SQLite.
+- Create an endpoint for paginated carousel fetch:
+   GET /api/assets?stage=TOFU|MOFU|BOFU&search=<substring>&limit=25&offset=0
+Return the aggregated cards only (fast).
+- Index SQLite for (stage, content_id) to make filtering fast.
+
+FRONTEND (MUST)
+- Dashboard renders three lanes using the endpoint above.
+- Implement infinite scroll with IntersectionObserver at end-of-lane sentinel.
+- Each lane should reset pagination when search query changes.
+- Add skeleton loaders while loading next page.
+
+DELIVERABLE
+- Main dashboard includes:
+   - Sticky search bar filtering only by CONTENT
+   - TOFU/MOFU/BOFU infinite carousels with content cards
+   - Internal on-hover URL preview (modal/popover with iframe + fallback)
+   - Uses Sage-style design tokens
+- Keep existing drilldown page; cards should link to it using content_id.
+
+CLARIFY ONLY IF BLOCKED
+If you cannot locate columns, ask which exact header to use for:
+- CONTENT (content id)
+- URL or URL_PREFIX + URL_PATH_ONLY
+Otherwise proceed with the assumptions above.

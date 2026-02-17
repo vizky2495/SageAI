@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, pgEnum, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -47,3 +47,30 @@ export const insertCollaboratorSchema = createInsertSchema(collaborators).omit({
 });
 export type InsertCollaborator = z.infer<typeof insertCollaboratorSchema>;
 export type Collaborator = typeof collaborators.$inferSelect;
+
+export const funnelStageEnum = pgEnum("funnel_stage", ["TOFU", "MOFU", "BOFU", "UNKNOWN"]);
+
+export const assetsAgg = pgTable("assets_agg", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentId: text("content_id").notNull(),
+  stage: funnelStageEnum("stage").notNull(),
+  name: text("name"),
+  url: text("url"),
+  typecampaignmember: text("typecampaignmember"),
+  productFranchise: text("product_franchise"),
+  utmChannel: text("utm_channel"),
+  pageviewsSum: integer("pageviews_sum").notNull().default(0),
+  timeAvg: real("time_avg").notNull().default(0),
+  downloadsSum: integer("downloads_sum").notNull().default(0),
+  uniqueLeads: integer("unique_leads").notNull().default(0),
+  sqoCount: integer("sqo_count").notNull().default(0),
+  formName: text("form_name"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAssetAggSchema = createInsertSchema(assetsAgg).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAssetAgg = z.infer<typeof insertAssetAggSchema>;
+export type AssetAgg = typeof assetsAgg.$inferSelect;
