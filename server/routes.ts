@@ -95,7 +95,11 @@ export async function registerRoutes(
 
       const aggMap = new Map<string, any>();
 
-      for (const r of rows) {
+      for (const rawRow of rows) {
+        const r: Record<string, any> = {};
+        for (const [k, v] of Object.entries(rawRow)) {
+          r[k.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")] = v;
+        }
         const contentId = str(r.content || r.utm_content || r.name || r.url_path_only || r.url || "");
         if (!contentId) continue;
 
