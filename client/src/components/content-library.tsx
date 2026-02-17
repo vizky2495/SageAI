@@ -144,18 +144,19 @@ function ContentCard({
   const secondary =
     asset.campaignName || asset.name || asset.formName || null;
 
-  const tags = [
-    asset.utmCampaign && `Campaign: ${asset.utmCampaign}`,
-    asset.utmMedium && `Medium: ${asset.utmMedium}`,
+  const allTags = [
     asset.utmChannel,
     asset.productFranchise,
     asset.productCategory,
     asset.objective,
     asset.cta && `CTA: ${asset.cta}`,
+    asset.utmMedium && `Medium: ${asset.utmMedium}`,
+    asset.utmCampaign && `Campaign: ${asset.utmCampaign}`,
     asset.utmTerm && `Term: ${asset.utmTerm}`,
     asset.utmContent && `UTM Content: ${asset.utmContent}`,
     asset.formName && `Form: ${asset.formName}`,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
+  const tags = allTags.slice(0, 4);
 
   return (
     <>
@@ -165,13 +166,24 @@ function ContentCard({
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div
-              className="truncate text-sm font-[650] tracking-tight"
-              title={asset.contentId}
-              data-testid="card-title"
-            >
-              {asset.contentId}
-            </div>
+            {asset.url ? (
+              <button
+                className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 transition hover:decoration-foreground hover:text-primary cursor-pointer"
+                title={`${asset.contentId} — click to preview URL`}
+                onClick={() => setPreviewUrl(asset.url)}
+                data-testid="card-title"
+              >
+                {asset.contentId}
+              </button>
+            ) : (
+              <div
+                className="truncate text-sm font-[650] tracking-tight"
+                title={asset.contentId}
+                data-testid="card-title"
+              >
+                {asset.contentId}
+              </div>
+            )}
             {secondary && (
               <div
                 className="mt-0.5 truncate text-xs text-muted-foreground"
@@ -212,15 +224,24 @@ function ContentCard({
 
         {tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1" data-testid="card-tags">
-            {tags.map((t) => (
+            {tags.map((t, i) => (
               <Badge
-                key={t}
+                key={`${t}-${i}`}
                 variant="secondary"
                 className="rounded-lg border bg-card/60 text-[10px]"
               >
                 {t}
               </Badge>
             ))}
+            {allTags.length > 4 && (
+              <Badge
+                variant="secondary"
+                className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground"
+                title={allTags.slice(4).join(", ")}
+              >
+                +{allTags.length - 4}
+              </Badge>
+            )}
           </div>
         )}
 
@@ -371,7 +392,7 @@ function StageCarousel({
   const total = data?.pages[0]?.total ?? 0;
 
   return (
-    <div className="flex flex-col gap-3" data-testid={`carousel-${stage.toLowerCase()}`}>
+    <div className="flex min-w-0 flex-col gap-3" data-testid={`carousel-${stage.toLowerCase()}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Badge className={`border ${tone.bg} ${tone.text} ${tone.border}`}>
@@ -406,7 +427,7 @@ function StageCarousel({
       <div
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin"
-        style={{ scrollSnapType: "x mandatory" }}
+        style={{ scrollSnapType: "x mandatory", maxWidth: "100%" }}
         data-testid={`scroll-lane-${stage.toLowerCase()}`}
       >
         {isLoading &&
@@ -459,7 +480,7 @@ export default function ContentLibrary() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-4" data-testid="content-library">
+    <div className="flex min-w-0 flex-col gap-4 overflow-hidden" data-testid="content-library">
       <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">

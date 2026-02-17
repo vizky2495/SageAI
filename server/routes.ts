@@ -111,7 +111,7 @@ export async function registerRoutes(
             contentId,
             stage,
             name: str(r.name) || null,
-            url: str(r.url) || null,
+            url: isValidUrl(str(r.url)) ? str(r.url) : null,
             typecampaignmember: str(r.typecampaignmember__c) || str(r.typecampaignmember) || str(r.content_type) || null,
             productFranchise: str(r.product_franchise__c) || str(r.product_franchise_c) || str(r.product_franchise) || null,
             utmChannel: str(r.utm_channel) || str(r.channel) || null,
@@ -214,6 +214,16 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+function isValidUrl(v: string): boolean {
+  if (!v) return false;
+  try {
+    const url = new URL(v.startsWith("http") ? v : `https://${v}`);
+    return url.hostname.includes(".");
+  } catch {
+    return false;
+  }
 }
 
 function str(v: unknown): string {
