@@ -1,0 +1,53 @@
+All metrics are calculated strictly at the CONTENT level only. No URL‑level or row‑level breakdowns are allowed. Any timestamp fields must be converted to DATE format, and the date format must not be changed from the Snowflake default. Dates are used only for filtering.
+CONTENT is the Content ID. It is used for search, card primary title, and funnel stage classification.
+URL is the preferred preview and click URL. If URL is not null or empty, use it. If URL is empty, fall back to URL_PREFIX + URL_PATH_ONLY.
+Card secondary text is selected using strict priority. Use the first non‑null value only:
+
+NAME
+FORM_NAME
+TYPECAMPAIGNMEMBER__C
+Do not concatenate or stack values.
+
+Card tags are independent and should display if present:
+
+Product tag: PRODUCT_FRANCHISE__C
+Channel tag: UTM_CHANNEL
+Content type tag: TYPECAMPAIGNMEMBER__C
+Tags must render even if the funnel stage is UNKNOWN.
+
+Funnel stage classification is immutable per CONTENT.
+Primary funnel stage classification is keyword‑based using the CONTENT field (case‑insensitive):
+If CONTENT contains “BOFU” → BOFU
+Else if CONTENT contains “MOFU” → MOFU
+Else if CONTENT contains “TOFU” → TOFU
+If multiple keywords appear, apply priority:
+BOFU > MOFU > TOFU
+Behavioral fallback is applied only if no TOFU/MOFU/BOFU keyword is found in CONTENT:
+If IS_SQO > 0 → BOFU
+Else if LEADORCONTACTID (or LEADID / CONTACTID) exists → MOFU
+Else if TOTAL_PAGEVIEWS > 0 OR TOTAL_TIME_ON_PAGE_SECONDS > 0 → TOFU
+Else → UNKNOWN
+Behavioral logic must never override keyword‑based classification. UNKNOWN is a valid stage and must be displayed.
+Engagement metrics aggregation rules (CONTENT level only):
+
+TOTAL_PAGEVIEWS: SUM
+TOTAL_TIME_ON_PAGE_SECONDS: AVG, then converted to minutes for display and rounded
+TOTAL_DOWNLOADS: SUM
+
+Lead and SQO metrics:
+
+Unique Leads = COUNT(DISTINCT LEADORCONTACTID)
+SQOs = COUNT(DISTINCT LEADORCONTACTID) WHERE IS_SQO = 1
+
+If SQO data does not exist or no SQOs are present, default SQO count to 0. Do not error or suppress the card.
+Card metric display by funnel stage:
+TOFU cards display Pageviews, Avg Time on Page (minutes), and Downloads.
+MOFU cards display Unique Leads and Pageviews.
+BOFU cards display SQOs and Unique Leads.
+If BOFU classification comes only from CONTENT keyword and SQO data is missing or always 0, display a label: “BOFU tag from CONTENT”.
+Guardrails:
+Funnel stage is immutable per CONTENT.
+Behavioral logic never overrides keyword logic.
+UNKNOWN stage is allowed and must render.
+Missing metrics default to 0, not null.
+Work strictly with available data only.
