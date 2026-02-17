@@ -100,29 +100,38 @@ export async function registerRoutes(
         for (const [k, v] of Object.entries(rawRow)) {
           r[k.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")] = v;
         }
-        const contentId = str(r.content || "");
+        const contentId = str(r.content) || str(r.content_id) || str(r.asset_id) || "";
         if (!contentId) continue;
 
         const stage = classifyStageServer(contentId, r);
         const key = contentId;
 
         if (!aggMap.has(key)) {
-          const rawUrl = str(r.url) || "";
           aggMap.set(key, {
             contentId,
             stage,
-            name: str(r.name) || str(r.form_name) || null,
-            url: rawUrl || null,
+            name: str(r.name) || null,
+            url: str(r.url) || null,
             typecampaignmember: str(r.typecampaignmember__c) || str(r.typecampaignmember) || str(r.content_type) || null,
-            productFranchise: str(r.product_franchise__c) || str(r.product_franchise) || str(r.product) || null,
+            productFranchise: str(r.product_franchise__c) || str(r.product_franchise_c) || str(r.product_franchise) || null,
             utmChannel: str(r.utm_channel) || str(r.channel) || null,
+            utmCampaign: str(r.utm_campaign) || str(r.utm_campoaign) || null,
+            utmMedium: str(r.utm_medium) || null,
+            utmTerm: str(r.utm_term) || null,
+            utmContent: str(r.utm_content) || str(r.utm_cintent) || null,
+            formName: str(r.form_name) || str(r.form_name__c) || null,
+            cta: str(r.cta) || null,
+            objective: str(r.objective__c) || str(r.objective_c) || str(r.objective) || null,
+            productCategory: str(r.product_category__c) || str(r.product_category_c) || str(r.product_category) || null,
+            campaignId: str(r.campaign_id) || null,
+            campaignName: str(r.name) || null,
+            dateStamp: str(r.date_stamp) || str(r.datestamp) || null,
             clientIds: new Set<string>(),
             timeTotal: 0,
             timeCount: 0,
             downloadsSum: 0,
             leadIds: new Set<string>(),
             sqoLeadIds: new Set<string>(),
-            formName: str(r.form_name) || null,
           });
         }
 
@@ -153,12 +162,22 @@ export async function registerRoutes(
         typecampaignmember: a.typecampaignmember,
         productFranchise: a.productFranchise,
         utmChannel: a.utmChannel,
+        utmCampaign: a.utmCampaign,
+        utmMedium: a.utmMedium,
+        utmTerm: a.utmTerm,
+        utmContent: a.utmContent,
+        formName: a.formName,
+        cta: a.cta,
+        objective: a.objective,
+        productCategory: a.productCategory,
+        campaignId: a.campaignId,
+        campaignName: a.campaignName,
+        dateStamp: a.dateStamp,
         pageviewsSum: a.clientIds.size,
         timeAvg: a.timeCount > 0 ? Math.round(a.timeTotal / a.timeCount) : 0,
         downloadsSum: a.downloadsSum,
         uniqueLeads: a.leadIds.size,
         sqoCount: a.sqoLeadIds.size,
-        formName: a.formName,
       }));
 
       await storage.clearAssets();

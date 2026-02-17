@@ -142,12 +142,19 @@ function ContentCard({
   const tone = stageTones[stage] || stageTones.TOFU;
 
   const secondary =
-    asset.name || asset.formName || asset.typecampaignmember || null;
+    asset.campaignName || asset.name || asset.formName || null;
 
   const tags = [
-    asset.typecampaignmember,
-    asset.productFranchise,
+    asset.utmCampaign && `Campaign: ${asset.utmCampaign}`,
+    asset.utmMedium && `Medium: ${asset.utmMedium}`,
     asset.utmChannel,
+    asset.productFranchise,
+    asset.productCategory,
+    asset.objective,
+    asset.cta && `CTA: ${asset.cta}`,
+    asset.utmTerm && `Term: ${asset.utmTerm}`,
+    asset.utmContent && `UTM Content: ${asset.utmContent}`,
+    asset.formName && `Form: ${asset.formName}`,
   ].filter(Boolean);
 
   return (
