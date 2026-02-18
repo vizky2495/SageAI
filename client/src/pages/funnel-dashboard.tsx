@@ -748,34 +748,38 @@ export default function FunnelDashboard() {
       .slice(0, 10);
   }, [filtered, dimension]);
 
-  const ctaFunnelData = useMemo(() => {
-    const ctaMap = new Map<string, { cta: string; TOFU: number; MOFU: number; BOFU: number; total: number }>();
+  const ctaByStage = useMemo(() => {
+    const map: Record<string, Map<string, number>> = { TOFU: new Map(), MOFU: new Map(), BOFU: new Map() };
     for (const r of rows) {
       const ctaVal = r.cta || "(none)";
-      if (!ctaMap.has(ctaVal)) {
-        ctaMap.set(ctaVal, { cta: ctaVal, TOFU: 0, MOFU: 0, BOFU: 0, total: 0 });
-      }
-      const entry = ctaMap.get(ctaVal)!;
-      if (r.stage === "TOFU" || r.stage === "MOFU" || r.stage === "BOFU") {
-        entry[r.stage] += 1;
-        entry.total += 1;
+      const s = r.stage;
+      if (s === "TOFU" || s === "MOFU" || s === "BOFU") {
+        map[s].set(ctaVal, (map[s].get(ctaVal) || 0) + 1);
       }
     }
-    return Array.from(ctaMap.values())
-      .filter((d) => d.total > 0)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 12);
+    const toArr = (m: Map<string, number>) =>
+      Array.from(m.entries())
+        .map(([cta, count]) => ({ cta, count }))
+        .sort((a, b) => b.count - a.count);
+    return {
+      TOFU: toArr(map.TOFU),
+      MOFU: toArr(map.MOFU),
+      BOFU: toArr(map.BOFU),
+    };
   }, [rows]);
 
   const ctaSummary = useMemo(() => {
-    const ctaMap = new Map<string, { cta: string; assets: number; pageViews: number; leads: number; sqos: number }>();
+    const ctaMap = new Map<string, { cta: string; assets: number; tofu: number; mofu: number; bofu: number; pageViews: number; leads: number; sqos: number }>();
     for (const r of rows) {
       const ctaVal = r.cta || "(none)";
       if (!ctaMap.has(ctaVal)) {
-        ctaMap.set(ctaVal, { cta: ctaVal, assets: 0, pageViews: 0, leads: 0, sqos: 0 });
+        ctaMap.set(ctaVal, { cta: ctaVal, assets: 0, tofu: 0, mofu: 0, bofu: 0, pageViews: 0, leads: 0, sqos: 0 });
       }
       const entry = ctaMap.get(ctaVal)!;
       entry.assets += 1;
+      if (r.stage === "TOFU") entry.tofu += 1;
+      else if (r.stage === "MOFU") entry.mofu += 1;
+      else if (r.stage === "BOFU") entry.bofu += 1;
       entry.pageViews += r.pageViews || 0;
       entry.leads += r.newContacts || 0;
       entry.sqos += r.sqos || 0;
@@ -1284,50 +1288,64 @@ export default function FunnelDashboard() {
             </Card>
           </header>
 
-          <div className="grid gap-4 lg:grid-cols-5">
-            <Card className="lg:col-span-3 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium" data-testid="text-funnel-title">
-                    CTA Funnel Overview
-                  </div>
-                  <div
-                    className="mt-1 text-xs text-muted-foreground"
-                    data-testid="text-funnel-subtitle"
-                  >
-                    Content assets by CTA type across funnel stages.
-                  </div>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className="rounded-xl"
-                  data-testid="badge-funnel"
+          <div className="grid gap-4 lg:grid-cols-3 mb-4">
+            {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((stage) => {
+              const stageColors: Record<string, string> = {
+                TOFU: "hsl(var(--chart-1))",
+                MOFU: "hsl(var(--chart-2))",
+                BOFU: "hsl(var(--chart-3))",
+              };
+              const data = ctaByStage[stage];
+              const chartHeight = Math.max(200, data.length * 32 + 40);
+              return (
+                <Card
+                  key={stage}
+                  className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur"
+                  data-testid={`card-cta-${stage.toLowerCase()}`}
                 >
-                  {ctaFunnelData.length} CTAs
-                </Badge>
-              </div>
-              <div className="mt-4 h-[320px]" data-testid="chart-funnel">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={ctaFunnelData} layout="vertical" barCategoryGap={6}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} horizontal={false} />
-                    <XAxis type="number" tickLine={false} axisLine={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="cta"
-                      tickLine={false}
-                      axisLine={false}
-                      width={130}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <ReTooltip />
-                    <Legend />
-                    <Bar dataKey="TOFU" name="TOFU" stackId="stage" fill="hsl(var(--chart-1))" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="MOFU" name="MOFU" stackId="stage" fill="hsl(var(--chart-2))" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="BOFU" name="BOFU" stackId="stage" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium" data-testid={`text-cta-stage-title-${stage.toLowerCase()}`}>
+                        {stage} — CTA Breakdown
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Count of content IDs per CTA type
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="rounded-xl" data-testid={`badge-cta-stage-${stage.toLowerCase()}`}>
+                      {data.reduce((s, d) => s + d.count, 0)} assets
+                    </Badge>
+                  </div>
+                  <div className="mt-3" style={{ height: chartHeight }} data-testid={`chart-cta-${stage.toLowerCase()}`}>
+                    {data.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data} layout="vertical" barCategoryGap={4} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} horizontal={false} />
+                          <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                          <YAxis
+                            type="category"
+                            dataKey="cta"
+                            tickLine={false}
+                            axisLine={false}
+                            width={120}
+                            tick={{ fontSize: 11 }}
+                          />
+                          <ReTooltip formatter={(value: number) => [value, "Content IDs"]} />
+                          <Bar dataKey="count" name="Content IDs" fill={stageColors[stage]} radius={[0, 6, 6, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                        No CTA data for {stage}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-5">
 
             <Card className="lg:col-span-2 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
               <div className="flex items-center justify-between">
@@ -1517,12 +1535,15 @@ export default function FunnelDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[28%]">CTA</TableHead>
-                        <TableHead className="text-right">Assets</TableHead>
+                        <TableHead>CTA</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">TOFU</TableHead>
+                        <TableHead className="text-right">MOFU</TableHead>
+                        <TableHead className="text-right">BOFU</TableHead>
                         <TableHead className="text-right">Page Views</TableHead>
                         <TableHead className="text-right">Leads</TableHead>
                         <TableHead className="text-right">SQOs</TableHead>
-                        <TableHead className="text-right">Conv. Rate</TableHead>
+                        <TableHead className="text-right">Conv.</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1531,8 +1552,17 @@ export default function FunnelDashboard() {
                           <TableCell>
                             <div className="text-sm font-medium" data-testid={`text-cta-name-${idx}`}>{d.cta}</div>
                           </TableCell>
-                          <TableCell className="text-right text-sm" data-testid={`text-cta-assets-${idx}`}>
+                          <TableCell className="text-right text-sm font-[650]" data-testid={`text-cta-assets-${idx}`}>
                             {formatCompact(d.assets)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-tofu-${idx}`}>
+                            {d.tofu || "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-mofu-${idx}`}>
+                            {d.mofu || "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-bofu-${idx}`}>
+                            {d.bofu || "—"}
                           </TableCell>
                           <TableCell className="text-right text-sm" data-testid={`text-cta-views-${idx}`}>
                             {formatCompact(d.pageViews)}
