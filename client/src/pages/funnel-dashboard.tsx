@@ -63,6 +63,7 @@ type NormalizedRow = {
   productFranchise?: string;
   objective?: string;
   contentType?: string;
+  cta?: string;
   engagedSessions?: number;
   sessions?: number;
   pageViews?: number;
@@ -228,6 +229,9 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
         pickFirst(r, ["typecampaignmember__c", "content_type", "type"]) ?? "",
       ).trim() || undefined;
 
+    const cta =
+      String(pickFirst(r, ["cta", "call_to_action", "cta_type"]) ?? "").trim() || undefined;
+
     const engagedSessions = toNumber(
       pickFirst(r, [
         "engaged_sessions",
@@ -342,6 +346,7 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       productFranchise,
       objective,
       contentType,
+      cta,
       engagedSessions,
       sessions,
       pageViews,
@@ -554,6 +559,7 @@ export default function FunnelDashboard() {
           productFranchise: a.productFranchise || undefined,
           objective: a.objective || undefined,
           contentType: a.typecampaignmember || undefined,
+          cta: a.cta || undefined,
           engagedSessions: undefined,
           sessions: undefined,
           pageViews: a.pageviewsSum || 0,
@@ -741,6 +747,42 @@ export default function FunnelDashboard() {
       )
       .slice(0, 10);
   }, [filtered, dimension]);
+
+  const ctaFunnelData = useMemo(() => {
+    const ctaMap = new Map<string, { cta: string; TOFU: number; MOFU: number; BOFU: number; total: number }>();
+    for (const r of rows) {
+      const ctaVal = r.cta || "(none)";
+      if (!ctaMap.has(ctaVal)) {
+        ctaMap.set(ctaVal, { cta: ctaVal, TOFU: 0, MOFU: 0, BOFU: 0, total: 0 });
+      }
+      const entry = ctaMap.get(ctaVal)!;
+      if (r.stage === "TOFU" || r.stage === "MOFU" || r.stage === "BOFU") {
+        entry[r.stage] += 1;
+        entry.total += 1;
+      }
+    }
+    return Array.from(ctaMap.values())
+      .filter((d) => d.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12);
+  }, [rows]);
+
+  const ctaSummary = useMemo(() => {
+    const ctaMap = new Map<string, { cta: string; assets: number; pageViews: number; leads: number; sqos: number }>();
+    for (const r of rows) {
+      const ctaVal = r.cta || "(none)";
+      if (!ctaMap.has(ctaVal)) {
+        ctaMap.set(ctaVal, { cta: ctaVal, assets: 0, pageViews: 0, leads: 0, sqos: 0 });
+      }
+      const entry = ctaMap.get(ctaVal)!;
+      entry.assets += 1;
+      entry.pageViews += r.pageViews || 0;
+      entry.leads += r.newContacts || 0;
+      entry.sqos += r.sqos || 0;
+    }
+    return Array.from(ctaMap.values())
+      .sort((a, b) => b.assets - a.assets);
+  }, [rows]);
 
   const funnelSeries = useMemo(() => {
     if (uploadDiagnostics) {
@@ -1247,14 +1289,13 @@ export default function FunnelDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium" data-testid="text-funnel-title">
-                    Funnel overview
+                    CTA Funnel Overview
                   </div>
                   <div
                     className="mt-1 text-xs text-muted-foreground"
                     data-testid="text-funnel-subtitle"
                   >
-                    Stage volumes and progression signals (sample visualization;
-                    add date column for time series).
+                    Content assets by CTA type across funnel stages.
                   </div>
                 </div>
                 <Badge
@@ -1262,72 +1303,27 @@ export default function FunnelDashboard() {
                   className="rounded-xl"
                   data-testid="badge-funnel"
                 >
-                  {stageFilter === "ALL" ? "All stages" : stageFilter}
+                  {ctaFunnelData.length} CTAs
                 </Badge>
               </div>
-              <div className="mt-4 h-[280px]" data-testid="chart-funnel">
+              <div className="mt-4 h-[320px]" data-testid="chart-funnel">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={funnelSeries} barCategoryGap={18}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.35} />
-                    <XAxis dataKey="stage" tickLine={false} axisLine={false} />
-                    <YAxis tickLine={false} axisLine={false} />
+                  <BarChart data={ctaFunnelData} layout="vertical" barCategoryGap={6}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} horizontal={false} />
+                    <XAxis type="number" tickLine={false} axisLine={false} />
+                    <YAxis
+                      type="category"
+                      dataKey="cta"
+                      tickLine={false}
+                      axisLine={false}
+                      width={130}
+                      tick={{ fontSize: 12 }}
+                    />
                     <ReTooltip />
                     <Legend />
-                    {uploadDiagnostics ? (
-                      <>
-                        <Bar
-                          dataKey="contentAssets"
-                          name="Content Assets"
-                          fill="hsl(var(--chart-1))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="pageViews"
-                          name="Page Views"
-                          fill="hsl(var(--chart-2))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="uniqueLeads"
-                          name="Unique Leads"
-                          fill="hsl(var(--chart-3))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="sqos"
-                          name="SQOs"
-                          fill="hsl(var(--chart-4))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Bar
-                          dataKey="engagedSessions"
-                          name="Engaged Sessions"
-                          fill="hsl(var(--chart-1))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="newContacts"
-                          name="New Contacts"
-                          fill="hsl(var(--chart-2))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="mqls"
-                          name="MQLs"
-                          fill="hsl(var(--chart-3))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="sqos"
-                          name="SQOs"
-                          fill="hsl(var(--chart-4))"
-                          radius={[10, 10, 0, 0]}
-                        />
-                      </>
-                    )}
+                    <Bar dataKey="TOFU" name="TOFU" stackId="stage" fill="hsl(var(--chart-1))" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="MOFU" name="MOFU" stackId="stage" fill="hsl(var(--chart-2))" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="BOFU" name="BOFU" stackId="stage" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1474,8 +1470,16 @@ export default function FunnelDashboard() {
             </Card>
           </div>
 
-          <Tabs defaultValue="top-content" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+          <Tabs defaultValue="cta-analysis" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+              <TabsTrigger
+                value="cta-analysis"
+                className="rounded-xl"
+                data-testid="tab-cta-analysis"
+              >
+                <Filter className="mr-2 h-4 w-4" />
+                CTA Analysis
+              </TabsTrigger>
               <TabsTrigger
                 value="top-content"
                 className="rounded-xl"
@@ -1493,6 +1497,62 @@ export default function FunnelDashboard() {
                 Raw CSV
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="cta-analysis" className="mt-4">
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium" data-testid="text-cta-title">
+                      CTA Performance Summary
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground" data-testid="text-cta-subtitle">
+                      Metrics breakdown per CTA type across all funnel stages.
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="rounded-xl" data-testid="badge-cta-count">
+                    {ctaSummary.length} CTAs
+                  </Badge>
+                </div>
+                <div className="mt-4 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[28%]">CTA</TableHead>
+                        <TableHead className="text-right">Assets</TableHead>
+                        <TableHead className="text-right">Page Views</TableHead>
+                        <TableHead className="text-right">Leads</TableHead>
+                        <TableHead className="text-right">SQOs</TableHead>
+                        <TableHead className="text-right">Conv. Rate</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ctaSummary.map((d, idx) => (
+                        <TableRow key={d.cta} className="hover:bg-muted/30" data-testid={`row-cta-${idx}`}>
+                          <TableCell>
+                            <div className="text-sm font-medium" data-testid={`text-cta-name-${idx}`}>{d.cta}</div>
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-assets-${idx}`}>
+                            {formatCompact(d.assets)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-views-${idx}`}>
+                            {formatCompact(d.pageViews)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-leads-${idx}`}>
+                            {formatCompact(d.leads)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-[650]" data-testid={`text-cta-sqos-${idx}`}>
+                            {formatCompact(d.sqos)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm" data-testid={`text-cta-conv-${idx}`}>
+                            {d.leads > 0 ? `${((d.sqos / d.leads) * 100).toFixed(1)}%` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="top-content" className="mt-4">
               <div className="grid gap-4 lg:grid-cols-3">
