@@ -977,18 +977,22 @@ export default function FunnelDashboard() {
                   <div>
                     <div className="text-xs text-muted-foreground">TOFU</div>
                     <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-tofu-hero">
-                      {formatCompact(tofuHero)}
+                      {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.TOFU ?? 0) : tofuHero)}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
-                      New users / contacts
+                      {uploadDiagnostics ? "Content assets" : "New users / contacts"}
                     </div>
                   </div>
                   <Badge className={`border ${stageMeta.TOFU.tone}`} data-testid="badge-tofu">
-                    {formatPct(tofuConv)} new-user rate
+                    {uploadDiagnostics
+                      ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.TOFU ?? 0, uploadDiagnostics.ingested))} of total`
+                      : `${formatPct(tofuConv)} new-user rate`}
                   </Badge>
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground" data-testid="text-tofu-notes">
-                  Hero metric uses {tofuNewUsers ? "new users" : "new contacts"}. Denominator uses {tofuEngaged ? "engaged sessions" : "sessions"}.
+                  {uploadDiagnostics
+                    ? `${uploadDiagnostics.stageBreakdown.TOFU ?? 0} unique content IDs classified as Top-of-Funnel`
+                    : `Hero metric uses ${tofuNewUsers ? "new users" : "new contacts"}. Denominator uses ${tofuEngaged ? "engaged sessions" : "sessions"}.`}
                 </div>
               </Card>
 
@@ -997,22 +1001,30 @@ export default function FunnelDashboard() {
                   <div>
                     <div className="text-xs text-muted-foreground">MOFU</div>
                     <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-mofu-mqls">
-                      {formatCompact(mofuMqls)}
+                      {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.MOFU ?? 0) : mofuMqls)}
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">MQLs</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {uploadDiagnostics ? "Content assets" : "MQLs"}
+                    </div>
                   </div>
                   <Badge
                     className={`border ${stageMeta.MOFU.tone}`}
                     data-testid="badge-mofu"
                   >
-                    {formatPct(mofuConv)} MQL rate
+                    {uploadDiagnostics
+                      ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.MOFU ?? 0, uploadDiagnostics.ingested))} of total`
+                      : `${formatPct(mofuConv)} MQL rate`}
                   </Badge>
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground" data-testid="text-mofu-notes">
-                  {avgMqlScore !== undefined
-                    ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
-                    : "Lead score not available"}
-                  {mofuQdcs ? ` \u00b7 QDCs: ${formatCompact(mofuQdcs)}` : " \u00b7 QDC not tracked"}
+                  {uploadDiagnostics
+                    ? `${uploadDiagnostics.stageBreakdown.MOFU ?? 0} unique content IDs classified as Middle-of-Funnel`
+                    : <>
+                        {avgMqlScore !== undefined
+                          ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
+                          : "Lead score not available"}
+                        {mofuQdcs ? ` \u00b7 QDCs: ${formatCompact(mofuQdcs)}` : " \u00b7 QDC not tracked"}
+                      </>}
                 </div>
               </Card>
 
@@ -1024,16 +1036,22 @@ export default function FunnelDashboard() {
                       className="mt-1 text-2xl font-[650] tracking-tight"
                       data-testid="text-bofu-sqos"
                     >
-                      {formatCompact(bofuSqos)}
+                      {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.BOFU ?? 0) : bofuSqos)}
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">SQOs</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {uploadDiagnostics ? "Content assets" : "SQOs"}
+                    </div>
                   </div>
                   <Badge className={`border ${stageMeta.BOFU.tone}`} data-testid="badge-bofu">
-                    {bofuQdcs ? `${formatCompact(bofuQdcs)} QDCs` : "QDC not tracked"}
+                    {uploadDiagnostics
+                      ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.BOFU ?? 0, uploadDiagnostics.ingested))} of total`
+                      : bofuQdcs ? `${formatCompact(bofuQdcs)} QDCs` : "QDC not tracked"}
                   </Badge>
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground" data-testid="text-bofu-notes">
-                  {bofuQdcs ? `QDC \u2192 SQO: ${formatPct(pct(bofuSqos, bofuQdcs))}` : "QDC \u2192 SQO conversion is skipped (no QDC data)."}
+                  {uploadDiagnostics
+                    ? `${uploadDiagnostics.stageBreakdown.BOFU ?? 0} unique content IDs classified as Bottom-of-Funnel`
+                    : bofuQdcs ? `QDC \u2192 SQO: ${formatPct(pct(bofuSqos, bofuQdcs))}` : "QDC \u2192 SQO conversion is skipped (no QDC data)."}
                 </div>
               </Card>
             </div>
