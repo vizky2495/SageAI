@@ -166,7 +166,7 @@ function ContentCard({
   return (
     <>
       <Card
-        className="group flex h-full w-[280px] shrink-0 flex-col rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur transition hover:shadow"
+        className="group relative flex h-full w-[280px] shrink-0 flex-col rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-primary/30 hover:bg-card"
         data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
       >
         <div className="flex items-start justify-between gap-2">
@@ -217,7 +217,7 @@ function ContentCard({
               {truncateUrl(asset.url)}
             </div>
             <button
-              className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
               onClick={() => setPreviewUrl(asset.url)}
               title="Preview URL"
               data-testid="button-preview-url"
@@ -250,7 +250,7 @@ function ContentCard({
           </div>
         )}
 
-        <Separator className="my-3" />
+        <Separator className="my-3 transition-colors group-hover:bg-primary/20" />
 
         <div className="grid grid-cols-2 gap-2 text-xs" data-testid="card-metrics">
           {stage === "TOFU" && (
@@ -431,7 +431,7 @@ function StageCarousel({
 
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin"
+        className="flex gap-3 overflow-x-auto pt-2 pb-3 scrollbar-thin"
         style={{ scrollSnapType: "x mandatory", maxWidth: "100%" }}
         data-testid={`scroll-lane-${stage.toLowerCase()}`}
       >
@@ -485,7 +485,7 @@ export default function ContentLibrary() {
   }, []);
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 overflow-hidden" data-testid="content-library">
+    <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
       <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
