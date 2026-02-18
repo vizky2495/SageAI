@@ -434,9 +434,11 @@ export default function FunnelDashboard() {
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
   const [uploadDiagnostics, setUploadDiagnostics] = useState<UploadDiagnostics | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [dbRows, setDbRows] = useState<NormalizedRow[] | null>(null);
 
   const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
-  const rows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
+  const csvRows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
+  const rows = dbRows ?? csvRows;
 
   const queryClient = useQueryClient();
   const ingestedRef = useRef<string>("");
@@ -538,8 +540,40 @@ export default function FunnelDashboard() {
 
       const diagnostics: UploadDiagnostics = await ingestRes.json();
       setUploadDiagnostics(diagnostics);
-      setAiStep("done");
 
+      const allAssetsRes = await fetch("/api/assets/all");
+      if (allAssetsRes.ok) {
+        const dbAssets: any[] = await allAssetsRes.json();
+        const converted: NormalizedRow[] = dbAssets.map((a, idx) => ({
+          id: a.id || `db-${idx}`,
+          content: a.contentId || "",
+          stage: (a.stage || "UNKNOWN") as FunnelStage,
+          utmChannel: a.utmChannel || undefined,
+          utmMedium: a.utmMedium || undefined,
+          utmContent: a.utmContent || undefined,
+          productFranchise: a.productFranchise || undefined,
+          objective: a.objective || undefined,
+          contentType: a.typecampaignmember || undefined,
+          engagedSessions: undefined,
+          sessions: undefined,
+          pageViews: a.pageviewsSum || 0,
+          timeSpentSeconds: a.timeAvg || undefined,
+          scrollDepth: undefined,
+          newUsers: undefined,
+          returningUsers: undefined,
+          newsletterSignups: undefined,
+          nextContentViews: undefined,
+          newContacts: a.uniqueLeads || 0,
+          formSubmissions: undefined,
+          mqls: undefined,
+          qdcs: undefined,
+          sqos: a.sqoCount || 0,
+          leadScore: undefined,
+        }));
+        setDbRows(converted);
+      }
+
+      setAiStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
     } catch (err: any) {
       console.error("AI upload error:", err);
@@ -610,8 +644,9 @@ export default function FunnelDashboard() {
   const topByStage: TopByStage = useMemo(() => {
     const compute = (stage: StageKey) => {
       const base = byStage[stage];
-      const metricKey: keyof NormalizedRow =
-        stage === "TOFU"
+      const metricKey: keyof NormalizedRow = uploadDiagnostics
+        ? "pageViews"
+        : stage === "TOFU"
           ? (sum(base, "newUsers") ? "newUsers" : "newContacts")
           : stage === "MOFU"
             ? "mqls"
@@ -655,7 +690,7 @@ export default function FunnelDashboard() {
       MOFU: compute("MOFU"),
       BOFU: compute("BOFU"),
     };
-  }, [byStage]);
+  }, [byStage, uploadDiagnostics]);
 
   const dimensionData = useMemo(() => {
     const roll = new Map<
@@ -708,6 +743,30 @@ export default function FunnelDashboard() {
   }, [filtered, dimension]);
 
   const funnelSeries = useMemo(() => {
+    if (uploadDiagnostics) {
+      const sb = uploadDiagnostics.stageBreakdown;
+      return [
+        {
+          stage: "TOFU",
+          contentAssets: sb.TOFU ?? 0,
+          pageViews: sum(byStage.TOFU, "pageViews"),
+          uniqueLeads: sum(byStage.TOFU, "newContacts"),
+        },
+        {
+          stage: "MOFU",
+          contentAssets: sb.MOFU ?? 0,
+          pageViews: sum(byStage.MOFU, "pageViews"),
+          uniqueLeads: sum(byStage.MOFU, "newContacts"),
+        },
+        {
+          stage: "BOFU",
+          contentAssets: sb.BOFU ?? 0,
+          pageViews: sum(byStage.BOFU, "pageViews"),
+          uniqueLeads: sum(byStage.BOFU, "newContacts"),
+          sqos: sum(byStage.BOFU, "sqos"),
+        },
+      ];
+    }
     return [
       {
         stage: "TOFU",
@@ -725,7 +784,7 @@ export default function FunnelDashboard() {
         sqos: bofuSqos,
       },
     ];
-  }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos]);
+  }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStage]);
 
   function onPickFile(file: File) {
     handleAiUpload(file);
@@ -815,6 +874,7 @@ export default function FunnelDashboard() {
                       setAiAnalysis(null);
                       setUploadDiagnostics(null);
                       setAiError(null);
+                      setDbRows(null);
                       setCsvText(mockCSV);
                       setFileName("sample.csv");
                     }}
@@ -1213,30 +1273,61 @@ export default function FunnelDashboard() {
                     <YAxis tickLine={false} axisLine={false} />
                     <ReTooltip />
                     <Legend />
-                    <Bar
-                      dataKey="engagedSessions"
-                      name="Engaged Sessions"
-                      fill="hsl(var(--chart-1))"
-                      radius={[10, 10, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="newContacts"
-                      name="New Contacts"
-                      fill="hsl(var(--chart-2))"
-                      radius={[10, 10, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="mqls"
-                      name="MQLs"
-                      fill="hsl(var(--chart-3))"
-                      radius={[10, 10, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="sqos"
-                      name="SQOs"
-                      fill="hsl(var(--chart-4))"
-                      radius={[10, 10, 0, 0]}
-                    />
+                    {uploadDiagnostics ? (
+                      <>
+                        <Bar
+                          dataKey="contentAssets"
+                          name="Content Assets"
+                          fill="hsl(var(--chart-1))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="pageViews"
+                          name="Page Views"
+                          fill="hsl(var(--chart-2))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="uniqueLeads"
+                          name="Unique Leads"
+                          fill="hsl(var(--chart-3))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="sqos"
+                          name="SQOs"
+                          fill="hsl(var(--chart-4))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Bar
+                          dataKey="engagedSessions"
+                          name="Engaged Sessions"
+                          fill="hsl(var(--chart-1))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="newContacts"
+                          name="New Contacts"
+                          fill="hsl(var(--chart-2))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="mqls"
+                          name="MQLs"
+                          fill="hsl(var(--chart-3))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="sqos"
+                          name="SQOs"
+                          fill="hsl(var(--chart-4))"
+                          radius={[10, 10, 0, 0]}
+                        />
+                      </>
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1260,7 +1351,7 @@ export default function FunnelDashboard() {
                   className="rounded-xl"
                   data-testid="badge-mix"
                 >
-                  {formatCompact(totalRows)} rows
+                  {formatCompact(uploadDiagnostics ? uploadDiagnostics.ingested : totalRows)} {uploadDiagnostics ? "content assets" : "rows"}
                 </Badge>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1284,13 +1375,17 @@ export default function FunnelDashboard() {
                         className="mt-1 text-lg font-[650] tracking-tight"
                         data-testid={`text-stage-count-${s.toLowerCase()}`}
                       >
-                        {byStage[s].length}
+                        {uploadDiagnostics
+                          ? (uploadDiagnostics.stageBreakdown[s] ?? 0)
+                          : byStage[s].length}
                       </div>
                     </div>
                     <span
                       className={`rounded-full border px-2 py-1 text-xs ${stageMeta[s].tone}`}
                     >
-                      {Math.round(pct(byStage[s].length, totalRows))}%
+                      {uploadDiagnostics
+                        ? Math.round(pct(uploadDiagnostics.stageBreakdown[s] ?? 0, uploadDiagnostics.ingested))
+                        : Math.round(pct(byStage[s].length, totalRows))}%
                     </span>
                   </button>
                 ))}
@@ -1334,8 +1429,8 @@ export default function FunnelDashboard() {
                       <ReTooltip />
                       <Area
                         type="monotone"
-                        dataKey="mqls"
-                        name="MQLs"
+                        dataKey={uploadDiagnostics ? "views" : "mqls"}
+                        name={uploadDiagnostics ? "Page Views" : "MQLs"}
                         stroke="hsl(var(--chart-1))"
                         fill="url(#g1)"
                         strokeWidth={2}
@@ -1352,13 +1447,25 @@ export default function FunnelDashboard() {
                     >
                       <div className="truncate text-sm font-medium">{d.key}</div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatCompact(d.contacts)} contacts</span>
-                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                        <span>{formatCompact(d.mqls)} MQLs</span>
-                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                        <span>{formatCompact(d.qdcs)} QDCs</span>
-                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                        <span>{formatCompact(d.sqos)} SQOs</span>
+                        {uploadDiagnostics ? (
+                          <>
+                            <span>{formatCompact(d.views)} page views</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>{formatCompact(d.contacts)} leads</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>{formatCompact(d.sqos)} SQOs</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>{formatCompact(d.contacts)} contacts</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>{formatCompact(d.mqls)} MQLs</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>{formatCompact(d.qdcs)} QDCs</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>{formatCompact(d.sqos)} SQOs</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1390,8 +1497,9 @@ export default function FunnelDashboard() {
             <TabsContent value="top-content" className="mt-4">
               <div className="grid gap-4 lg:grid-cols-3">
                 {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((s) => {
-                  const metricLabel =
-                    s === "TOFU" ? "Engaged Sessions" : s === "MOFU" ? "MQLs" : "SQOs";
+                  const metricLabel = uploadDiagnostics
+                    ? "Page Views"
+                    : s === "TOFU" ? "Engaged Sessions" : s === "MOFU" ? "MQLs" : "SQOs";
 
                   return (
                     <Card

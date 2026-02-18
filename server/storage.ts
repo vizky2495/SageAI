@@ -33,6 +33,7 @@ export interface IStorage {
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }>;
+  getAllAssets(): Promise<AssetAgg[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -137,6 +138,9 @@ export class DatabaseStorage implements IStorage {
     ]);
 
     return { data, total };
+  }
+  async getAllAssets(): Promise<AssetAgg[]> {
+    return db.select().from(assetsAgg).orderBy(desc(assetsAgg.pageviewsSum));
   }
 }
 

@@ -204,6 +204,11 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.get("/api/assets/all", async (_req, res) => {
+    const assets = await storage.getAllAssets();
+    res.json(assets);
+  });
+
   app.post("/api/assets/upload-excel", async (req: Request, res: Response) => {
     try {
       const { base64, filename } = req.body as { base64: string; filename: string };
