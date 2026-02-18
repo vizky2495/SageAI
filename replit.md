@@ -1,9 +1,9 @@
 # Overview
 
-**Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV files containing marketing performance data, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards. It also includes a **Prompt Studio** for managing and versioning AI prompt configurations used by the Content Intelligence Analyst agent, with collaborator tracking.
+**Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV and Excel (.xlsx) files containing marketing performance data, uses Claude Opus AI to intelligently map columns to the standardized schema, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards. It also includes a **Prompt Studio** for managing and versioning AI prompt configurations used by the Content Intelligence Analyst agent, with collaborator tracking.
 
 The app has two main pages:
-1. **Funnel Dashboard** (`/`) — Upload CSVs, visualize funnel metrics with charts and tables, filter by stage/product/channel. Includes a **Content Library** section with backend-aggregated content assets displayed in horizontal carousels per stage (TOFU/MOFU/BOFU), searchable by content ID, with infinite scroll and URL preview.
+1. **Funnel Dashboard** (`/`) — Upload CSVs or Excel files, visualize funnel metrics with charts and tables, filter by stage/product/channel. Features AI-powered column mapping via Claude Opus that prevents rows from being silently dropped due to mismatched column names. Shows real-time upload diagnostics (total rows, ingested count, skipped rows, stage breakdown). Includes a **Content Library** section with backend-aggregated content assets displayed in horizontal carousels per stage (TOFU/MOFU/BOFU), searchable by content ID, with infinite scroll and URL preview.
 2. **Prompt Studio** (`/prompt-studio`) — CRUD interface for prompt versions and collaborators, supporting version tagging, compiled prompt content, and risk-level tracking.
 
 # User Preferences
@@ -32,6 +32,9 @@ Preferred communication style: Simple, everyday language.
   - `/api/collaborators` — CRUD for collaborators (GET, POST, PATCH, DELETE)
   - `/api/compile` — POST: deterministic compilation of collaborator layers into a single prompt
   - `/api/diff/:versionId/:compareId` — GET: line-level diff between two versions
+  - `/api/assets/upload-excel` — POST: parse Excel (.xlsx) files sent as base64, returns headers + rows
+  - `/api/assets/analyze` — POST: sends headers + sample rows to Claude Opus for intelligent column mapping
+  - `/api/assets/ingest-mapped` — POST: uses AI-generated column mapping to ingest rows without dropping mismatched columns
 - **Validation**: Zod schemas (generated from Drizzle schema via `drizzle-zod`)
 - **Dev Server**: Vite dev server is integrated as Express middleware during development (see `server/vite.ts`). In production, static files are served from `dist/public`
 

@@ -1,15 +1,19 @@
 import TopNav from "@/components/top-nav";
 import ContentLibrary from "@/components/content-library";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  Brain,
+  CheckCircle2,
   FileUp,
   Filter,
+  Loader2,
   LineChart,
   Sparkles,
   Table as TableIcon,
+  XCircle,
 } from "lucide-react";
 import {
   Area,
@@ -398,6 +402,25 @@ TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Blog,NCA,640,980,2600,61,56,35
 MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Landing Page,NCA,260,420,1100,77,65,140,95,9,130,25,25,10,2,1,44
 BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Landing Page,NCA,90,140,520,44,47,55,45,1,38,10,10,6,2,4,66`;
 
+type AiAnalysis = {
+  mapping: Record<string, string | null>;
+  contentIdColumn: string;
+  stageSignals: string[];
+  unmappedColumns: string[];
+  dataQualityNotes: string[];
+  confidence: string;
+};
+
+type UploadDiagnostics = {
+  ingested: number;
+  totalRows: number;
+  skippedNoContentId: number;
+  uniqueContentIds: number;
+  stageBreakdown: Record<string, number>;
+};
+
+type AiStep = "idle" | "parsing" | "analyzing" | "ingesting" | "done" | "error";
+
 export default function FunnelDashboard() {
   const [csvText, setCsvText] = useState<string>(mockCSV);
   const [fileName, setFileName] = useState<string>("sample.csv");
@@ -407,13 +430,21 @@ export default function FunnelDashboard() {
   >("utmChannel");
   const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
 
+  const [aiStep, setAiStep] = useState<AiStep>("idle");
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
+  const [uploadDiagnostics, setUploadDiagnostics] = useState<UploadDiagnostics | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
   const rows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
 
   const queryClient = useQueryClient();
   const ingestedRef = useRef<string>("");
 
+  const aiActiveRef = useRef(false);
+
   useEffect(() => {
+    if (aiActiveRef.current) return;
     const key = csvText.slice(0, 200);
     if (key === ingestedRef.current || parsedRows.length === 0) return;
     ingestedRef.current = key;
@@ -425,6 +456,97 @@ export default function FunnelDashboard() {
       .then(() => queryClient.invalidateQueries({ queryKey: ["/api/assets"] }))
       .catch((err) => console.error("Ingest failed:", err));
   }, [parsedRows, csvText, queryClient]);
+
+  const handleAiUpload = useCallback(async (file: File) => {
+    aiActiveRef.current = true;
+    setAiStep("parsing");
+    setAiError(null);
+    setAiAnalysis(null);
+    setUploadDiagnostics(null);
+    setFileName(file.name);
+
+    try {
+      const isExcel = file.name.match(/\.xlsx?$/i);
+      let headers: string[];
+      let sampleRows: Record<string, any>[];
+      let allRows: Record<string, any>[];
+
+      if (isExcel) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const parseRes = await fetch("/api/assets/upload-excel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base64, filename: file.name }),
+        });
+
+        if (!parseRes.ok) {
+          const err = await parseRes.json();
+          throw new Error(err.message || "Failed to parse Excel file");
+        }
+
+        const parseData = await parseRes.json();
+        headers = parseData.headers;
+        sampleRows = parseData.sampleRows;
+        allRows = parseData.rows;
+      } else {
+        const text = await file.text();
+        setCsvText(text);
+        const parsed = parseCSV(text);
+        if (parsed.length === 0) throw new Error("No data rows found in CSV");
+        headers = Object.keys(parsed[0]);
+        sampleRows = parsed.slice(0, 5) as Record<string, any>[];
+        allRows = parsed as Record<string, any>[];
+      }
+
+      setAiStep("analyzing");
+
+      const analyzeRes = await fetch("/api/assets/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ headers, sampleRows }),
+      });
+
+      if (!analyzeRes.ok) {
+        const err = await analyzeRes.json();
+        throw new Error(err.message || "AI analysis failed");
+      }
+
+      const analysis: AiAnalysis = await analyzeRes.json();
+      setAiAnalysis(analysis);
+
+      setAiStep("ingesting");
+
+      const ingestRes = await fetch("/api/assets/ingest-mapped", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: allRows, mapping: analysis.mapping }),
+      });
+
+      if (!ingestRes.ok) {
+        const err = await ingestRes.json();
+        throw new Error(err.message || "Ingestion failed");
+      }
+
+      const diagnostics: UploadDiagnostics = await ingestRes.json();
+      setUploadDiagnostics(diagnostics);
+      setAiStep("done");
+
+      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
+    } catch (err: any) {
+      console.error("AI upload error:", err);
+      setAiError(err.message || "Upload failed");
+      setAiStep("error");
+    }
+  }, [queryClient]);
 
   const filtered = useMemo(() => {
     const stageFiltered =
@@ -606,8 +728,7 @@ export default function FunnelDashboard() {
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos]);
 
   function onPickFile(file: File) {
-    setFileName(file.name);
-    file.text().then((t) => setCsvText(t));
+    handleAiUpload(file);
   }
 
   return (
@@ -665,15 +786,21 @@ export default function FunnelDashboard() {
                     className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-card/70 px-3 py-2 text-sm shadow-sm backdrop-blur hover:shadow"
                     data-testid="button-upload"
                   >
-                    <FileUp className="h-4 w-4" />
-                    <span className="font-medium">Upload CSV</span>
+                    {aiStep !== "idle" && aiStep !== "done" && aiStep !== "error" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileUp className="h-4 w-4" />
+                    )}
+                    <span className="font-medium">Upload CSV / Excel</span>
                     <input
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       className="hidden"
+                      disabled={aiStep !== "idle" && aiStep !== "done" && aiStep !== "error"}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f) onPickFile(f);
+                        e.target.value = "";
                       }}
                       data-testid="input-file"
                     />
@@ -682,7 +809,15 @@ export default function FunnelDashboard() {
                   <Button
                     variant="secondary"
                     className="rounded-xl"
-                    onClick={() => setCsvText(mockCSV)}
+                    onClick={() => {
+                      aiActiveRef.current = false;
+                      setAiStep("idle");
+                      setAiAnalysis(null);
+                      setUploadDiagnostics(null);
+                      setAiError(null);
+                      setCsvText(mockCSV);
+                      setFileName("sample.csv");
+                    }}
                     data-testid="button-load-sample"
                   >
                     <Sparkles className="mr-2 h-4 w-4" />
@@ -695,6 +830,146 @@ export default function FunnelDashboard() {
                 </div>
               </div>
             </div>
+
+            {aiStep !== "idle" && (
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ai-analysis-panel">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
+                    <Brain className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">AI-Powered File Analysis</div>
+                    <div className="text-xs text-muted-foreground">
+                      Claude Opus analyzes your file to map columns intelligently
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    {aiStep === "parsing" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-chart-1" />
+                    )}
+                    <span className={aiStep === "parsing" ? "font-medium" : "text-muted-foreground"}>
+                      Parsing file…
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    {aiStep === "analyzing" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-2" />
+                    ) : aiStep === "ingesting" || aiStep === "done" ? (
+                      <CheckCircle2 className="h-4 w-4 text-chart-2" />
+                    ) : aiStep === "error" && !aiAnalysis ? (
+                      <XCircle className="h-4 w-4 text-destructive" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                    )}
+                    <span className={aiStep === "analyzing" ? "font-medium" : "text-muted-foreground"}>
+                      AI analyzing columns with Claude Opus…
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    {aiStep === "ingesting" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-3" />
+                    ) : aiStep === "done" ? (
+                      <CheckCircle2 className="h-4 w-4 text-chart-3" />
+                    ) : aiStep === "error" && aiAnalysis ? (
+                      <XCircle className="h-4 w-4 text-destructive" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-muted" />
+                    )}
+                    <span className={aiStep === "ingesting" ? "font-medium" : "text-muted-foreground"}>
+                      Processing data with AI mapping…
+                    </span>
+                  </div>
+                </div>
+
+                {aiError && (
+                  <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" data-testid="ai-error">
+                    {aiError}
+                  </div>
+                )}
+
+                {aiAnalysis && (
+                  <div className="mt-3 rounded-xl border bg-muted/30 p-3" data-testid="ai-analysis-results">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="rounded-lg border bg-card/60">
+                        Confidence: {aiAnalysis.confidence}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Content ID column: <span className="font-medium text-foreground">{aiAnalysis.contentIdColumn}</span>
+                      </span>
+                    </div>
+
+                    {aiAnalysis.dataQualityNotes.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {aiAnalysis.dataQualityNotes.map((note, i) => (
+                          <div key={i} className="text-xs text-muted-foreground">
+                            • {note}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Object.entries(aiAnalysis.mapping)
+                        .filter(([, v]) => v !== null)
+                        .slice(0, 8)
+                        .map(([orig, target]) => (
+                          <Badge key={orig} variant="secondary" className="rounded-lg border bg-card/60 text-[10px]">
+                            {orig} → {target}
+                          </Badge>
+                        ))}
+                      {Object.values(aiAnalysis.mapping).filter(Boolean).length > 8 && (
+                        <Badge variant="secondary" className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground">
+                          +{Object.values(aiAnalysis.mapping).filter(Boolean).length - 8} more
+                        </Badge>
+                      )}
+                    </div>
+
+                    {aiAnalysis.unmappedColumns.length > 0 && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Unmapped: {aiAnalysis.unmappedColumns.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {uploadDiagnostics && (
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="upload-diagnostics">
+                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                      <div className="text-lg font-[650]">{uploadDiagnostics.totalRows.toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground">Total rows</div>
+                    </div>
+                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                      <div className="text-lg font-[650]">{uploadDiagnostics.uniqueContentIds.toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground">Unique content IDs</div>
+                    </div>
+                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                      <div className="text-lg font-[650]">{uploadDiagnostics.ingested.toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground">Ingested</div>
+                    </div>
+                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                      <div className={`text-lg font-[650] ${uploadDiagnostics.skippedNoContentId > 0 ? "text-destructive" : ""}`}>
+                        {uploadDiagnostics.skippedNoContentId.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">Skipped (no ID)</div>
+                    </div>
+                    <div className="col-span-2 sm:col-span-4 flex flex-wrap gap-2 justify-center">
+                      {Object.entries(uploadDiagnostics.stageBreakdown).map(([stage, count]) => (
+                        <Badge key={stage} className={`border ${(stageMeta as any)[stage]?.tone || ""}`}>
+                          {stage}: {count}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
 
             <div className="grid gap-3 md:grid-cols-3">
               <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">

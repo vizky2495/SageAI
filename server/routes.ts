@@ -5,6 +5,8 @@ import { insertPromptVersionSchema, insertCollaboratorSchema } from "@shared/sch
 import { z } from "zod";
 import https from "https";
 import http from "http";
+import Anthropic from "@anthropic-ai/sdk";
+import * as XLSX from "xlsx";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -200,6 +202,280 @@ export async function registerRoutes(
 
     const result = await storage.getAssets({ stage, search, limit, offset });
     res.json(result);
+  });
+
+  app.post("/api/assets/upload-excel", async (req: Request, res: Response) => {
+    try {
+      const { base64, filename } = req.body as { base64: string; filename: string };
+      if (!base64) {
+        return res.status(400).json({ message: "No file data provided" });
+      }
+
+      const buffer = Buffer.from(base64, "base64");
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return res.status(400).json({ message: "No sheets found in the file" });
+      }
+
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" }) as Record<string, any>[];
+      if (rows.length === 0) {
+        return res.status(400).json({ message: "No data rows found in the sheet" });
+      }
+
+      const headers = Object.keys(rows[0]);
+
+      res.json({
+        headers,
+        rowCount: rows.length,
+        sampleRows: rows.slice(0, 5),
+        sheetName,
+        filename,
+        rows,
+      });
+    } catch (err: any) {
+      console.error("Excel parse error:", err);
+      res.status(500).json({ message: "Failed to parse Excel file: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.post("/api/assets/analyze", async (req: Request, res: Response) => {
+    try {
+      const { headers, sampleRows } = req.body as { headers: string[]; sampleRows: Record<string, any>[] };
+      if (!headers || !Array.isArray(headers) || headers.length === 0) {
+        return res.status(400).json({ message: "No headers provided" });
+      }
+
+      const anthropic = new Anthropic({
+        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      });
+
+      const targetFields = [
+        { field: "content", description: "Content ID — the unique identifier for each piece of content (e.g. CL_ACS_US_SMA_PDF_MOFU_...)" },
+        { field: "url", description: "URL of the content page" },
+        { field: "name", description: "Campaign name or content name" },
+        { field: "utm_channel", description: "Marketing channel (e.g. Organic, Paid, Email, Direct)" },
+        { field: "utm_campaign", description: "UTM campaign parameter" },
+        { field: "utm_medium", description: "UTM medium parameter (e.g. cpc, email, organic)" },
+        { field: "utm_term", description: "UTM term / keyword" },
+        { field: "utm_content", description: "UTM content parameter" },
+        { field: "product_franchise", description: "Product franchise or product line" },
+        { field: "product_category", description: "Product category" },
+        { field: "typecampaignmember", description: "Campaign member type or content type" },
+        { field: "form_name", description: "Form name used for lead capture" },
+        { field: "cta", description: "Call to action type (e.g. PDF, Demo, Trial, Webinar)" },
+        { field: "objective", description: "Campaign objective (e.g. NCA, C4L, P4L)" },
+        { field: "campaign_id", description: "Campaign ID" },
+        { field: "date_stamp", description: "Date of the record" },
+        { field: "google_clientid1", description: "Google Client ID for pageview counting" },
+        { field: "total_time_on_page_seconds", description: "Time spent on page in seconds" },
+        { field: "total_downloads", description: "Number of downloads" },
+        { field: "leadorcontactid", description: "Lead or contact ID for unique lead counting" },
+        { field: "is_sqo", description: "Sales qualified opportunity flag (1 = SQO, 0 = not)" },
+      ];
+
+      const sampleData = sampleRows.slice(0, 3).map((row) => {
+        const simplified: Record<string, string> = {};
+        for (const [k, v] of Object.entries(row)) {
+          simplified[k] = String(v).slice(0, 100);
+        }
+        return simplified;
+      });
+
+      const prompt = `You are a data analyst helping map CSV/Excel column headers to a standardized schema for a marketing funnel analytics tool.
+
+Here are the column headers from the uploaded file:
+${JSON.stringify(headers)}
+
+Here are ${sampleData.length} sample rows:
+${JSON.stringify(sampleData, null, 2)}
+
+Here are the target fields I need to map to:
+${targetFields.map((f) => `- "${f.field}": ${f.description}`).join("\n")}
+
+Please analyze each column header and its sample data, then produce a JSON mapping object where:
+- Keys are the EXACT original column headers from the uploaded file
+- Values are the target field names from my list above, or null if no match
+
+Also analyze the data to identify:
+1. Which column contains the primary content identifier (most important — this determines if rows get processed)
+2. Any columns that could provide funnel stage signals
+3. Any potential data quality issues
+
+Respond with ONLY valid JSON in this exact format:
+{
+  "mapping": { "OriginalColumn1": "target_field_or_null", ... },
+  "contentIdColumn": "the original column name that maps to content ID",
+  "stageSignals": ["list of columns that help determine TOFU/MOFU/BOFU stage"],
+  "unmappedColumns": ["columns that don't match any target field"],
+  "dataQualityNotes": ["any observations about the data quality"],
+  "confidence": "high|medium|low"
+}`;
+
+      const message = await anthropic.messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const responseText = message.content[0].type === "text" ? message.content[0].text : "";
+
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return res.status(500).json({ message: "AI did not return valid JSON", raw: responseText });
+      }
+
+      const analysis = JSON.parse(jsonMatch[0]);
+      res.json(analysis);
+    } catch (err: any) {
+      console.error("AI analysis error:", err);
+      res.status(500).json({ message: "AI analysis failed: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.post("/api/assets/ingest-mapped", async (req: Request, res: Response) => {
+    try {
+      const { rows, mapping } = req.body as {
+        rows: Record<string, any>[];
+        mapping: Record<string, string | null>;
+      };
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "No rows provided" });
+      }
+      if (!mapping || typeof mapping !== "object") {
+        return res.status(400).json({ message: "No column mapping provided" });
+      }
+
+      const reverseMap: Record<string, string> = {};
+      for (const [originalCol, targetField] of Object.entries(mapping)) {
+        if (targetField) {
+          reverseMap[targetField] = originalCol;
+        }
+      }
+
+      const getMapped = (row: Record<string, any>, targetField: string): string => {
+        const col = reverseMap[targetField];
+        if (!col) return "";
+        const val = row[col];
+        if (val === null || val === undefined) return "";
+        return String(val).trim();
+      };
+
+      const aggMap = new Map<string, any>();
+      let skippedNoContentId = 0;
+
+      for (const row of rows) {
+        const contentId = getMapped(row, "content");
+        if (!contentId) {
+          skippedNoContentId++;
+          continue;
+        }
+
+        const stage = classifyStageServer(contentId, {
+          is_sqo: getMapped(row, "is_sqo"),
+          leadorcontactid: getMapped(row, "leadorcontactid"),
+          google_clientid1: getMapped(row, "google_clientid1"),
+          total_pageviews: "",
+          total_time_on_page_seconds: getMapped(row, "total_time_on_page_seconds"),
+        });
+
+        if (!aggMap.has(contentId)) {
+          aggMap.set(contentId, {
+            contentId,
+            stage,
+            name: getMapped(row, "name") || null,
+            url: isValidUrl(getMapped(row, "url")) ? getMapped(row, "url") : null,
+            typecampaignmember: getMapped(row, "typecampaignmember") || null,
+            productFranchise: getMapped(row, "product_franchise") || null,
+            utmChannel: getMapped(row, "utm_channel") || null,
+            utmCampaign: getMapped(row, "utm_campaign") || null,
+            utmMedium: getMapped(row, "utm_medium") || null,
+            utmTerm: getMapped(row, "utm_term") || null,
+            utmContent: getMapped(row, "utm_content") || null,
+            formName: getMapped(row, "form_name") || null,
+            cta: getMapped(row, "cta") || null,
+            objective: getMapped(row, "objective") || null,
+            productCategory: getMapped(row, "product_category") || null,
+            campaignId: getMapped(row, "campaign_id") || null,
+            campaignName: getMapped(row, "name") || null,
+            dateStamp: getMapped(row, "date_stamp") || null,
+            clientIds: new Set<string>(),
+            timeTotal: 0,
+            timeCount: 0,
+            downloadsSum: 0,
+            leadIds: new Set<string>(),
+            sqoLeadIds: new Set<string>(),
+          });
+        }
+
+        const agg = aggMap.get(contentId)!;
+
+        const clientId = getMapped(row, "google_clientid1");
+        if (clientId) agg.clientIds.add(clientId);
+
+        const timeVal = num(getMapped(row, "total_time_on_page_seconds"));
+        if (timeVal) {
+          agg.timeTotal += timeVal;
+          agg.timeCount += 1;
+        }
+
+        const downloads = num(getMapped(row, "total_downloads"));
+        agg.downloadsSum += downloads || 0;
+
+        const leadId = getMapped(row, "leadorcontactid");
+        if (leadId) agg.leadIds.add(leadId);
+
+        const isSqo = num(getMapped(row, "is_sqo"));
+        if (isSqo && isSqo > 0 && leadId) agg.sqoLeadIds.add(leadId);
+      }
+
+      const assets = Array.from(aggMap.values()).map((a) => ({
+        contentId: a.contentId,
+        stage: a.stage as "TOFU" | "MOFU" | "BOFU" | "UNKNOWN",
+        name: a.name,
+        url: a.url,
+        typecampaignmember: a.typecampaignmember,
+        productFranchise: a.productFranchise,
+        utmChannel: a.utmChannel,
+        utmCampaign: a.utmCampaign,
+        utmMedium: a.utmMedium,
+        utmTerm: a.utmTerm,
+        utmContent: a.utmContent,
+        formName: a.formName,
+        cta: a.cta,
+        objective: a.objective,
+        productCategory: a.productCategory,
+        campaignId: a.campaignId,
+        campaignName: a.campaignName,
+        dateStamp: a.dateStamp,
+        pageviewsSum: a.clientIds.size,
+        timeAvg: a.timeCount > 0 ? Math.round(a.timeTotal / a.timeCount) : 0,
+        downloadsSum: a.downloadsSum,
+        uniqueLeads: a.leadIds.size,
+        sqoCount: a.sqoLeadIds.size,
+      }));
+
+      await storage.clearAssets();
+      await storage.bulkInsertAssets(assets);
+
+      res.json({
+        ingested: assets.length,
+        totalRows: rows.length,
+        skippedNoContentId,
+        uniqueContentIds: assets.length,
+        stageBreakdown: {
+          TOFU: assets.filter((a) => a.stage === "TOFU").length,
+          MOFU: assets.filter((a) => a.stage === "MOFU").length,
+          BOFU: assets.filter((a) => a.stage === "BOFU").length,
+          UNKNOWN: assets.filter((a) => a.stage === "UNKNOWN").length,
+        },
+      });
+    } catch (err: any) {
+      console.error("Mapped ingest error:", err);
+      res.status(500).json({ message: err.message || "Ingestion failed" });
+    }
   });
 
   app.get("/api/diff/:versionId/:compareId", async (req, res) => {
