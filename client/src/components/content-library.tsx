@@ -144,6 +144,7 @@ function ContentCard({
   stage: string;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [hovered, setHovered] = useState(false);
   const tone = stageTones[stage] || stageTones.TOFU;
 
   const secondary =
@@ -165,165 +166,191 @@ function ContentCard({
 
   return (
     <>
-      <Card
-        className="group relative flex h-full w-[280px] shrink-0 flex-col rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-primary/30 hover:bg-card"
-        data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
+      <div
+        className="w-[280px] shrink-0"
+        style={{ paddingTop: 6, paddingBottom: 6 }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            {asset.url ? (
-              <button
-                className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 transition hover:decoration-foreground hover:text-primary cursor-pointer"
-                title={`${asset.contentId} — click to preview URL`}
-                onClick={() => setPreviewUrl(asset.url)}
-                data-testid="card-title"
-              >
-                {asset.contentId}
-              </button>
-            ) : (
-              <div
-                className="truncate text-sm font-[650] tracking-tight"
-                title={asset.contentId}
-                data-testid="card-title"
-              >
-                {asset.contentId}
-              </div>
-            )}
-            {secondary && (
-              <div
-                className="mt-0.5 truncate text-xs text-muted-foreground"
-                title={secondary}
-                data-testid="card-secondary"
-              >
-                {secondary}
-              </div>
-            )}
-          </div>
-          <Badge
-            className={`shrink-0 border ${tone.bg} ${tone.text} ${tone.border}`}
-            data-testid="card-stage-badge"
-          >
-            {stage}
-          </Badge>
-        </div>
-
-        {asset.url && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <div
-              className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
-              title={asset.url}
-              data-testid="card-url"
-            >
-              {truncateUrl(asset.url)}
+        <Card
+          className="flex h-full flex-col rounded-2xl border p-4 backdrop-blur"
+          style={{
+            transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+            transform: hovered ? "translateY(-4px)" : "translateY(0)",
+            boxShadow: hovered
+              ? "0 10px 25px -5px rgba(0,0,0,0.15), 0 4px 10px -5px rgba(0,0,0,0.1)"
+              : "0 1px 3px 0 rgba(0,0,0,0.06)",
+            borderColor: hovered ? "hsl(var(--primary) / 0.35)" : undefined,
+            background: hovered ? "hsl(var(--card))" : "hsl(var(--card) / 0.7)",
+          }}
+          data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              {asset.url ? (
+                <button
+                  className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 cursor-pointer"
+                  style={{
+                    transition: "color 0.15s ease",
+                    color: hovered ? "hsl(var(--primary))" : undefined,
+                  }}
+                  title={`${asset.contentId} — click to preview URL`}
+                  onClick={() => setPreviewUrl(asset.url)}
+                  data-testid="card-title"
+                >
+                  {asset.contentId}
+                </button>
+              ) : (
+                <div
+                  className="truncate text-sm font-[650] tracking-tight"
+                  title={asset.contentId}
+                  data-testid="card-title"
+                >
+                  {asset.contentId}
+                </div>
+              )}
+              {secondary && (
+                <div
+                  className="mt-0.5 truncate text-xs text-muted-foreground"
+                  title={secondary}
+                  data-testid="card-secondary"
+                >
+                  {secondary}
+                </div>
+              )}
             </div>
-            <button
-              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
-              onClick={() => setPreviewUrl(asset.url)}
-              title="Preview URL"
-              data-testid="button-preview-url"
+            <Badge
+              className={`shrink-0 border ${tone.bg} ${tone.text} ${tone.border}`}
+              data-testid="card-stage-badge"
             >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
+              {stage}
+            </Badge>
           </div>
-        )}
 
-        {tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1" data-testid="card-tags">
-            {tags.map((t, i) => (
-              <Badge
-                key={`${t}-${i}`}
-                variant="secondary"
-                className="rounded-lg border bg-card/60 text-[10px]"
+          {asset.url && (
+            <div className="mt-2 flex items-center gap-1.5">
+              <div
+                className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
+                title={asset.url}
+                data-testid="card-url"
               >
-                {t}
-              </Badge>
-            ))}
-            {allTags.length > 4 && (
-              <Badge
-                variant="secondary"
-                className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground"
-                title={allTags.slice(4).join(", ")}
+                {truncateUrl(asset.url)}
+              </div>
+              <button
+                className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
+                onClick={() => setPreviewUrl(asset.url)}
+                title="Preview URL"
+                data-testid="button-preview-url"
               >
-                +{allTags.length - 4}
-              </Badge>
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1" data-testid="card-tags">
+              {tags.map((t, i) => (
+                <Badge
+                  key={`${t}-${i}`}
+                  variant="secondary"
+                  className="rounded-lg border bg-card/60 text-[10px]"
+                >
+                  {t}
+                </Badge>
+              ))}
+              {allTags.length > 4 && (
+                <Badge
+                  variant="secondary"
+                  className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground"
+                  title={allTags.slice(4).join(", ")}
+                >
+                  +{allTags.length - 4}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          <Separator
+            className="my-3"
+            style={{
+              transition: "background-color 0.2s ease",
+              backgroundColor: hovered ? "hsl(var(--primary) / 0.2)" : undefined,
+            }}
+          />
+
+          <div className="grid grid-cols-2 gap-2 text-xs" data-testid="card-metrics">
+            {stage === "TOFU" && (
+              <>
+                <div>
+                  <div className="text-muted-foreground">Pageviews</div>
+                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Avg time</div>
+                  <div className="mt-0.5 font-[650]">
+                    {asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m"}
+                  </div>
+                </div>
+                {asset.downloadsSum > 0 && (
+                  <div>
+                    <div className="text-muted-foreground">Downloads</div>
+                    <div className="mt-0.5 font-[650]">{formatCompact(asset.downloadsSum)}</div>
+                  </div>
+                )}
+              </>
+            )}
+            {stage === "MOFU" && (
+              <>
+                <div>
+                  <div className="text-muted-foreground">Unique leads</div>
+                  <div className="mt-0.5 font-[650]">
+                    {formatCompact(asset.uniqueLeads)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Pageviews</div>
+                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
+                </div>
+              </>
+            )}
+            {stage === "BOFU" && (
+              <>
+                <div>
+                  <div className="text-muted-foreground">SQOs</div>
+                  <div className="mt-0.5 font-[650]">
+                    {formatCompact(asset.sqoCount)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Unique leads</div>
+                  <div className="mt-0.5 font-[650]">
+                    {formatCompact(asset.uniqueLeads)}
+                  </div>
+                </div>
+                {asset.sqoCount === 0 && (
+                  <div className="col-span-2 mt-1 rounded bg-chart-4/10 px-2 py-1 text-[10px] text-chart-4">
+                    BOFU tag from CONTENT
+                  </div>
+                )}
+              </>
+            )}
+            {stage === "UNKNOWN" && (
+              <>
+                <div>
+                  <div className="text-muted-foreground">Pageviews</div>
+                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Unique leads</div>
+                  <div className="mt-0.5 font-[650]">
+                    {formatCompact(asset.uniqueLeads)}
+                  </div>
+                </div>
+              </>
             )}
           </div>
-        )}
-
-        <Separator className="my-3 transition-colors group-hover:bg-primary/20" />
-
-        <div className="grid grid-cols-2 gap-2 text-xs" data-testid="card-metrics">
-          {stage === "TOFU" && (
-            <>
-              <div>
-                <div className="text-muted-foreground">Pageviews</div>
-                <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Avg time</div>
-                <div className="mt-0.5 font-[650]">
-                  {asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m"}
-                </div>
-              </div>
-              {asset.downloadsSum > 0 && (
-                <div>
-                  <div className="text-muted-foreground">Downloads</div>
-                  <div className="mt-0.5 font-[650]">{formatCompact(asset.downloadsSum)}</div>
-                </div>
-              )}
-            </>
-          )}
-          {stage === "MOFU" && (
-            <>
-              <div>
-                <div className="text-muted-foreground">Unique leads</div>
-                <div className="mt-0.5 font-[650]">
-                  {formatCompact(asset.uniqueLeads)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Pageviews</div>
-                <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
-              </div>
-            </>
-          )}
-          {stage === "BOFU" && (
-            <>
-              <div>
-                <div className="text-muted-foreground">SQOs</div>
-                <div className="mt-0.5 font-[650]">
-                  {formatCompact(asset.sqoCount)}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Unique leads</div>
-                <div className="mt-0.5 font-[650]">
-                  {formatCompact(asset.uniqueLeads)}
-                </div>
-              </div>
-              {asset.sqoCount === 0 && (
-                <div className="col-span-2 mt-1 rounded bg-chart-4/10 px-2 py-1 text-[10px] text-chart-4">
-                  BOFU tag from CONTENT
-                </div>
-              )}
-            </>
-          )}
-          {stage === "UNKNOWN" && (
-            <>
-              <div>
-                <div className="text-muted-foreground">Pageviews</div>
-                <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Unique leads</div>
-                <div className="mt-0.5 font-[650]">
-                  {formatCompact(asset.uniqueLeads)}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       {previewUrl && (
         <UrlPreview url={previewUrl} onClose={() => setPreviewUrl(null)} />
