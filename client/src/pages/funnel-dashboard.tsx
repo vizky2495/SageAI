@@ -605,9 +605,9 @@ export default function FunnelDashboard() {
       BOFU: [],
       UNKNOWN: [],
     };
-    for (const r of rows) groups[r.stage].push(r);
+    for (const r of filtered) groups[r.stage].push(r);
     return groups;
-  }, [rows]);
+  }, [filtered]);
 
   const tofuBase = byStage.TOFU;
   const mofuBase = byStage.MOFU;
@@ -638,7 +638,7 @@ export default function FunnelDashboard() {
       ? qualityMqlScores.reduce((a, b) => a + b, 0) / qualityMqlScores.length
       : undefined;
 
-  const totalRows = rows.length;
+  const totalRows = filtered.length;
   const unknownCount = byStage.UNKNOWN.length;
 
   const contentTypeOptions = useMemo(() => {
@@ -750,7 +750,7 @@ export default function FunnelDashboard() {
 
   const ctaByStage = useMemo(() => {
     const map: Record<string, Map<string, number>> = { TOFU: new Map(), MOFU: new Map(), BOFU: new Map() };
-    for (const r of rows) {
+    for (const r of filtered) {
       const ctaVal = r.cta || "(none)";
       const s = r.stage;
       if (s === "TOFU" || s === "MOFU" || s === "BOFU") {
@@ -766,11 +766,11 @@ export default function FunnelDashboard() {
       MOFU: toArr(map.MOFU),
       BOFU: toArr(map.BOFU),
     };
-  }, [rows]);
+  }, [filtered]);
 
   const ctaSummary = useMemo(() => {
     const ctaMap = new Map<string, { cta: string; assets: number; tofu: number; mofu: number; bofu: number; pageViews: number; leads: number; sqos: number }>();
-    for (const r of rows) {
+    for (const r of filtered) {
       const ctaVal = r.cta || "(none)";
       if (!ctaMap.has(ctaVal)) {
         ctaMap.set(ctaVal, { cta: ctaVal, assets: 0, tofu: 0, mofu: 0, bofu: 0, pageViews: 0, leads: 0, sqos: 0 });
@@ -786,27 +786,26 @@ export default function FunnelDashboard() {
     }
     return Array.from(ctaMap.values())
       .sort((a, b) => b.assets - a.assets);
-  }, [rows]);
+  }, [filtered]);
 
   const funnelSeries = useMemo(() => {
     if (uploadDiagnostics) {
-      const sb = uploadDiagnostics.stageBreakdown;
       return [
         {
           stage: "TOFU",
-          contentAssets: sb.TOFU ?? 0,
+          contentAssets: byStage.TOFU.length,
           pageViews: sum(byStage.TOFU, "pageViews"),
           uniqueLeads: sum(byStage.TOFU, "newContacts"),
         },
         {
           stage: "MOFU",
-          contentAssets: sb.MOFU ?? 0,
+          contentAssets: byStage.MOFU.length,
           pageViews: sum(byStage.MOFU, "pageViews"),
           uniqueLeads: sum(byStage.MOFU, "newContacts"),
         },
         {
           stage: "BOFU",
-          contentAssets: sb.BOFU ?? 0,
+          contentAssets: byStage.BOFU.length,
           pageViews: sum(byStage.BOFU, "pageViews"),
           uniqueLeads: sum(byStage.BOFU, "newContacts"),
           sqos: sum(byStage.BOFU, "sqos"),
@@ -1365,7 +1364,7 @@ export default function FunnelDashboard() {
                   className="rounded-xl"
                   data-testid="badge-mix"
                 >
-                  {formatCompact(uploadDiagnostics ? uploadDiagnostics.ingested : totalRows)} {uploadDiagnostics ? "content assets" : "rows"}
+                  {formatCompact(totalRows)} {uploadDiagnostics ? "content assets" : "rows"}
                 </Badge>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1389,17 +1388,13 @@ export default function FunnelDashboard() {
                         className="mt-1 text-lg font-[650] tracking-tight"
                         data-testid={`text-stage-count-${s.toLowerCase()}`}
                       >
-                        {uploadDiagnostics
-                          ? (uploadDiagnostics.stageBreakdown[s] ?? 0)
-                          : byStage[s].length}
+                        {byStage[s].length}
                       </div>
                     </div>
                     <span
                       className={`rounded-full border px-2 py-1 text-xs ${stageMeta[s].tone}`}
                     >
-                      {uploadDiagnostics
-                        ? Math.round(pct(uploadDiagnostics.stageBreakdown[s] ?? 0, uploadDiagnostics.ingested))
-                        : Math.round(pct(byStage[s].length, totalRows))}%
+                      {Math.round(pct(byStage[s].length, totalRows))}%
                     </span>
                   </button>
                 ))}
