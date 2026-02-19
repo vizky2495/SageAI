@@ -54,60 +54,60 @@
 }
 
 :root {
-  --button-outline: rgba(0, 0, 0, 0.1);
-  --badge-outline: rgba(0, 0, 0, 0.05);
-  --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0, 0, 0, 0.03);
-  --elevate-2: rgba(0, 0, 0, 0.08);
+  --button-outline: rgba(255, 255, 255, 0.1);
+  --badge-outline: rgba(255, 255, 255, 0.05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
 
-  /* Art direction: "Sage UI" — calm, minimal, sage greens + warm neutrals */
-  --background: 140 20% 98%;
-  --foreground: 160 26% 12%;
+  /* Art direction: Sage brand — deep black, electric green, white text */
+  --background: 150 10% 4%;
+  --foreground: 0 0% 96%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 160 26% 12%;
-  --card-border: 150 18% 88%;
+  --card: 150 8% 7%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 150 6% 14%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 160 26% 12%;
-  --popover-border: 150 18% 88%;
+  --popover: 150 8% 7%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 150 6% 14%;
 
-  --border: 150 18% 88%;
-  --input: 150 16% 80%;
-  --ring: 152 34% 42%;
+  --border: 150 6% 14%;
+  --input: 150 6% 18%;
+  --ring: 145 100% 42%;
 
-  --primary: 152 34% 42%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 145 100% 42%;
+  --primary-foreground: 0 0% 0%;
 
-  --secondary: 140 16% 95%;
-  --secondary-foreground: 160 26% 12%;
+  --secondary: 150 6% 12%;
+  --secondary-foreground: 0 0% 96%;
 
-  --muted: 140 16% 95%;
-  --muted-foreground: 160 12% 38%;
+  --muted: 150 6% 12%;
+  --muted-foreground: 150 6% 60%;
 
-  --accent: 173 38% 36%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 145 80% 36%;
+  --accent-foreground: 0 0% 0%;
 
   --destructive: 0 72% 52%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 160 26% 12%;
-  --sidebar-border: 150 18% 88%;
-  --sidebar-primary: 152 34% 42%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 173 38% 36%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-ring: 152 34% 42%;
+  --sidebar: 150 8% 5%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 150 6% 14%;
+  --sidebar-primary: 145 100% 42%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 145 80% 36%;
+  --sidebar-accent-foreground: 0 0% 0%;
+  --sidebar-ring: 145 100% 42%;
 
-  /* Stage colors (Sage palette mapping)
-     TOFU: sage-light (chart-1)
-     MOFU: sage-medium/teal (chart-2)
-     BOFU: sage-dark (chart-3) */
-  --chart-1: 142 34% 60%;
-  --chart-2: 173 38% 44%;
-  --chart-3: 152 28% 32%;
-  --chart-4: 33 84% 55%;
+  /* Stage colors — Sage green spectrum
+     TOFU: bright green (chart-1)
+     MOFU: teal-green (chart-2)
+     BOFU: deep emerald (chart-3) */
+  --chart-1: 145 100% 42%;
+  --chart-2: 165 70% 38%;
+  --chart-3: 140 60% 28%;
+  --chart-4: 50 80% 55%;
   --chart-5: 0 72% 52%;
 
   --font-sans: "Geist", "DM Sans", ui-sans-serif, system-ui, -apple-system,
@@ -118,14 +118,14 @@
 
   --radius: 0.9rem;
 
-  --shadow-2xs: 0 1px 0 0 hsl(220 30% 10% / 0.04);
-  --shadow-xs: 0 1px 2px hsl(220 30% 10% / 0.06);
-  --shadow-sm: 0 8px 24px -18px hsl(220 30% 10% / 0.22);
-  --shadow: 0 18px 46px -34px hsl(220 30% 10% / 0.32);
-  --shadow-md: 0 28px 72px -52px hsl(220 30% 10% / 0.34);
-  --shadow-lg: 0 40px 96px -72px hsl(220 30% 10% / 0.45);
-  --shadow-xl: 0 52px 140px -100px hsl(220 30% 10% / 0.52);
-  --shadow-2xl: 0 70px 180px -140px hsl(220 30% 10% / 0.6);
+  --shadow-2xs: 0 1px 0 0 hsl(0 0% 0% / 0.2);
+  --shadow-xs: 0 1px 2px hsl(0 0% 0% / 0.3);
+  --shadow-sm: 0 8px 24px -18px hsl(0 0% 0% / 0.5);
+  --shadow: 0 18px 46px -34px hsl(0 0% 0% / 0.6);
+  --shadow-md: 0 28px 72px -52px hsl(0 0% 0% / 0.65);
+  --shadow-lg: 0 40px 96px -72px hsl(0 0% 0% / 0.7);
+  --shadow-xl: 0 52px 140px -100px hsl(0 0% 0% / 0.75);
+  --shadow-2xl: 0 70px 180px -140px hsl(0 0% 0% / 0.8);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -180,50 +180,50 @@
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 160 22% 6%;
-  --foreground: 140 20% 96%;
+  --background: 150 10% 4%;
+  --foreground: 0 0% 96%;
 
-  --card: 160 22% 8%;
-  --card-foreground: 140 20% 96%;
-  --card-border: 155 14% 16%;
+  --card: 150 8% 7%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 150 6% 14%;
 
-  --popover: 160 22% 8%;
-  --popover-foreground: 140 20% 96%;
-  --popover-border: 155 14% 16%;
+  --popover: 150 8% 7%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 150 6% 14%;
 
-  --border: 155 14% 16%;
-  --input: 155 14% 22%;
-  --ring: 142 34% 60%;
+  --border: 150 6% 14%;
+  --input: 150 6% 18%;
+  --ring: 145 100% 42%;
 
-  --primary: 142 34% 60%;
-  --primary-foreground: 160 22% 8%;
+  --primary: 145 100% 42%;
+  --primary-foreground: 0 0% 0%;
 
-  --secondary: 155 14% 14%;
-  --secondary-foreground: 140 20% 96%;
+  --secondary: 150 6% 12%;
+  --secondary-foreground: 0 0% 96%;
 
-  --muted: 155 14% 14%;
-  --muted-foreground: 150 10% 70%;
+  --muted: 150 6% 12%;
+  --muted-foreground: 150 6% 60%;
 
-  --accent: 173 38% 50%;
-  --accent-foreground: 160 22% 8%;
+  --accent: 145 80% 36%;
+  --accent-foreground: 0 0% 0%;
 
-  --destructive: 0 72% 60%;
-  --destructive-foreground: 160 22% 8%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 160 22% 8%;
-  --sidebar-foreground: 140 20% 96%;
-  --sidebar-border: 155 14% 16%;
-  --sidebar-primary: 142 34% 60%;
-  --sidebar-primary-foreground: 160 22% 8%;
-  --sidebar-accent: 173 38% 50%;
-  --sidebar-accent-foreground: 160 22% 8%;
-  --sidebar-ring: 142 34% 60%;
+  --sidebar: 150 8% 5%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 150 6% 14%;
+  --sidebar-primary: 145 100% 42%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 145 80% 36%;
+  --sidebar-accent-foreground: 0 0% 0%;
+  --sidebar-ring: 145 100% 42%;
 
-  --chart-1: 142 34% 60%;
-  --chart-2: 173 38% 50%;
-  --chart-3: 152 28% 38%;
-  --chart-4: 33 84% 62%;
-  --chart-5: 0 72% 60%;
+  --chart-1: 145 100% 42%;
+  --chart-2: 165 70% 38%;
+  --chart-3: 140 60% 28%;
+  --chart-4: 50 80% 55%;
+  --chart-5: 0 72% 55%;
 }
 
 @layer base {
