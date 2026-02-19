@@ -43,44 +43,79 @@ function truncateUrl(url: string | null): string {
   }
 }
 
-function UrlPreview({
-  url,
+function ContentDetailModal({
+  asset,
+  stage,
   onClose,
 }: {
-  url: string;
+  asset: AssetAgg;
+  stage: string;
   onClose: () => void;
 }) {
   const [iframeError, setIframeError] = useState(false);
   const [loading, setLoading] = useState(true);
-  const fullUrl = url.startsWith("http") ? url : `https://${url}`;
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(fullUrl)}`;
+  const tone = stageTones[stage] || stageTones.TOFU;
+  const hasUrl = !!asset.url;
+  const fullUrl = hasUrl ? (asset.url!.startsWith("http") ? asset.url! : `https://${asset.url}`) : "";
+  const proxyUrl = hasUrl ? `/api/proxy?url=${encodeURIComponent(fullUrl)}` : "";
+
+  const detailRows: { label: string; value: string | null | undefined }[] = [
+    { label: "Content ID", value: asset.contentId },
+    { label: "Stage", value: stage },
+    { label: "URL", value: asset.url },
+    { label: "Campaign Name", value: asset.campaignName || asset.name },
+    { label: "Product Franchise", value: asset.productFranchise },
+    { label: "Product Category", value: asset.productCategory },
+    { label: "Channel", value: asset.utmChannel },
+    { label: "Medium", value: asset.utmMedium },
+    { label: "Campaign", value: asset.utmCampaign },
+    { label: "Term", value: asset.utmTerm },
+    { label: "UTM Content", value: asset.utmContent },
+    { label: "CTA", value: asset.cta },
+    { label: "Objective", value: asset.objective },
+    { label: "Form Name", value: asset.formName },
+    { label: "Content Type", value: asset.typecampaignmember },
+    { label: "Campaign ID", value: asset.campaignId },
+    { label: "Date", value: asset.dateStamp },
+  ].filter((r) => r.value);
+
+  const metricRows = [
+    { label: "Pageviews", value: asset.pageviewsSum },
+    { label: "Avg Time (sec)", value: asset.timeAvg },
+    { label: "Downloads", value: asset.downloadsSum },
+    { label: "Unique Leads", value: asset.uniqueLeads },
+    { label: "SQOs", value: asset.sqoCount },
+  ].filter((r) => r.value > 0);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
       data-testid="url-preview-overlay"
     >
       <div
-        className="relative w-full max-w-4xl rounded-2xl border bg-card p-4 shadow-xl"
+        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border bg-card p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="url-preview-modal"
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{fullUrl}</div>
+          <div className="min-w-0 flex-1 flex items-center gap-3">
+            <Badge className={`shrink-0 border ${tone.bg} ${tone.text} ${tone.border}`}>{stage}</Badge>
+            <div className="truncate text-sm font-semibold">{asset.contentId}</div>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href={fullUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-xl border bg-card px-3 py-1.5 text-xs font-medium hover:shadow"
-              data-testid="button-open-new-tab"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open in new tab
-            </a>
+            {hasUrl && (
+              <a
+                href={fullUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-xl border bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 transition-colors"
+                data-testid="button-open-new-tab"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open in new tab
+              </a>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -92,45 +127,101 @@ function UrlPreview({
             </Button>
           </div>
         </div>
-        <Separator className="my-3" />
-        {iframeError ? (
-          <div className="flex h-[500px] items-center justify-center rounded-xl border bg-muted/30 text-center text-sm text-muted-foreground" data-testid="preview-fallback">
+
+        <Separator className="my-4" />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-4">
             <div>
-              <p>Preview not available for this page.</p>
-              <a
-                href={fullUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-foreground underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open in new tab
-              </a>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</div>
+              <div className="space-y-2">
+                {detailRows.map((r) => (
+                  <div key={r.label} className="flex items-start gap-3 text-sm">
+                    <span className="shrink-0 w-[120px] text-muted-foreground">{r.label}</span>
+                    <span className="font-medium break-all">
+                      {r.label === "URL" && r.value ? (
+                        <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                          {r.value}
+                        </a>
+                      ) : (
+                        r.value
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="relative">
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-xl border bg-muted/30">
-                <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                  Loading preview…
+
+            {metricRows.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Metrics</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {metricRows.map((m) => (
+                    <div key={m.label} className="rounded-xl border bg-secondary/50 p-3">
+                      <div className="text-xs text-muted-foreground">{m.label}</div>
+                      <div className="mt-1 text-lg font-bold">{formatCompact(m.value)}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-            <iframe
-              src={proxyUrl}
-              className="h-[500px] w-full rounded-xl border"
-              title="URL Preview"
-              onError={() => {
-                setIframeError(true);
-                setLoading(false);
-              }}
-              onLoad={() => setLoading(false)}
-              data-testid="iframe-preview"
-            />
           </div>
-        )}
+
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              {hasUrl ? "Page Preview" : "Preview"}
+            </div>
+            {hasUrl ? (
+              iframeError ? (
+                <div className="flex h-[400px] items-center justify-center rounded-xl border bg-muted/20 text-center text-sm text-muted-foreground" data-testid="preview-fallback">
+                  <div className="flex flex-col items-center gap-3">
+                    <Eye className="h-8 w-8 text-muted-foreground/50" />
+                    <p>Preview not available for this page.</p>
+                    <a
+                      href={fullUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open in new tab
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  {loading && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl border bg-muted/20">
+                      <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        Loading preview…
+                      </div>
+                    </div>
+                  )}
+                  <iframe
+                    src={proxyUrl}
+                    className="h-[400px] w-full rounded-xl border bg-white"
+                    title="URL Preview"
+                    onError={() => {
+                      setIframeError(true);
+                      setLoading(false);
+                    }}
+                    onLoad={() => setLoading(false)}
+                    data-testid="iframe-preview"
+                  />
+                </div>
+              )
+            ) : (
+              <div className="flex h-[400px] items-center justify-center rounded-xl border bg-muted/20 text-center text-sm text-muted-foreground" data-testid="preview-no-url">
+                <div className="flex flex-col items-center gap-3">
+                  <Eye className="h-8 w-8 text-muted-foreground/50" />
+                  <p>No URL available for this content.</p>
+                  <p className="text-xs">Upload data with a URL column to enable page previews.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -143,7 +234,7 @@ function ContentCard({
   asset: AssetAgg;
   stage: string;
 }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
   const tone = stageTones[stage] || stageTones.TOFU;
 
@@ -187,28 +278,18 @@ function ContentCard({
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              {asset.url ? (
-                <button
-                  className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 cursor-pointer"
-                  style={{
-                    transition: "color 0.15s ease",
-                    color: hovered ? "hsl(var(--primary))" : undefined,
-                  }}
-                  title={`${asset.contentId} — click to preview URL`}
-                  onClick={() => setPreviewUrl(asset.url)}
-                  data-testid="card-title"
-                >
-                  {asset.contentId}
-                </button>
-              ) : (
-                <div
-                  className="truncate text-sm font-[650] tracking-tight"
-                  title={asset.contentId}
-                  data-testid="card-title"
-                >
-                  {asset.contentId}
-                </div>
-              )}
+              <button
+                className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 cursor-pointer"
+                style={{
+                  transition: "color 0.15s ease",
+                  color: hovered ? "hsl(var(--primary))" : undefined,
+                }}
+                title={`${asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
+                onClick={() => setShowDetail(true)}
+                data-testid="card-title"
+              >
+                {asset.contentId}
+              </button>
               {secondary && (
                 <div
                   className="mt-0.5 truncate text-xs text-muted-foreground"
@@ -238,7 +319,7 @@ function ContentCard({
               </div>
               <button
                 className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
-                onClick={() => setPreviewUrl(asset.url)}
+                onClick={() => setShowDetail(true)}
                 title="Preview URL"
                 data-testid="button-preview-url"
               >
@@ -352,8 +433,8 @@ function ContentCard({
         </Card>
       </div>
 
-      {previewUrl && (
-        <UrlPreview url={previewUrl} onClose={() => setPreviewUrl(null)} />
+      {showDetail && (
+        <ContentDetailModal asset={asset} stage={stage} onClose={() => setShowDetail(false)} />
       )}
     </>
   );
