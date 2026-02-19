@@ -134,6 +134,137 @@ function classifyStage(contentRaw: string, explicitStage?: string): FunnelStage 
   return "UNKNOWN";
 }
 
+function classifyStageFull(contentId: string, row: Record<string, any>, reverseMap: Record<string, string>): FunnelStage {
+  const s = contentId.toUpperCase();
+  if (s.includes("BOFU")) return "BOFU";
+  if (s.includes("MOFU")) return "MOFU";
+  if (s.includes("TOFU")) return "TOFU";
+
+  const getMapped = (field: string) => {
+    const col = reverseMap[field];
+    if (!col) return "";
+    const val = row[col];
+    if (val === null || val === undefined) return "";
+    return String(val).trim();
+  };
+
+  const sqo = toNumber(getMapped("is_sqo"));
+  if (sqo && sqo > 0) return "BOFU";
+  const leadId = getMapped("leadorcontactid");
+  if (leadId) return "MOFU";
+  const clientId = getMapped("google_clientid1");
+  const time = toNumber(getMapped("total_time_on_page_seconds"));
+  if (clientId || (time && time > 0)) return "TOFU";
+  return "UNKNOWN";
+}
+
+function isValidUrl(v: string): boolean {
+  if (!v) return false;
+  try {
+    const url = new URL(v.startsWith("http") ? v : `https://${v}`);
+    return url.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
+function aggregateRowsClientSide(
+  rows: Record<string, any>[],
+  mapping: Record<string, string | null>,
+): { assets: any[]; skippedNoContentId: number } {
+  const reverseMap: Record<string, string> = {};
+  for (const [originalCol, targetField] of Object.entries(mapping)) {
+    if (targetField) reverseMap[targetField] = originalCol;
+  }
+
+  const getMapped = (row: Record<string, any>, field: string): string => {
+    const col = reverseMap[field];
+    if (!col) return "";
+    const val = row[col];
+    if (val === null || val === undefined) return "";
+    return String(val).trim();
+  };
+
+  const aggMap = new Map<string, any>();
+  let skippedNoContentId = 0;
+
+  for (const row of rows) {
+    const contentId = getMapped(row, "content");
+    if (!contentId) { skippedNoContentId++; continue; }
+
+    const stage = classifyStageFull(contentId, row, reverseMap);
+
+    if (!aggMap.has(contentId)) {
+      aggMap.set(contentId, {
+        contentId,
+        stage,
+        name: getMapped(row, "name") || null,
+        url: isValidUrl(getMapped(row, "url")) ? getMapped(row, "url") : null,
+        typecampaignmember: getMapped(row, "typecampaignmember") || null,
+        productFranchise: getMapped(row, "product_franchise") || null,
+        utmChannel: getMapped(row, "utm_channel") || null,
+        utmCampaign: getMapped(row, "utm_campaign") || null,
+        utmMedium: getMapped(row, "utm_medium") || null,
+        utmTerm: getMapped(row, "utm_term") || null,
+        utmContent: getMapped(row, "utm_content") || null,
+        formName: getMapped(row, "form_name") || null,
+        cta: getMapped(row, "cta") || null,
+        objective: getMapped(row, "objective") || null,
+        productCategory: getMapped(row, "product_category") || null,
+        campaignId: getMapped(row, "campaign_id") || null,
+        campaignName: getMapped(row, "name") || null,
+        dateStamp: getMapped(row, "date_stamp") || null,
+        clientIds: new Set<string>(),
+        timeTotal: 0,
+        timeCount: 0,
+        downloadsSum: 0,
+        leadIds: new Set<string>(),
+        sqoLeadIds: new Set<string>(),
+      });
+    }
+
+    const agg = aggMap.get(contentId)!;
+    const clientId = getMapped(row, "google_clientid1");
+    if (clientId) agg.clientIds.add(clientId);
+    const timeVal = toNumber(getMapped(row, "total_time_on_page_seconds"));
+    if (timeVal) { agg.timeTotal += timeVal; agg.timeCount += 1; }
+    const downloads = toNumber(getMapped(row, "total_downloads"));
+    agg.downloadsSum += downloads || 0;
+    const leadId = getMapped(row, "leadorcontactid");
+    if (leadId) agg.leadIds.add(leadId);
+    const isSqo = toNumber(getMapped(row, "is_sqo"));
+    if (isSqo && isSqo > 0 && leadId) agg.sqoLeadIds.add(leadId);
+  }
+
+  const assets = Array.from(aggMap.values()).map((a) => ({
+    contentId: a.contentId,
+    stage: a.stage,
+    name: a.name,
+    url: a.url,
+    typecampaignmember: a.typecampaignmember,
+    productFranchise: a.productFranchise,
+    utmChannel: a.utmChannel,
+    utmCampaign: a.utmCampaign,
+    utmMedium: a.utmMedium,
+    utmTerm: a.utmTerm,
+    utmContent: a.utmContent,
+    formName: a.formName,
+    cta: a.cta,
+    objective: a.objective,
+    productCategory: a.productCategory,
+    campaignId: a.campaignId,
+    campaignName: a.campaignName,
+    dateStamp: a.dateStamp,
+    pageviewsSum: a.clientIds.size,
+    timeAvg: a.timeCount > 0 ? Math.round(a.timeTotal / a.timeCount) : 0,
+    downloadsSum: a.downloadsSum,
+    uniqueLeads: a.leadIds.size,
+    sqoCount: a.sqoLeadIds.size,
+  }));
+
+  return { assets, skippedNoContentId };
+}
+
 function parseCSV(text: string): ParsedRow[] {
   const lines = text
     .replace(/\r\n/g, "\n")
@@ -579,12 +710,14 @@ export default function FunnelDashboard() {
 
       setAiStep("ingesting");
 
+      const { assets: aggregatedAssets, skippedNoContentId } = aggregateRowsClientSide(allRows, analysis.mapping);
+
       let ingestRes: globalThis.Response;
       try {
-        ingestRes = await fetch("/api/assets/ingest-mapped", {
+        ingestRes = await fetch("/api/assets/ingest-aggregated", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows: allRows, mapping: analysis.mapping }),
+          body: JSON.stringify({ assets: aggregatedAssets, totalRows: allRows.length, skippedNoContentId }),
         });
       } catch (networkErr: any) {
         throw new Error("Network error during data ingestion. Please try again.");

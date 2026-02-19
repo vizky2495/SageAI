@@ -339,6 +339,65 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
+  app.post("/api/assets/ingest-aggregated", async (req: Request, res: Response) => {
+    try {
+      const { assets, totalRows, skippedNoContentId } = req.body as {
+        assets: any[];
+        totalRows: number;
+        skippedNoContentId: number;
+      };
+
+      if (!Array.isArray(assets) || assets.length === 0) {
+        return res.status(400).json({ message: "No aggregated assets provided" });
+      }
+
+      const validatedAssets = assets.map((a) => ({
+        contentId: String(a.contentId || ""),
+        stage: (a.stage || "UNKNOWN") as "TOFU" | "MOFU" | "BOFU" | "UNKNOWN",
+        name: a.name || null,
+        url: a.url || null,
+        typecampaignmember: a.typecampaignmember || null,
+        productFranchise: a.productFranchise || null,
+        utmChannel: a.utmChannel || null,
+        utmCampaign: a.utmCampaign || null,
+        utmMedium: a.utmMedium || null,
+        utmTerm: a.utmTerm || null,
+        utmContent: a.utmContent || null,
+        formName: a.formName || null,
+        cta: a.cta || null,
+        objective: a.objective || null,
+        productCategory: a.productCategory || null,
+        campaignId: a.campaignId || null,
+        campaignName: a.campaignName || null,
+        dateStamp: a.dateStamp || null,
+        pageviewsSum: Number(a.pageviewsSum) || 0,
+        timeAvg: Number(a.timeAvg) || 0,
+        downloadsSum: Number(a.downloadsSum) || 0,
+        uniqueLeads: Number(a.uniqueLeads) || 0,
+        sqoCount: Number(a.sqoCount) || 0,
+      }));
+
+      await storage.clearAssets();
+      await storage.bulkInsertAssets(validatedAssets);
+
+      res.json({
+        ingested: validatedAssets.length,
+        totalRows: totalRows || validatedAssets.length,
+        skippedNoContentId: skippedNoContentId || 0,
+        uniqueContentIds: validatedAssets.length,
+        stageBreakdown: {
+          TOFU: validatedAssets.filter((a) => a.stage === "TOFU").length,
+          MOFU: validatedAssets.filter((a) => a.stage === "MOFU").length,
+          BOFU: validatedAssets.filter((a) => a.stage === "BOFU").length,
+          UNKNOWN: validatedAssets.filter((a) => a.stage === "UNKNOWN").length,
+        },
+      });
+    } catch (err: any) {
+      console.error("Aggregated ingest error:", err);
+      res.status(500).json({ message: err.message || "Ingestion failed" });
+    }
+  });
+
   app.post("/api/assets/ingest-mapped", async (req: Request, res: Response) => {
     try {
       const { rows, mapping } = req.body as {
