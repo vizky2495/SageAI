@@ -23,6 +23,16 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ message: "File is too large. Please upload a smaller file (max 50 MB)." });
+  }
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ message: "Invalid file data. Please check the file format and try again." });
+  }
+  next(err);
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

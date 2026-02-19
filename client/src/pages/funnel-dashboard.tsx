@@ -464,6 +464,21 @@ export default function FunnelDashboard() {
       .catch((err) => console.error("Ingest failed:", err));
   }, [parsedRows, csvText, queryClient]);
 
+  const safeJsonParse = useCallback(async (res: globalThis.Response, fallbackMsg: string): Promise<any> => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      if (text.trim().startsWith("<")) {
+        throw new Error(`${fallbackMsg} (server returned an unexpected response — the file may be too large or the server timed out)`);
+      }
+      throw new Error(`${fallbackMsg}: ${text.slice(0, 200)}`);
+    }
+  }, []);
+
+  const ALLOWED_EXTENSIONS = /\.(csv|xlsx?)$/i;
+  const MAX_FILE_SIZE_MB = 50;
+
   const handleAiUpload = useCallback(async (file: File) => {
     aiActiveRef.current = true;
     setAiStep("parsing");
@@ -473,6 +488,15 @@ export default function FunnelDashboard() {
     setFileName(file.name);
 
     try {
+      if (!ALLOWED_EXTENSIONS.test(file.name)) {
+        throw new Error(`Unsupported file type. Please upload a CSV or Excel (.xlsx) file.`);
+      }
+
+      const fileSizeMB = file.size / (1024 * 1024);
+      if (fileSizeMB > MAX_FILE_SIZE_MB) {
+        throw new Error(`File is too large (${fileSizeMB.toFixed(1)} MB). Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`);
+      }
+
       const isExcel = file.name.match(/\.xlsx?$/i);
       let headers: string[];
       let sampleRows: Record<string, any>[];
@@ -485,70 +509,103 @@ export default function FunnelDashboard() {
             const result = reader.result as string;
             resolve(result.split(",")[1]);
           };
-          reader.onerror = reject;
+          reader.onerror = () => reject(new Error("Failed to read file. Please try again."));
           reader.readAsDataURL(file);
         });
 
-        const parseRes = await fetch("/api/assets/upload-excel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ base64, filename: file.name }),
-        });
+        let parseRes: globalThis.Response;
+        try {
+          parseRes = await fetch("/api/assets/upload-excel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ base64, filename: file.name }),
+          });
+        } catch (networkErr: any) {
+          throw new Error("Network error while uploading file. Please check your connection and try again.");
+        }
 
         if (!parseRes.ok) {
-          const err = await parseRes.json();
+          const err = await safeJsonParse(parseRes, "Failed to parse Excel file");
           throw new Error(err.message || "Failed to parse Excel file");
         }
 
-        const parseData = await parseRes.json();
+        const parseData = await safeJsonParse(parseRes, "Failed to parse server response");
         headers = parseData.headers;
         sampleRows = parseData.sampleRows;
         allRows = parseData.rows;
       } else {
-        const text = await file.text();
+        let text: string;
+        try {
+          text = await file.text();
+        } catch {
+          throw new Error("Failed to read the CSV file. The file may be corrupted.");
+        }
         setCsvText(text);
         const parsed = parseCSV(text);
-        if (parsed.length === 0) throw new Error("No data rows found in CSV");
+        if (parsed.length === 0) throw new Error("No data rows found in the file. Please check the file contains data rows with headers.");
         headers = Object.keys(parsed[0]);
+        if (headers.length === 0) throw new Error("Could not detect column headers. Please ensure the first row contains column names.");
         sampleRows = parsed.slice(0, 5) as Record<string, any>[];
         allRows = parsed as Record<string, any>[];
       }
 
+      if (headers.length === 0) {
+        throw new Error("No column headers found in the file. Please check the file format.");
+      }
+
       setAiStep("analyzing");
 
-      const analyzeRes = await fetch("/api/assets/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headers, sampleRows }),
-      });
+      let analyzeRes: globalThis.Response;
+      try {
+        analyzeRes = await fetch("/api/assets/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ headers, sampleRows }),
+        });
+      } catch (networkErr: any) {
+        throw new Error("Network error during AI analysis. Please try again.");
+      }
 
       if (!analyzeRes.ok) {
-        const err = await analyzeRes.json();
+        const err = await safeJsonParse(analyzeRes, "AI analysis failed");
         throw new Error(err.message || "AI analysis failed");
       }
 
-      const analysis: AiAnalysis = await analyzeRes.json();
+      const analysis: AiAnalysis = await safeJsonParse(analyzeRes, "Failed to parse AI analysis response");
+      if (!analysis.mapping || typeof analysis.mapping !== "object") {
+        throw new Error("AI returned an invalid column mapping. Please try uploading again.");
+      }
       setAiAnalysis(analysis);
 
       setAiStep("ingesting");
 
-      const ingestRes = await fetch("/api/assets/ingest-mapped", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: allRows, mapping: analysis.mapping }),
-      });
+      let ingestRes: globalThis.Response;
+      try {
+        ingestRes = await fetch("/api/assets/ingest-mapped", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: allRows, mapping: analysis.mapping }),
+        });
+      } catch (networkErr: any) {
+        throw new Error("Network error during data ingestion. Please try again.");
+      }
 
       if (!ingestRes.ok) {
-        const err = await ingestRes.json();
+        const err = await safeJsonParse(ingestRes, "Data ingestion failed");
         throw new Error(err.message || "Ingestion failed");
       }
 
-      const diagnostics: UploadDiagnostics = await ingestRes.json();
+      const diagnostics: UploadDiagnostics = await safeJsonParse(ingestRes, "Failed to parse ingestion results");
       setUploadDiagnostics(diagnostics);
 
-      const allAssetsRes = await fetch("/api/assets/all");
+      let allAssetsRes: globalThis.Response;
+      try {
+        allAssetsRes = await fetch("/api/assets/all");
+      } catch {
+        allAssetsRes = new Response(null, { status: 500 });
+      }
       if (allAssetsRes.ok) {
-        const dbAssets: any[] = await allAssetsRes.json();
+        const dbAssets: any[] = await safeJsonParse(allAssetsRes, "Failed to load assets");
         const converted: NormalizedRow[] = dbAssets.map((a, idx) => ({
           id: a.id || `db-${idx}`,
           content: a.contentId || "",
@@ -586,7 +643,7 @@ export default function FunnelDashboard() {
       setAiError(err.message || "Upload failed");
       setAiStep("error");
     }
-  }, [queryClient]);
+  }, [queryClient, safeJsonParse]);
 
   const filtered = useMemo(() => {
     const stageFiltered =
