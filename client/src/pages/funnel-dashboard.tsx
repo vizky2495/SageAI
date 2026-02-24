@@ -1629,6 +1629,50 @@ export default function FunnelDashboard() {
                     </Select>
                   </div>
 
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Channel</span>
+                    <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
+                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-channel-dimension">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="utmChannel">UTM Channel</SelectItem>
+                        <SelectItem value="productFranchise">Product</SelectItem>
+                        <SelectItem value="contentType">Content Type</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Product</span>
+                    <Select value={productFilter} onValueChange={setProductFilter}>
+                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-product-filter">
+                        <SelectValue placeholder="All products" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
+                        {productList.map((p) => (
+                          <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Industry</span>
+                    <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-industry-filter">
+                        <SelectValue placeholder="All industries" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
+                        {industryList.map((ind) => (
+                          <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="hidden items-center gap-2 md:flex">
                     <Badge
                       variant="secondary"
@@ -1717,18 +1761,9 @@ export default function FunnelDashboard() {
                     Breakdown by UTM channel.
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
-                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-channel-dimension">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="utmChannel">UTM Channel</SelectItem>
-                      <SelectItem value="productFranchise">Product</SelectItem>
-                      <SelectItem value="contentType">Content Type</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Badge variant="secondary" className="rounded-xl" data-testid="badge-channel-count">
+                  {dimensionData.length} {dimensionData.length === 1 ? "channel" : "channels"}
+                </Badge>
               </div>
 
               <Separator className="my-3" />
@@ -1820,19 +1855,9 @@ export default function FunnelDashboard() {
                     Breakdown by PRODUCT_FRANCHISE__C.
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Select value={productFilter} onValueChange={setProductFilter}>
-                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-product-filter">
-                      <SelectValue placeholder="All products" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
-                      {productList.map((p) => (
-                        <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Badge variant="secondary" className="rounded-xl" data-testid="badge-product-count">
+                  {productMixData.length} {productMixData.length === 1 ? "product" : "products"}
+                </Badge>
               </div>
 
               <Separator className="my-3" />
@@ -1925,19 +1950,9 @@ export default function FunnelDashboard() {
                     Breakdown by industry / vertical.
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-industry-filter">
-                      <SelectValue placeholder="All industries" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
-                      {industryList.map((ind) => (
-                        <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Badge variant="secondary" className="rounded-xl" data-testid="badge-industry-count">
+                  {industryMixData.length} {industryMixData.length === 1 ? "industry" : "industries"}
+                </Badge>
               </div>
 
               <Separator className="my-3" />
