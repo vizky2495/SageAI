@@ -566,6 +566,7 @@ export default function FunnelDashboard() {
   >("utmChannel");
   const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
   const [productFilter, setProductFilter] = useState<string>("ALL");
+  const [productStageExpand, setProductStageExpand] = useState<{ product: string; stage: string } | null>(null);
 
   const [aiStep, setAiStep] = useState<AiStep>("idle");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
@@ -996,6 +997,26 @@ export default function FunnelDashboard() {
       .sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls))
       .slice(0, 12);
   }, [filtered, productFilter]);
+
+  const productStageContentIds = useMemo(() => {
+    if (!productStageExpand) return [];
+    const { product, stage } = productStageExpand;
+    return filtered
+      .filter((r) => {
+        const p = r.productFranchise || "(unattributed)";
+        return p === product && r.stage === stage;
+      })
+      .map((r) => ({
+        content: r.content,
+        channel: r.utmChannel || "",
+        cta: r.cta || "",
+        views: r.pageViews ?? 0,
+        contacts: r.formSubmissions ?? r.newContacts ?? 0,
+        mqls: r.mqls ?? 0,
+        sqos: r.sqos ?? 0,
+      }))
+      .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
+  }, [filtered, productStageExpand]);
 
   const ctaByStage = useMemo(() => {
     const map: Record<string, Map<string, number>> = { TOFU: new Map(), MOFU: new Map(), BOFU: new Map() };
@@ -1796,45 +1817,140 @@ export default function FunnelDashboard() {
 
               <Separator className="my-4" />
 
-              <div className="grid gap-2 max-h-[260px] overflow-y-auto pr-1">
-                {productMixData.map((d) => (
-                  <button
-                    key={d.key}
-                    className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80"
-                    onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)}
-                    data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{d.key}</div>
-                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{d.count} assets</span>
-                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                        <span className="text-emerald-400">{d.tofu} TOFU</span>
-                        <span className="text-sky-400">{d.mofu} MOFU</span>
-                        <span className="text-orange-400">{d.bofu} BOFU</span>
+              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
+                {productMixData.map((d) => {
+                  const isExpanded = (s: string) =>
+                    productStageExpand?.product === d.key && productStageExpand?.stage === s;
+                  const toggleStage = (s: string, e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setProductStageExpand(isExpanded(s) ? null : { product: d.key, stage: s });
+                  };
+                  const stageButtons: { stage: string; count: number; color: string; activeColor: string }[] = [
+                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
+                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
+                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
+                  ];
+                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
+
+                  return (
+                    <div key={d.key}>
+                      <div
+                        className="w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer"
+                        onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)}
+                        data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{d.key}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{d.count} assets</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            {stageButtons.map((sb) => (
+                              <button
+                                key={sb.stage}
+                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                                onClick={(e) => toggleStage(sb.stage, e)}
+                                title={`Show ${sb.stage} content IDs for ${d.key}`}
+                                data-testid={`btn-product-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                              >
+                                {sb.count} {sb.stage}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-3">
+                          {uploadDiagnostics ? (
+                            <>
+                              <span>{formatCompact(d.views)} views</span>
+                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                              <span>{formatCompact(d.contacts)} leads</span>
+                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                              <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{formatCompact(d.contacts)} contacts</span>
+                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                              <span>{formatCompact(d.mqls)} MQLs</span>
+                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                              <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-3">
-                      {uploadDiagnostics ? (
-                        <>
-                          <span>{formatCompact(d.views)} views</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          <span>{formatCompact(d.contacts)} leads</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>{formatCompact(d.contacts)} contacts</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          <span>{formatCompact(d.mqls)} MQLs</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
-                        </>
+
+                      {expandedStage && (
+                        <div
+                          className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3"
+                          data-testid={`drilldown-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>
+                                {expandedStage.stage}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {productStageContentIds.length} content {productStageContentIds.length === 1 ? "asset" : "assets"}
+                              </span>
+                            </div>
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={() => setProductStageExpand(null)}
+                              data-testid="btn-close-drilldown"
+                            >
+                              Close
+                            </button>
+                          </div>
+                          <div className="max-h-[200px] overflow-y-auto space-y-1">
+                            {productStageContentIds.map((item, idx) => (
+                              <div
+                                key={`${item.content}-${idx}`}
+                                className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs"
+                                data-testid={`drilldown-item-${idx}`}
+                              >
+                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>
+                                  {item.content}
+                                </div>
+                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
+                                  {item.channel && <span>{item.channel}</span>}
+                                  {item.cta && (
+                                    <>
+                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                                      <span>{item.cta}</span>
+                                    </>
+                                  )}
+                                  {uploadDiagnostics ? (
+                                    <>
+                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                                      <span>{formatCompact(item.views)} views</span>
+                                    </>
+                                  ) : (
+                                    item.mqls > 0 && (
+                                      <>
+                                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                                        <span>{formatCompact(item.mqls)} MQLs</span>
+                                      </>
+                                    )
+                                  )}
+                                  {item.sqos > 0 && (
+                                    <>
+                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                                      <span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {productStageContentIds.length === 0 && (
+                              <div className="text-center text-xs text-muted-foreground py-3">
+                                No content assets found.
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </Card>
 
