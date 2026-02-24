@@ -61,6 +61,7 @@ type NormalizedRow = {
   utmMedium?: string;
   utmContent?: string;
   productFranchise?: string;
+  industry?: string;
   objective?: string;
   contentType?: string;
   cta?: string;
@@ -351,6 +352,17 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
         ]) ?? "",
       ).trim() || undefined;
 
+    const industry =
+      String(
+        pickFirst(r, [
+          "industry",
+          "industry__c",
+          "vertical",
+          "verticals",
+          "sector",
+        ]) ?? "",
+      ).trim() || undefined;
+
     const objective =
       String(pickFirst(r, ["objective", "campaign_objective"]) ?? "").trim() ||
       undefined;
@@ -475,6 +487,7 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       utmMedium,
       utmContent,
       productFranchise,
+      industry,
       objective,
       contentType,
       cta,
@@ -527,16 +540,16 @@ const stageMeta: Record<FunnelStage, { label: string; tone: string }> = {
   UNKNOWN: { label: "UNKNOWN", tone: "bg-muted text-muted-foreground border-border" },
 };
 
-const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,PAGEVIEWS,AVG_TIME_ON_PAGE,AVG_SCROLL_DEPTH,NEW_USERS,RETURNING_USERS,NEWSLETTER_SIGNUPS,NEXT_CONTENT_VIEWS,NEW_CONTACTS,FORM_SUBMISSIONS,MQL_FLAG,QDC_COUNT,SQO_FLAG,FORM_SCORE1
-TOFU_Cloud_Security_101,Organic,Search,CloudShield,Blog,NCA,980,1520,4200,64,58,510,210,22,380,64,18,0,0,0,18
-TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Landing Page,NCA,720,1200,3100,49,52,402,160,19,240,51,16,0,0,0,22
-MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Webinar,NCA,410,620,1200,71,63,180,110,8,120,44,44,21,6,2,51
-MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Whitepaper,NCA,330,470,1400,83,66,190,120,11,150,39,39,17,4,1,47
-BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Landing Page,NCA,120,200,640,58,50,70,60,2,44,28,28,14,7,9,72
-BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Case Study,NCA,140,210,880,92,71,90,75,4,62,19,19,9,3,7,68
-TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Blog,NCA,640,980,2600,61,56,350,180,14,190,41,10,0,0,0,16
-MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Landing Page,NCA,260,420,1100,77,65,140,95,9,130,25,25,10,2,1,44
-BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Landing Page,NCA,90,140,520,44,47,55,45,1,38,10,10,6,2,4,66`;
+const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,INDUSTRY,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,PAGEVIEWS,AVG_TIME_ON_PAGE,AVG_SCROLL_DEPTH,NEW_USERS,RETURNING_USERS,NEWSLETTER_SIGNUPS,NEXT_CONTENT_VIEWS,NEW_CONTACTS,FORM_SUBMISSIONS,MQL_FLAG,QDC_COUNT,SQO_FLAG,FORM_SCORE1
+TOFU_Cloud_Security_101,Organic,Search,CloudShield,Financial Services,Blog,NCA,980,1520,4200,64,58,510,210,22,380,64,18,0,0,0,18
+TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Technology,Landing Page,NCA,720,1200,3100,49,52,402,160,19,240,51,16,0,0,0,22
+MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Financial Services,Webinar,NCA,410,620,1200,71,63,180,110,8,120,44,44,21,6,2,51
+MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Healthcare,Whitepaper,NCA,330,470,1400,83,66,190,120,11,150,39,39,17,4,1,47
+BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Technology,Landing Page,NCA,120,200,640,58,50,70,60,2,44,28,28,14,7,9,72
+BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Financial Services,Case Study,NCA,140,210,880,92,71,90,75,4,62,19,19,9,3,7,68
+TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Healthcare,Blog,NCA,640,980,2600,61,56,350,180,14,190,41,10,0,0,0,16
+MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Technology,Landing Page,NCA,260,420,1100,77,65,140,95,9,130,25,25,10,2,1,44
+BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Financial Services,Landing Page,NCA,90,140,520,44,47,55,45,1,38,10,10,6,2,4,66`;
 
 type AiAnalysis = {
   mapping: Record<string, string | null>;
@@ -567,6 +580,9 @@ export default function FunnelDashboard() {
   const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
   const [productFilter, setProductFilter] = useState<string>("ALL");
   const [productStageExpand, setProductStageExpand] = useState<{ product: string; stage: string } | null>(null);
+  const [industryFilter, setIndustryFilter] = useState<string>("ALL");
+  const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
+  const [stageExpand, setStageExpand] = useState<string | null>(null);
 
   const [aiStep, setAiStep] = useState<AiStep>("idle");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
@@ -1017,6 +1033,102 @@ export default function FunnelDashboard() {
       }))
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
   }, [filtered, productStageExpand]);
+
+  const stageExpandContentIds = useMemo(() => {
+    if (!stageExpand) return [];
+    return filtered
+      .filter((r) => r.stage === stageExpand)
+      .map((r) => ({
+        content: r.content,
+        product: r.productFranchise || "",
+        channel: r.utmChannel || "",
+        cta: r.cta || "",
+        views: r.pageViews ?? 0,
+        contacts: r.formSubmissions ?? r.newContacts ?? 0,
+        mqls: r.mqls ?? 0,
+        sqos: r.sqos ?? 0,
+      }))
+      .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
+  }, [filtered, stageExpand]);
+
+  const industryList = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) {
+      if (r.industry) s.add(r.industry);
+    }
+    return Array.from(s).sort();
+  }, [rows]);
+
+  const industryMixData = useMemo(() => {
+    const roll = new Map<
+      string,
+      {
+        key: string;
+        count: number;
+        views: number;
+        contacts: number;
+        mqls: number;
+        qdcs: number;
+        sqos: number;
+        tofu: number;
+        mofu: number;
+        bofu: number;
+      }
+    >();
+
+    const source = industryFilter === "ALL" ? filtered : filtered.filter((r) => r.industry === industryFilter);
+
+    for (const r of source) {
+      const key = r.industry || "(unattributed)";
+      const cur = roll.get(key) || {
+        key,
+        count: 0,
+        views: 0,
+        contacts: 0,
+        mqls: 0,
+        qdcs: 0,
+        sqos: 0,
+        tofu: 0,
+        mofu: 0,
+        bofu: 0,
+      };
+      cur.count += 1;
+      cur.views += r.pageViews ?? 0;
+      cur.contacts += r.formSubmissions ?? r.newContacts ?? 0;
+      cur.mqls += r.mqls ?? 0;
+      cur.qdcs += r.qdcs ?? 0;
+      cur.sqos += r.sqos ?? 0;
+      if (r.stage === "TOFU") cur.tofu += 1;
+      else if (r.stage === "MOFU") cur.mofu += 1;
+      else if (r.stage === "BOFU") cur.bofu += 1;
+      roll.set(key, cur);
+    }
+
+    return Array.from(roll.values())
+      .sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls))
+      .slice(0, 12);
+  }, [filtered, industryFilter]);
+
+  const industryStageContentIds = useMemo(() => {
+    if (!industryStageExpand) return [];
+    const { industry, stage } = industryStageExpand;
+    return filtered
+      .filter((r) => {
+        const ind = r.industry || "(unattributed)";
+        return ind === industry && r.stage === stage;
+      })
+      .map((r) => ({
+        content: r.content,
+        product: r.productFranchise || "",
+        channel: r.utmChannel || "",
+        cta: r.cta || "",
+        views: r.pageViews ?? 0,
+        contacts: r.formSubmissions ?? r.newContacts ?? 0,
+        mqls: r.mqls ?? 0,
+        sqos: r.sqos ?? 0,
+      }))
+      .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
+  }, [filtered, industryStageExpand]);
 
   const ctaByStage = useMemo(() => {
     const map: Record<string, Map<string, number>> = { TOFU: new Map(), MOFU: new Map(), BOFU: new Map() };
@@ -1614,136 +1726,106 @@ export default function FunnelDashboard() {
             })}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-5">
+          <div className="grid gap-4 lg:grid-cols-3">
 
-            <Card className="lg:col-span-2 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-stage-mix">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium" data-testid="text-mix-title">
-                    Stage mix
-                  </div>
-                  <div
-                    className="mt-1 text-xs text-muted-foreground"
-                    data-testid="text-mix-subtitle"
-                  >
-                    Row distribution by classified stage.
+                  <div className="text-sm font-medium" data-testid="text-mix-title">Stage mix</div>
+                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-mix-subtitle">
+                    Distribution by funnel stage.
                   </div>
                 </div>
-                <Badge
-                  variant="secondary"
-                  className="rounded-xl"
-                  data-testid="badge-mix"
-                >
-                  {formatCompact(totalRows)} {uploadDiagnostics ? "content assets" : "rows"}
+                <Badge variant="secondary" className="rounded-xl" data-testid="badge-mix">
+                  {formatCompact(totalRows)} {uploadDiagnostics ? "assets" : "rows"}
                 </Badge>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {([
-                  "TOFU",
-                  "MOFU",
-                  "BOFU",
-                  "UNKNOWN",
-                ] as FunnelStage[]).map((s) => (
-                  <button
-                    key={s}
-                    className="group flex items-center justify-between rounded-2xl border bg-card/60 px-3 py-3 text-left shadow-sm transition hover:shadow"
-                    onClick={() => setStageFilter((prev) => (prev === s ? "ALL" : s))}
-                    data-testid={`button-stage-${s.toLowerCase()}`}
-                  >
-                    <div>
-                      <div className="text-xs text-muted-foreground">
-                        {stageMeta[s].label}
-                      </div>
+
+              <Separator className="my-3" />
+
+              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
+                {(["TOFU", "MOFU", "BOFU", "UNKNOWN"] as FunnelStage[]).map((s) => {
+                  const count = byStage[s].length;
+                  const isExp = stageExpand === s;
+                  return (
+                    <div key={s}>
                       <div
-                        className="mt-1 text-lg font-[650] tracking-tight"
-                        data-testid={`text-stage-count-${s.toLowerCase()}`}
+                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${stageFilter === s ? "ring-1 ring-primary/40" : ""}`}
+                        onClick={() => setStageFilter((prev) => (prev === s ? "ALL" : s))}
+                        data-testid={`button-stage-${s.toLowerCase()}`}
                       >
-                        {byStage[s].length}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded-full border px-2 py-0.5 text-xs ${stageMeta[s].tone}`}>{s}</span>
+                            <span className="text-sm font-[650]" data-testid={`text-stage-count-${s.toLowerCase()}`}>{count}</span>
+                            <span className="text-xs text-muted-foreground">{Math.round(pct(count, totalRows))}%</span>
+                          </div>
+                        </div>
+                        {s !== "UNKNOWN" && count > 0 && (
+                          <button
+                            className={`rounded-lg px-2 py-0.5 text-xs transition-colors cursor-pointer hover:bg-muted/50 text-muted-foreground ${isExp ? "bg-primary/15 ring-1 ring-primary/30 text-primary" : ""}`}
+                            onClick={(e) => { e.stopPropagation(); setStageExpand(isExp ? null : s); }}
+                            title={`Show ${s} content IDs`}
+                            data-testid={`btn-stage-expand-${s.toLowerCase()}`}
+                          >
+                            {count} IDs
+                          </button>
+                        )}
                       </div>
+                      {isExp && s !== "UNKNOWN" && (
+                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-stage-${s.toLowerCase()}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className={`text-xs border ${stageMeta[s].tone}`}>{s}</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {stageExpandContentIds.length} content {stageExpandContentIds.length === 1 ? "asset" : "assets"}
+                              </span>
+                            </div>
+                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setStageExpand(null)} data-testid="btn-close-stage-drilldown">Close</button>
+                          </div>
+                          <div className="max-h-[200px] overflow-y-auto space-y-1">
+                            {stageExpandContentIds.map((item, idx) => (
+                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`stage-drilldown-item-${idx}`}>
+                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
+                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
+                                  {item.product && <span>{item.product}</span>}
+                                  {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
+                                  {uploadDiagnostics ? (
+                                    <><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>
+                                  ) : (
+                                    item.mqls > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.mqls)} MQLs</span></>)
+                                  )}
+                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
+                                </div>
+                              </div>
+                            ))}
+                            {stageExpandContentIds.length === 0 && (
+                              <div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <span
-                      className={`rounded-full border px-2 py-1 text-xs ${stageMeta[s].tone}`}
-                    >
-                      {Math.round(pct(byStage[s].length, totalRows))}%
-                    </span>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
 
-              <Separator className="my-4" />
+              <Separator className="my-3" />
 
               <div className="grid gap-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium" data-testid="text-dim-title">
-                    Breakdown: {dimension}
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className="rounded-xl"
-                    data-testid="badge-breakdown"
-                  >
-                    Top {dimensionData.length}
-                  </Badge>
-                </div>
-                <div className="h-[190px]" data-testid="chart-dimension">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dimensionData}>
-                      <defs>
-                        <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
-                          <stop
-                            offset="0%"
-                            stopColor="hsl(var(--chart-1))"
-                            stopOpacity={0.35}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="hsl(var(--chart-1))"
-                            stopOpacity={0.03}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                      <XAxis dataKey="key" hide />
-                      <YAxis hide />
-                      <ReTooltip />
-                      <Area
-                        type="monotone"
-                        dataKey={uploadDiagnostics ? "views" : "mqls"}
-                        name={uploadDiagnostics ? "Page Views" : "MQLs"}
-                        stroke="hsl(var(--chart-1))"
-                        fill="url(#g1)"
-                        strokeWidth={2}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <div className="text-sm font-medium" data-testid="text-dim-title">Channel: {dimension}</div>
+                  <Badge variant="secondary" className="rounded-xl" data-testid="badge-breakdown">Top {dimensionData.length}</Badge>
                 </div>
                 <div className="grid gap-2">
-                  {dimensionData.slice(0, 6).map((d) => (
-                    <div
-                      key={d.key}
-                      className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2"
-                      data-testid={`row-dimension-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
-                    >
+                  {dimensionData.slice(0, 5).map((d) => (
+                    <div key={d.key} className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2" data-testid={`row-dimension-${d.key.replace(/\s+/g, "-").toLowerCase()}`}>
                       <div className="truncate text-sm font-medium">{d.key}</div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         {uploadDiagnostics ? (
-                          <>
-                            <span>{formatCompact(d.views)} page views</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            <span>{formatCompact(d.contacts)} leads</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            <span>{formatCompact(d.sqos)} SQOs</span>
-                          </>
+                          <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.sqos)} SQOs</span></>
                         ) : (
-                          <>
-                            <span>{formatCompact(d.contacts)} contacts</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            <span>{formatCompact(d.mqls)} MQLs</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            <span>{formatCompact(d.qdcs)} QDCs</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            <span>{formatCompact(d.sqos)} SQOs</span>
-                          </>
+                          <><span>{formatCompact(d.contacts)} contacts</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.sqos)} SQOs</span></>
                         )}
                       </div>
                     </div>
@@ -1752,80 +1834,39 @@ export default function FunnelDashboard() {
               </div>
             </Card>
 
-            <Card className="lg:col-span-3 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-product-mix">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-product-mix">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium" data-testid="text-product-mix-title">
-                    Product mix
-                  </div>
+                  <div className="text-sm font-medium" data-testid="text-product-mix-title">Product mix</div>
                   <div className="mt-1 text-xs text-muted-foreground" data-testid="text-product-mix-subtitle">
-                    Performance breakdown by product franchise.
+                    Breakdown by PRODUCT_FRANCHISE__C.
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={productFilter} onValueChange={setProductFilter}>
-                    <SelectTrigger className="h-8 w-[180px] rounded-xl text-xs" data-testid="select-product-filter">
+                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-product-filter">
                       <SelectValue placeholder="All products" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
                       {productList.map((p) => (
-                        <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>
-                          {p}
-                        </SelectItem>
+                        <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Badge variant="secondary" className="rounded-xl" data-testid="badge-product-count">
-                    {productMixData.length} {productMixData.length === 1 ? "product" : "products"}
-                  </Badge>
                 </div>
               </div>
 
-              <div className="mt-4 h-[180px]" data-testid="chart-product-mix">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={productMixData} layout="vertical" margin={{ left: 4, right: 12 }}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} horizontal={false} />
-                    <XAxis type="number" hide />
-                    <YAxis
-                      type="category"
-                      dataKey="key"
-                      width={110}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <ReTooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                      }}
-                    />
-                    <Bar dataKey="tofu" name="TOFU" stackId="stage" fill="hsl(var(--chart-1))" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="mofu" name="MOFU" stackId="stage" fill="hsl(var(--chart-2))" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="bofu" name="BOFU" stackId="stage" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
-                    <Legend
-                      iconType="circle"
-                      iconSize={8}
-                      wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <Separator className="my-4" />
+              <Separator className="my-3" />
 
               <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
                 {productMixData.map((d) => {
-                  const isExpanded = (s: string) =>
-                    productStageExpand?.product === d.key && productStageExpand?.stage === s;
+                  const isExpanded = (s: string) => productStageExpand?.product === d.key && productStageExpand?.stage === s;
                   const toggleStage = (s: string, e: React.MouseEvent) => {
                     e.stopPropagation();
                     setProductStageExpand(isExpanded(s) ? null : { product: d.key, stage: s });
                   };
-                  const stageButtons: { stage: string; count: number; color: string; activeColor: string }[] = [
+                  const stageButtons = [
                     { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
                     { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
                     { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
@@ -1835,7 +1876,7 @@ export default function FunnelDashboard() {
                   return (
                     <div key={d.key}>
                       <div
-                        className="w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer"
+                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${productFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
                         onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)}
                         data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
                       >
@@ -1857,93 +1898,142 @@ export default function FunnelDashboard() {
                             ))}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-3">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
                           {uploadDiagnostics ? (
-                            <>
-                              <span>{formatCompact(d.views)} views</span>
-                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                              <span>{formatCompact(d.contacts)} leads</span>
-                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                              <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
-                            </>
+                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
                           ) : (
-                            <>
-                              <span>{formatCompact(d.contacts)} contacts</span>
-                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                              <span>{formatCompact(d.mqls)} MQLs</span>
-                              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                              <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
-                            </>
+                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
                           )}
                         </div>
                       </div>
 
                       {expandedStage && (
-                        <div
-                          className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3"
-                          data-testid={`drilldown-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}
-                        >
+                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>
-                                {expandedStage.stage}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {productStageContentIds.length} content {productStageContentIds.length === 1 ? "asset" : "assets"}
-                              </span>
+                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
+                              <span className="text-xs text-muted-foreground">{productStageContentIds.length} content {productStageContentIds.length === 1 ? "asset" : "assets"}</span>
                             </div>
-                            <button
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                              onClick={() => setProductStageExpand(null)}
-                              data-testid="btn-close-drilldown"
-                            >
-                              Close
-                            </button>
+                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setProductStageExpand(null)} data-testid="btn-close-product-drilldown">Close</button>
                           </div>
                           <div className="max-h-[200px] overflow-y-auto space-y-1">
                             {productStageContentIds.map((item, idx) => (
-                              <div
-                                key={`${item.content}-${idx}`}
-                                className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs"
-                                data-testid={`drilldown-item-${idx}`}
-                              >
-                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>
-                                  {item.content}
-                                </div>
+                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`product-drilldown-item-${idx}`}>
+                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
                                 <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
                                   {item.channel && <span>{item.channel}</span>}
-                                  {item.cta && (
-                                    <>
-                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                                      <span>{item.cta}</span>
-                                    </>
-                                  )}
-                                  {uploadDiagnostics ? (
-                                    <>
-                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                                      <span>{formatCompact(item.views)} views</span>
-                                    </>
-                                  ) : (
-                                    item.mqls > 0 && (
-                                      <>
-                                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                                        <span>{formatCompact(item.mqls)} MQLs</span>
-                                      </>
-                                    )
-                                  )}
-                                  {item.sqos > 0 && (
-                                    <>
-                                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                                      <span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span>
-                                    </>
-                                  )}
+                                  {item.cta && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.cta}</span></>)}
+                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
                                 </div>
                               </div>
                             ))}
                             {productStageContentIds.length === 0 && (
-                              <div className="text-center text-xs text-muted-foreground py-3">
-                                No content assets found.
+                              <div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-industry-mix">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" data-testid="text-industry-mix-title">Industry mix</div>
+                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-industry-mix-subtitle">
+                    Breakdown by industry / vertical.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-industry-filter">
+                      <SelectValue placeholder="All industries" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
+                      {industryList.map((ind) => (
+                        <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator className="my-3" />
+
+              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
+                {industryMixData.map((d) => {
+                  const isExpanded = (s: string) => industryStageExpand?.industry === d.key && industryStageExpand?.stage === s;
+                  const toggleStage = (s: string, e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setIndustryStageExpand(isExpanded(s) ? null : { industry: d.key, stage: s });
+                  };
+                  const stageButtons = [
+                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
+                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
+                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
+                  ];
+                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
+
+                  return (
+                    <div key={d.key}>
+                      <div
+                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${industryFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
+                        onClick={() => setIndustryFilter(d.key === industryFilter ? "ALL" : d.key)}
+                        data-testid={`row-industry-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{d.key}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{d.count} assets</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            {stageButtons.map((sb) => (
+                              <button
+                                key={sb.stage}
+                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                                onClick={(e) => toggleStage(sb.stage, e)}
+                                title={`Show ${sb.stage} content IDs for ${d.key}`}
+                                data-testid={`btn-industry-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                              >
+                                {sb.count} {sb.stage}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
+                          {uploadDiagnostics ? (
+                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                          ) : (
+                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                          )}
+                        </div>
+                      </div>
+
+                      {expandedStage && (
+                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-industry-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
+                              <span className="text-xs text-muted-foreground">{industryStageContentIds.length} content {industryStageContentIds.length === 1 ? "asset" : "assets"}</span>
+                            </div>
+                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setIndustryStageExpand(null)} data-testid="btn-close-industry-drilldown">Close</button>
+                          </div>
+                          <div className="max-h-[200px] overflow-y-auto space-y-1">
+                            {industryStageContentIds.map((item, idx) => (
+                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`industry-drilldown-item-${idx}`}>
+                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
+                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
+                                  {item.product && <span>{item.product}</span>}
+                                  {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
+                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
+                                </div>
                               </div>
+                            ))}
+                            {industryStageContentIds.length === 0 && (
+                              <div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>
                             )}
                           </div>
                         </div>
