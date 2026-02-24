@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import FunnelDashboard from "@/pages/funnel-dashboard";
 import PromptStudio from "@/pages/prompt-studio";
+import AIChatbot from "@/components/ai-chatbot";
 import { queryClient } from "./lib/queryClient";
 
 function Router() {
@@ -23,6 +24,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
+        <AIChatbot />
       </TooltipProvider>
     </QueryClientProvider>
   );
