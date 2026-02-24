@@ -582,7 +582,7 @@ export default function FunnelDashboard() {
   const [productStageExpand, setProductStageExpand] = useState<{ product: string; stage: string } | null>(null);
   const [industryFilter, setIndustryFilter] = useState<string>("ALL");
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
-  const [stageExpand, setStageExpand] = useState<string | null>(null);
+  const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
 
   const [aiStep, setAiStep] = useState<AiStep>("idle");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
@@ -911,6 +911,7 @@ export default function FunnelDashboard() {
       string,
       {
         key: string;
+        count: number;
         engaged: number;
         views: number;
         newUsers: number;
@@ -919,6 +920,9 @@ export default function FunnelDashboard() {
         mqls: number;
         qdcs: number;
         sqos: number;
+        tofu: number;
+        mofu: number;
+        bofu: number;
       }
     >();
 
@@ -927,6 +931,7 @@ export default function FunnelDashboard() {
       const cur =
         roll.get(key) || {
           key,
+          count: 0,
           engaged: 0,
           views: 0,
           newUsers: 0,
@@ -935,7 +940,11 @@ export default function FunnelDashboard() {
           mqls: 0,
           qdcs: 0,
           sqos: 0,
+          tofu: 0,
+          mofu: 0,
+          bofu: 0,
         };
+      cur.count += 1;
       cur.engaged += r.engagedSessions ?? 0;
       cur.views += r.pageViews ?? 0;
       cur.newUsers += r.newUsers ?? 0;
@@ -944,6 +953,9 @@ export default function FunnelDashboard() {
       cur.mqls += r.mqls ?? 0;
       cur.qdcs += r.qdcs ?? 0;
       cur.sqos += r.sqos ?? 0;
+      if (r.stage === "TOFU") cur.tofu += 1;
+      else if (r.stage === "MOFU") cur.mofu += 1;
+      else if (r.stage === "BOFU") cur.bofu += 1;
       roll.set(key, cur);
     }
 
@@ -1034,10 +1046,14 @@ export default function FunnelDashboard() {
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
   }, [filtered, productStageExpand]);
 
-  const stageExpandContentIds = useMemo(() => {
-    if (!stageExpand) return [];
+  const channelStageContentIds = useMemo(() => {
+    if (!channelStageExpand) return [];
+    const { channel, stage } = channelStageExpand;
     return filtered
-      .filter((r) => r.stage === stageExpand)
+      .filter((r) => {
+        const ch = (r[dimension] as string | undefined) || "(unattributed)";
+        return ch === channel && r.stage === stage;
+      })
       .map((r) => ({
         content: r.content,
         product: r.productFranchise || "",
@@ -1049,7 +1065,7 @@ export default function FunnelDashboard() {
         sqos: r.sqos ?? 0,
       }))
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
-  }, [filtered, stageExpand]);
+  }, [filtered, channelStageExpand, dimension]);
 
   const industryList = useMemo(() => {
     const s = new Set<string>();
@@ -1613,41 +1629,6 @@ export default function FunnelDashboard() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Breakdown</span>
-                    <Select
-                      value={dimension}
-                      onValueChange={(v) => setDimension(v as typeof dimension)}
-                    >
-                      <SelectTrigger
-                        className="h-9 w-[200px] rounded-xl"
-                        data-testid="select-dimension"
-                      >
-                        <SelectValue placeholder="Dimension" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem
-                          value="utmChannel"
-                          data-testid="option-dim-channel"
-                        >
-                          UTM Channel
-                        </SelectItem>
-                        <SelectItem
-                          value="productFranchise"
-                          data-testid="option-dim-product"
-                        >
-                          Product
-                        </SelectItem>
-                        <SelectItem
-                          value="contentType"
-                          data-testid="option-dim-type"
-                        >
-                          Content type
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
                   <div className="hidden items-center gap-2 md:flex">
                     <Badge
                       variant="secondary"
@@ -1728,78 +1709,98 @@ export default function FunnelDashboard() {
 
           <div className="grid gap-4 lg:grid-cols-3">
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-stage-mix">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-channel-mix">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium" data-testid="text-mix-title">Stage mix</div>
-                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-mix-subtitle">
-                    Distribution by funnel stage.
+                  <div className="text-sm font-medium" data-testid="text-channel-mix-title">Channel mix</div>
+                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-channel-mix-subtitle">
+                    Breakdown by UTM channel.
                   </div>
                 </div>
-                <Badge variant="secondary" className="rounded-xl" data-testid="badge-mix">
-                  {formatCompact(totalRows)} {uploadDiagnostics ? "assets" : "rows"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
+                    <SelectTrigger className="h-7 w-[140px] rounded-xl text-xs" data-testid="select-channel-dimension">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="utmChannel">UTM Channel</SelectItem>
+                      <SelectItem value="productFranchise">Product</SelectItem>
+                      <SelectItem value="contentType">Content Type</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <Separator className="my-3" />
 
               <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
-                {(["TOFU", "MOFU", "BOFU", "UNKNOWN"] as FunnelStage[]).map((s) => {
-                  const count = byStage[s].length;
-                  const isExp = stageExpand === s;
+                {dimensionData.map((d) => {
+                  const isExpanded = (s: string) => channelStageExpand?.channel === d.key && channelStageExpand?.stage === s;
+                  const toggleStage = (s: string, e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setChannelStageExpand(isExpanded(s) ? null : { channel: d.key, stage: s });
+                  };
+                  const stageButtons = [
+                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
+                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
+                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
+                  ];
+                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
+
                   return (
-                    <div key={s}>
+                    <div key={d.key}>
                       <div
-                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${stageFilter === s ? "ring-1 ring-primary/40" : ""}`}
-                        onClick={() => setStageFilter((prev) => (prev === s ? "ALL" : s))}
-                        data-testid={`button-stage-${s.toLowerCase()}`}
+                        className="w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer"
+                        data-testid={`row-channel-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`rounded-full border px-2 py-0.5 text-xs ${stageMeta[s].tone}`}>{s}</span>
-                            <span className="text-sm font-[650]" data-testid={`text-stage-count-${s.toLowerCase()}`}>{count}</span>
-                            <span className="text-xs text-muted-foreground">{Math.round(pct(count, totalRows))}%</span>
+                          <div className="truncate text-sm font-medium">{d.key}</div>
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{d.count} assets</span>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            {stageButtons.map((sb) => (
+                              <button
+                                key={sb.stage}
+                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                                onClick={(e) => toggleStage(sb.stage, e)}
+                                title={`Show ${sb.stage} content IDs for ${d.key}`}
+                                data-testid={`btn-channel-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                              >
+                                {sb.count} {sb.stage}
+                              </button>
+                            ))}
                           </div>
                         </div>
-                        {s !== "UNKNOWN" && count > 0 && (
-                          <button
-                            className={`rounded-lg px-2 py-0.5 text-xs transition-colors cursor-pointer hover:bg-muted/50 text-muted-foreground ${isExp ? "bg-primary/15 ring-1 ring-primary/30 text-primary" : ""}`}
-                            onClick={(e) => { e.stopPropagation(); setStageExpand(isExp ? null : s); }}
-                            title={`Show ${s} content IDs`}
-                            data-testid={`btn-stage-expand-${s.toLowerCase()}`}
-                          >
-                            {count} IDs
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
+                          {uploadDiagnostics ? (
+                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                          ) : (
+                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                          )}
+                        </div>
                       </div>
-                      {isExp && s !== "UNKNOWN" && (
-                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-stage-${s.toLowerCase()}`}>
+
+                      {expandedStage && (
+                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-channel-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Badge className={`text-xs border ${stageMeta[s].tone}`}>{s}</Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {stageExpandContentIds.length} content {stageExpandContentIds.length === 1 ? "asset" : "assets"}
-                              </span>
+                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
+                              <span className="text-xs text-muted-foreground">{channelStageContentIds.length} content {channelStageContentIds.length === 1 ? "asset" : "assets"}</span>
                             </div>
-                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setStageExpand(null)} data-testid="btn-close-stage-drilldown">Close</button>
+                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setChannelStageExpand(null)} data-testid="btn-close-channel-drilldown">Close</button>
                           </div>
                           <div className="max-h-[200px] overflow-y-auto space-y-1">
-                            {stageExpandContentIds.map((item, idx) => (
-                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`stage-drilldown-item-${idx}`}>
+                            {channelStageContentIds.map((item, idx) => (
+                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`channel-drilldown-item-${idx}`}>
                                 <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
                                 <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
                                   {item.product && <span>{item.product}</span>}
-                                  {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
-                                  {uploadDiagnostics ? (
-                                    <><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>
-                                  ) : (
-                                    item.mqls > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.mqls)} MQLs</span></>)
-                                  )}
+                                  {item.cta && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.cta}</span></>)}
                                   {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
                                 </div>
                               </div>
                             ))}
-                            {stageExpandContentIds.length === 0 && (
+                            {channelStageContentIds.length === 0 && (
                               <div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>
                             )}
                           </div>
@@ -1808,29 +1809,6 @@ export default function FunnelDashboard() {
                     </div>
                   );
                 })}
-              </div>
-
-              <Separator className="my-3" />
-
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium" data-testid="text-dim-title">Channel: {dimension}</div>
-                  <Badge variant="secondary" className="rounded-xl" data-testid="badge-breakdown">Top {dimensionData.length}</Badge>
-                </div>
-                <div className="grid gap-2">
-                  {dimensionData.slice(0, 5).map((d) => (
-                    <div key={d.key} className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2" data-testid={`row-dimension-${d.key.replace(/\s+/g, "-").toLowerCase()}`}>
-                      <div className="truncate text-sm font-medium">{d.key}</div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {uploadDiagnostics ? (
-                          <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.sqos)} SQOs</span></>
-                        ) : (
-                          <><span>{formatCompact(d.contacts)} contacts</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(d.sqos)} SQOs</span></>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </Card>
 
