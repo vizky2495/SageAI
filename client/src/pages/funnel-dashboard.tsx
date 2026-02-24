@@ -565,6 +565,7 @@ export default function FunnelDashboard() {
     "utmChannel" | "productFranchise" | "contentType"
   >("utmChannel");
   const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
+  const [productFilter, setProductFilter] = useState<string>("ALL");
 
   const [aiStep, setAiStep] = useState<AiStep>("idle");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
@@ -937,6 +938,64 @@ export default function FunnelDashboard() {
       )
       .slice(0, 10);
   }, [filtered, dimension]);
+
+  const productList = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) {
+      if (r.productFranchise) s.add(r.productFranchise);
+    }
+    return Array.from(s).sort();
+  }, [rows]);
+
+  const productMixData = useMemo(() => {
+    const roll = new Map<
+      string,
+      {
+        key: string;
+        count: number;
+        views: number;
+        contacts: number;
+        mqls: number;
+        qdcs: number;
+        sqos: number;
+        tofu: number;
+        mofu: number;
+        bofu: number;
+      }
+    >();
+
+    const source = productFilter === "ALL" ? filtered : filtered.filter((r) => r.productFranchise === productFilter);
+
+    for (const r of source) {
+      const key = r.productFranchise || "(unattributed)";
+      const cur = roll.get(key) || {
+        key,
+        count: 0,
+        views: 0,
+        contacts: 0,
+        mqls: 0,
+        qdcs: 0,
+        sqos: 0,
+        tofu: 0,
+        mofu: 0,
+        bofu: 0,
+      };
+      cur.count += 1;
+      cur.views += r.pageViews ?? 0;
+      cur.contacts += r.formSubmissions ?? r.newContacts ?? 0;
+      cur.mqls += r.mqls ?? 0;
+      cur.qdcs += r.qdcs ?? 0;
+      cur.sqos += r.sqos ?? 0;
+      if (r.stage === "TOFU") cur.tofu += 1;
+      else if (r.stage === "MOFU") cur.mofu += 1;
+      else if (r.stage === "BOFU") cur.bofu += 1;
+      roll.set(key, cur);
+    }
+
+    return Array.from(roll.values())
+      .sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls))
+      .slice(0, 12);
+  }, [filtered, productFilter]);
 
   const ctaByStage = useMemo(() => {
     const map: Record<string, Map<string, number>> = { TOFU: new Map(), MOFU: new Map(), BOFU: new Map() };
@@ -1671,6 +1730,114 @@ export default function FunnelDashboard() {
                 </div>
               </div>
             </Card>
+
+            <Card className="lg:col-span-3 rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-product-mix">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" data-testid="text-product-mix-title">
+                    Product mix
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-product-mix-subtitle">
+                    Performance breakdown by product franchise.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={productFilter} onValueChange={setProductFilter}>
+                    <SelectTrigger className="h-8 w-[180px] rounded-xl text-xs" data-testid="select-product-filter">
+                      <SelectValue placeholder="All products" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
+                      {productList.map((p) => (
+                        <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Badge variant="secondary" className="rounded-xl" data-testid="badge-product-count">
+                    {productMixData.length} {productMixData.length === 1 ? "product" : "products"}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="mt-4 h-[180px]" data-testid="chart-product-mix">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={productMixData} layout="vertical" margin={{ left: 4, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} horizontal={false} />
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="key"
+                      width={110}
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <ReTooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Bar dataKey="tofu" name="TOFU" stackId="stage" fill="hsl(var(--chart-1))" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="mofu" name="MOFU" stackId="stage" fill="hsl(var(--chart-2))" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="bofu" name="BOFU" stackId="stage" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="grid gap-2 max-h-[260px] overflow-y-auto pr-1">
+                {productMixData.map((d) => (
+                  <button
+                    key={d.key}
+                    className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80"
+                    onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)}
+                    data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{d.key}</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{d.count} assets</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span className="text-emerald-400">{d.tofu} TOFU</span>
+                        <span className="text-sky-400">{d.mofu} MOFU</span>
+                        <span className="text-orange-400">{d.bofu} BOFU</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-3">
+                      {uploadDiagnostics ? (
+                        <>
+                          <span>{formatCompact(d.views)} views</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          <span>{formatCompact(d.contacts)} leads</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>{formatCompact(d.contacts)} contacts</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          <span>{formatCompact(d.mqls)} MQLs</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          <span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
           </div>
 
           <Tabs defaultValue="cta-analysis" className="w-full">
