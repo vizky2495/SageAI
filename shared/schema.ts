@@ -88,6 +88,7 @@ export type AssetAgg = typeof assetsAgg.$inferSelect;
 export const conversations = pgTable("conversations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   title: text("title").notNull().default("New Chat"),
+  agent: text("agent").notNull().default("cia"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

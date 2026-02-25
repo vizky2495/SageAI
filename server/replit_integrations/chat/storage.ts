@@ -1,11 +1,11 @@
 import { db } from "../../db";
 import { conversations, messages } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IChatStorage {
   getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;
-  getAllConversations(): Promise<(typeof conversations.$inferSelect)[]>;
-  createConversation(title: string): Promise<typeof conversations.$inferSelect>;
+  getAllConversations(agent?: string): Promise<(typeof conversations.$inferSelect)[]>;
+  createConversation(title: string, agent?: string): Promise<typeof conversations.$inferSelect>;
   updateConversationTitle(id: number, title: string): Promise<void>;
   deleteConversation(id: number): Promise<void>;
   getMessagesByConversation(conversationId: number): Promise<(typeof messages.$inferSelect)[]>;
@@ -18,12 +18,15 @@ export const chatStorage: IChatStorage = {
     return conversation;
   },
 
-  async getAllConversations() {
+  async getAllConversations(agent?: string) {
+    if (agent) {
+      return db.select().from(conversations).where(eq(conversations.agent, agent)).orderBy(desc(conversations.createdAt));
+    }
     return db.select().from(conversations).orderBy(desc(conversations.createdAt));
   },
 
-  async createConversation(title: string) {
-    const [conversation] = await db.insert(conversations).values({ title }).returning();
+  async createConversation(title: string, agent: string = "cia") {
+    const [conversation] = await db.insert(conversations).values({ title, agent }).returning();
     return conversation;
   },
 
@@ -45,4 +48,3 @@ export const chatStorage: IChatStorage = {
     return message;
   },
 };
-
