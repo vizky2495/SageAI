@@ -1,0 +1,51 @@
+We need to fix the CIA chatbot so it NEVER hallucinates and ALWAYS matches the dashboard metrics.
+
+CURRENT PROBLEM
+Chat responds with templated answers not grounded in uploaded CSV data. This is unacceptable. Responses must be consistent with dashboard tables/charts.
+
+REQUIREMENTS
+1) Single source of truth:
+   - Create a backend “truth layer” built from the same aggregated metrics used by the dashboard.
+   - Chat must use this truth layer, not raw CSV parsing in the LLM prompt.
+
+2) Add an endpoint:
+   GET /api/insights/summary
+   returning compact JSON containing:
+   - dataset_info (rows, unique content_id count)
+   - metric availability flags (pageviews/leads/sqos/etc)
+   - key tables used in dashboard (CTA table, stage counts, top content lists, channel mix, product mix)
+   - current filters applied (stage/type/channel/product/industry)
+
+3) Chat pipeline:
+   - When user asks a question, backend builds a “grounded_context” JSON payload:
+       {question, filters_applied, availability, relevant_table_slices}
+   - Send ONLY this payload to Claude Opus.
+   - Claude must answer using ONLY provided JSON.
+
+4) Strict guardrails:
+   - No numbers unless present in grounded_context.
+   - If a metric is missing (availability false) or zero across dataset, the agent must say:
+       “Cannot answer because <metric> is missing/zero in this dataset”
+     and provide 2 alternative questions it CAN answer from available data.
+
+5) Deterministic pre-checks (NO LLM CALL):
+   - If question asks about conversions/ROI/leads/SQOs and availability flags show missing, return a deterministic message immediately.
+   - This ensures zero hallucinations.
+
+6) Response format (mandatory):
+   - Answer (short)
+   - Data check (what metrics were used / missing)
+   - Evidence (cite exact fields/rows from the JSON, e.g. “CTA table: PDF total=801, leads=0, sqos=0”)
+   - Next best actions (1–3 bullets)
+
+7) Ensure consistency with filters:
+   - Chat must explicitly state “Based on current filters: …”
+   - Use same filtered dataset as dashboard.
+
+IMPLEMENTATION
+- Refactor the chat handler to query the same SQLite tables / cached aggregates as the dashboard.
+- Add tests:
+   - For the screenshot example, if all leads=0 and sqos=0, agent must refuse conversion analysis.
+- Update UI to show a small “Grounded ✅” badge when responses are generated from truth payload.
+
+Deliver the code changes.
