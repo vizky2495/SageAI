@@ -312,8 +312,21 @@ export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations", async (req: Request, res: Response) => {
     try {
       const agent = (req.query.agent as string) || undefined;
-      const conversations = await chatStorage.getAllConversations(agent);
-      res.json(conversations);
+      const convos = await chatStorage.getAllConversations(agent);
+
+      for (const conv of convos) {
+        if (conv.title === "New Chat") {
+          const msgs = await chatStorage.getMessagesByConversation(conv.id);
+          const firstUserMsg = msgs.find(m => m.role === "user");
+          if (firstUserMsg) {
+            const title = firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "");
+            await chatStorage.updateConversationTitle(conv.id, title);
+            conv.title = title;
+          }
+        }
+      }
+
+      res.json(convos);
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ error: "Failed to fetch conversations" });
