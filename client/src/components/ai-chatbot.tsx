@@ -246,6 +246,10 @@ export default function AIChatbot() {
                   full += data.content;
                   setStreamingContent(full);
                 }
+                if (data.title) {
+                  setActiveConv((prev) => prev ? { ...prev, title: data.title } : prev);
+                  fetchConversations();
+                }
                 if (data.done) {
                   setMsgs((prev) => [
                     ...prev,
@@ -257,12 +261,6 @@ export default function AIChatbot() {
                     },
                   ]);
                   setStreamingContent("");
-
-                  if (msgs.length === 0 && full.length > 0) {
-                    const title = userMsg.content.slice(0, 50) + (userMsg.content.length > 50 ? "..." : "");
-                    setActiveConv((prev) => prev ? { ...prev, title } : prev);
-                    fetchConversations();
-                  }
                 }
                 if (data.error) {
                   setMsgs((prev) => [
@@ -333,7 +331,7 @@ export default function AIChatbot() {
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-sm font-semibold">
-                    {showList ? "CIA Analyst" : (activeConv?.title || "New Chat")}
+                    {showList ? "CIA Agent" : (activeConv?.title || "New Chat")}
                   </span>
                 </div>
               </div>
@@ -405,7 +403,7 @@ export default function AIChatbot() {
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
                   {msgs.length === 0 && !streamingContent && (
                     <div className="text-center py-8">
-                      <div className="text-lg font-semibold mb-1">CIA Marketing Analyst</div>
+                      <div className="text-lg font-semibold mb-1">CIA Agent</div>
                       <div className="text-sm text-muted-foreground mb-4">
                         Ask me about your marketing data, funnel performance, channel analysis, or any KPI.
                       </div>

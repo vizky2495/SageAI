@@ -278,6 +278,26 @@ export function registerChatRoutes(app: Express): void {
 
       await chatStorage.createMessage(conversationId, "assistant", fullResponse);
 
+      const isFirstExchange = chatMessages.length === 1;
+      if (isFirstExchange && fullResponse.length > 0) {
+        try {
+          const titleResponse = await anthropic.messages.create({
+            model: "claude-sonnet-4-5",
+            max_tokens: 60,
+            system: "Generate a short, catchy one-liner title (max 6 words) for this chat conversation. Return ONLY the title text, no quotes, no punctuation at the end.",
+            messages: [
+              { role: "user", content: chatMessages[0].content },
+              { role: "assistant", content: fullResponse.slice(0, 500) },
+            ],
+          });
+          const title = (titleResponse.content[0] as any).text?.trim() || content.slice(0, 50);
+          await chatStorage.updateConversationTitle(conversationId, title);
+          res.write(`data: ${JSON.stringify({ title })}\n\n`);
+        } catch (e) {
+          console.error("Failed to generate title:", e);
+        }
+      }
+
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();
     } catch (error) {
