@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target } from "lucide-react";
+import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -57,6 +57,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  grounded?: boolean;
 }
 
 interface Conversation {
@@ -295,6 +296,7 @@ export default function AIChatbot() {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let full = "";
+      let isGrounded = false;
 
       if (reader) {
         while (true) {
@@ -308,6 +310,9 @@ export default function AIChatbot() {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
+                if (data.grounded) {
+                  isGrounded = true;
+                }
                 if (data.content) {
                   full += data.content;
                   setStreamingContent(full);
@@ -324,6 +329,7 @@ export default function AIChatbot() {
                       role: "assistant",
                       content: full,
                       createdAt: new Date().toISOString(),
+                      grounded: isGrounded,
                     },
                   ]);
                   setStreamingContent("");
@@ -519,14 +525,22 @@ export default function AIChatbot() {
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                       data-testid={`msg-${msg.role}-${msg.id}`}
                     >
-                      <div
-                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${
-                          msg.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted/50 border"
-                        }`}
-                      >
-                        {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                      <div className="max-w-[85%]">
+                        <div
+                          className={`rounded-2xl px-3.5 py-2.5 text-sm ${
+                            msg.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted/50 border"
+                          }`}
+                        >
+                          {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                        </div>
+                        {msg.role === "assistant" && msg.grounded && (
+                          <div className="flex items-center gap-1 mt-1 ml-1" data-testid={`badge-grounded-${msg.id}`}>
+                            <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                            <span className="text-[10px] text-emerald-400/80 font-medium">Grounded</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

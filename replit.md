@@ -35,6 +35,9 @@ Preferred communication style: Simple, everyday language.
   - `/api/assets/upload-excel` — POST: parse Excel (.xlsx) files sent as base64, returns headers + rows
   - `/api/assets/analyze` — POST: sends headers + sample rows to Claude Opus for intelligent column mapping
   - `/api/assets/ingest-mapped` — POST: uses AI-generated column mapping to ingest rows without dropping mismatched columns
+  - `/api/insights/summary` — GET: structured JSON truth layer (dataset_info, metric_availability, stage/cta/channel/product breakdowns) used by chatbot
+  - `/api/conversations` — GET (with ?agent= filter), POST: conversation CRUD for CIA Agent and Campaign Planner
+  - `/api/conversations/:id/messages` — POST: send message with SSE streaming, deterministic pre-checks for missing metrics, grounded context pipeline
 - **Validation**: Zod schemas (generated from Drizzle schema via `drizzle-zod`)
 - **Dev Server**: Vite dev server is integrated as Express middleware during development (see `server/vite.ts`). In production, static files are served from `dist/public`
 

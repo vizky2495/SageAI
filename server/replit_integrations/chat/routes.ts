@@ -1,84 +1,40 @@
 import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./storage";
-import { db } from "../../db";
-import { assetsAgg } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { buildInsightsSummary, type InsightsSummary } from "../../insights";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
-const CIA_SYSTEM_PROMPT = `You are an **Expert Marketing Analytics Consultant** with deep experience in:
+const CIA_SYSTEM_PROMPT = `You are the **CIA Agent** (Content Intelligence Analyst), a strictly data-grounded marketing analytics expert.
 
-- Digital & offline campaigns (email, paid social, search, display, events, direct mail, etc.)
-- Customer & prospect analytics (segmentation, cohorts, funnel analysis, attribution)
-- Performance measurement (CTR, CVR, CPC, CPA, ROAS, LTV, retention, churn, incrementality)
-- B2B/B2C reporting for senior business stakeholders
+CRITICAL RULES — NEVER BREAK THESE:
+1. You are provided a JSON object called "grounded_context". This is the ONLY source of truth.
+2. NEVER invent, estimate, or hallucinate any number. Every number you cite must exist in the grounded_context JSON.
+3. If a metric is zero or unavailable (metric_availability shows false), you MUST say: "This metric is not available in the current dataset."
+4. If the user asks about a metric that is zero/missing, do NOT attempt analysis. Instead state clearly what is missing and suggest 2 alternative questions you CAN answer from available data.
+5. Always cite your evidence by referencing the exact table and field from grounded_context (e.g., "cta_table shows: Ask An Expert has 456 assets, 0 leads, 0 SQOs").
 
-You are highly analytical, cautious with numbers, and always validate your calculations.
-You never guess metrics—you derive them transparently from the provided data.
+MANDATORY RESPONSE FORMAT — use these sections for every answer:
 
-==================================================
-ROLE & PERSONA
-==================================================
+### Answer
+A concise, direct answer to the user's question (2-5 sentences max). If the data cannot answer the question, say so here.
 
-You are an expert Marketing Analyst whose primary responsibilities are:
+### Data Check
+- List which metrics were AVAILABLE and used
+- List which metrics were MISSING or ZERO
+- State: "Based on [N] total content assets across [stages]"
 
-- Reading and understanding data provided as context from the Content Intelligence Analyst dashboard.
-- Answering marketing and business stakeholders' questions strictly based on that data.
-- Performing accurate aggregations, calculations, and KPI derivations.
-- Communicating insights clearly to non-technical stakeholders.
+### Evidence
+Cite the exact rows/fields from the grounded_context JSON that support your answer. Use bullet points.
+Example: "- cta_table: 'PDF' has 801 assets, 0 leads, 0 SQOs"
 
-You think like a senior marketing analytics consultant who builds robust, audit-ready analyses.
+### Next Best Actions
+1-3 actionable recommendations or alternative questions the user should explore.
 
-==================================================
-CONTEXT / BACKGROUND
-==================================================
-
-The user has uploaded marketing performance data into the Content Intelligence Analyst (CIA) dashboard.
-The data is organized into content assets classified into funnel stages:
-- TOFU (Top of Funnel) — awareness content
-- MOFU (Middle of Funnel) — consideration content
-- BOFU (Bottom of Funnel) — conversion/decision content
-
-Each content asset may have attributes like:
-- contentId, stage, name, url
-- productFranchise, productCategory
-- utmChannel, utmCampaign, utmMedium, utmTerm, utmContent
-- typecampaignmember, formName, cta, objective
-- campaignId, campaignName
-- Metrics: pageviewsSum, timeAvg, downloadsSum, uniqueLeads, sqoCount
-
-Key KPIs to derive:
-- Page views, downloads, unique leads, SQOs (Sales Qualified Opportunities)
-- Lead-to-SQO conversion rate = SQOs / Unique Leads
-- Content engagement = timeAvg (average time on page)
-- Funnel distribution across TOFU/MOFU/BOFU
-
-==================================================
-CONSTRAINTS & GUARDRAILS
-==================================================
-
-1. No Hallucinated Data — Only use numbers from the provided data context.
-2. No Hidden Assumptions — State all filters, transformations, and interpretations.
-3. Aggregation Safety — Prefer ratio-of-sums over average-of-ratios.
-4. Honesty About Uncertainty — If data is insufficient, say so explicitly.
-5. No Overstated Causality — Label correlations clearly.
-
-==================================================
-OUTPUT FORMAT
-==================================================
-
-Use Markdown formatting. Structure responses with:
-1. **Executive Summary** — 2-5 bullet points with key findings
-2. **Key Metrics & Tables** — Concise tables with relevant breakdowns
-3. **Methodology** — What data was used, filters applied, formulas used
-4. **Assumptions & Notes** — Any caveats or data quality issues
-
-Keep answers professional, concise, and business-friendly.
-Avoid unnecessary jargon; define terms when used.`;
+TONE: Professional, concise, transparent about data limitations. Never apologize excessively — just state facts clearly.`;
 
 const CAMPAIGN_PLANNER_PROMPT = `You are **Campaign Planner**, a senior-level Marketing Campaign Manager and Strategist.
 
@@ -116,196 +72,165 @@ If a field is **missing, contradictory, or ambiguous**, you must:
 
 ## 2. High-Level Responsibilities
 
-Whenever you are invoked, you must:
+1. **Ingest & Summarize Inputs** — Summarize key facts, highlight objectives/budgets/timelines, list assumptions.
 
-1. **Ingest & Summarize Inputs**
-   - Briefly summarize the key facts you see in the data using the user's own terminology where possible.
-   - Highlight anything that looks important: objectives, budgets, timelines, product list, priority segments, etc.
-   - Explicitly list **assumptions** you need to make due to missing or unclear data.
+2. **Identify Industry** — Infer primary industry/vertical. If unsure, list 2-3 options and ask.
 
-2. **Identify Industry**
-   - Infer the **primary industry/vertical** using brand name, product categories, language in descriptions, and any industry tags.
-   - If confident, state Primary Industry with a 1-2 sentence justification.
-   - If unsure, list 2-3 most likely industries with reasoning and ask a direct clarification question.
+3. **Identify Target Products/Offers** — Extract and group products (Core, Add-ons, Upsell, New Launch). Specify goals and priority.
 
-3. **Identify Target Products/Offers**
-   - Extract all relevant products, services, or offers.
-   - Group them into logical clusters (Core Product, Add-ons, Upsell, New Launch, Seasonal Offer).
-   - For each group, specify product(s), intended goal, and priority tier.
+4. **Ask Clarifying Questions** — Only questions that materially affect the plan. Be concise, numbered, minimal.
 
-4. **Ask Clarifying Questions (Before Final Plan)**
-   Only ask questions that **materially affect** the campaign plan. Common areas:
-   - Primary business objective
-   - Geographic focus and language(s)
-   - Budget level or range
-   - Flight dates and seasonality
-   - Key target audiences
-   - Channel constraints
-   - Measurement setup
-   - Creative constraints
+5. **Design the Campaign Strategy**
+   a. Objectives & Success Definition
+   b. Target Audience Strategy (2-5 groups)
+   c. Positioning & Messaging Framework
+   d. Channel & Media Strategy by funnel stage
+   e. Budget & Phasing Recommendation
+   f. Test & Learn Plan (2-4 tests)
 
-   Rules: Be concise, specific, numbered. Ask minimum necessary. If user can't provide more info, proceed with clearly labeled assumptions.
+6. **Measurement, Reporting, and Optimization**
 
-5. **Design the Campaign Strategy (Industry-Standard)**
-
-   a. **Objectives & Success Definition** — Map business goals to 2-4 marketing objectives with funnel stage assignment.
-
-   b. **Target Audience Strategy** — Define 2-5 core audience groups with basic definition, funnel role, and product relevance.
-
-   c. **Positioning & Messaging Framework** — For each product group: core value proposition, 2-3 messaging pillars, key proof points.
-
-   d. **Channel & Media Strategy** — Recommend channels by funnel stage:
-     - Awareness: YouTube, TV, Display, Paid Social reach
-     - Consideration: Social engagement, Native, Content, Mid-funnel retargeting
-     - Conversion: Search, Performance Max, high-intent retargeting, CRM/email
-     - Retention/Upsell: Email, in-app, remarketing, loyalty comms
-
-   e. **Budget & Phasing Recommendation** — Approximate % allocations by funnel stage, channel, and product group. Suggest launch vs steady-state phasing.
-
-   f. **Test & Learn Plan** — Propose 2-4 concrete tests with hypothesis, variables, and success metric.
-
-6. **Measurement, Reporting, and Optimization** — KPIs by funnel stage, attribution approach, reporting cadence, optimization levers.
-
-7. **Risk, Dependencies & Next Steps** — Risks, dependencies, summary, bulleted next steps, open questions.
+7. **Risk, Dependencies & Next Steps**
 
 ---
 
-## 3. Constraints & Guardrails
+## 3. Constraints
 
-1. **No Unlabeled Fabrication** — Do not invent specific numbers unless provided or explicitly requested. Label assumptions clearly.
-2. **Respect Data Limitations** — If data is sparse, state what you know vs don't know.
-3. **Stay in Marketing & Campaign Domain** — Focus on marketing strategy, media planning, campaign structure, measurement.
-4. **Tone & Depth** — Professional, clear, collaborative. Assume marketing-savvy reader. Explain jargon briefly when central to recommendation.
-
----
+1. No unlabeled fabrication — label assumptions clearly.
+2. Respect data limitations — state what you know vs don't know.
+3. Stay in marketing domain.
+4. Tone: professional, clear, collaborative.
 
 ## 4. Output Format
 
-Always respond in **structured Markdown** with these sections:
+Structured Markdown with: Input Summary & Assumptions, Industry & Product Identification, Clarifying Questions, Campaign Strategy Overview, Audience & Messaging Framework, Channel & Tactic Plan, Budget & Phasing, Measurement & Optimization, Risks & Dependencies, Next Steps.`;
 
-1. **Input Summary & Assumptions**
-2. **Industry & Product Identification**
-3. **Clarifying Questions** (if any)
-4. **Campaign Strategy Overview**
-5. **Audience & Messaging Framework**
-6. **Channel & Tactic Plan**
-7. **Budget & Phasing Recommendation** (or "Budget Assumptions" if unknown)
-8. **Measurement & Optimization Plan**
-9. **Risks, Dependencies & Mitigation**
-10. **Next Steps & Open Questions**`;
-
-function getSystemPrompt(agent: string): string {
-  return agent === "planner" ? CAMPAIGN_PLANNER_PROMPT : CIA_SYSTEM_PROMPT;
+interface MetricCheck {
+  keyword: string;
+  metricKey: keyof InsightsSummary["metric_availability"];
+  label: string;
 }
 
-async function getDataContext(): Promise<string> {
-  try {
-    const totalResult = await db.select({ count: sql<number>`count(*)` }).from(assetsAgg);
-    const total = totalResult[0]?.count ?? 0;
+const METRIC_CHECKS: MetricCheck[] = [
+  { keyword: "lead", metricKey: "leads", label: "leads (unique leads)" },
+  { keyword: "conversion", metricKey: "leads", label: "leads/conversion data" },
+  { keyword: "sqo", metricKey: "sqos", label: "SQOs (Sales Qualified Opportunities)" },
+  { keyword: "qualified", metricKey: "sqos", label: "SQOs (Sales Qualified Opportunities)" },
+  { keyword: "roi", metricKey: "sqos", label: "SQOs/ROI data" },
+  { keyword: "revenue", metricKey: "sqos", label: "revenue/SQO data" },
+  { keyword: "download", metricKey: "downloads", label: "downloads" },
+  { keyword: "pageview", metricKey: "pageviews", label: "pageviews" },
+  { keyword: "page view", metricKey: "pageviews", label: "pageviews" },
+  { keyword: "traffic", metricKey: "pageviews", label: "pageviews/traffic data" },
+  { keyword: "visit", metricKey: "pageviews", label: "pageviews/visit data" },
+];
 
-    if (total === 0) {
-      return "No data has been uploaded to the dashboard yet. Please ask the user to upload their CSV or Excel file first.";
+function checkDeterministicRefusal(
+  question: string,
+  availability: InsightsSummary["metric_availability"],
+  summary: InsightsSummary
+): string | null {
+  const q = question.toLowerCase();
+
+  const missingMetrics: string[] = [];
+  for (const check of METRIC_CHECKS) {
+    if (q.includes(check.keyword) && !availability[check.metricKey]) {
+      if (!missingMetrics.includes(check.label)) {
+        missingMetrics.push(check.label);
+      }
     }
-
-    const stageCounts = await db
-      .select({
-        stage: assetsAgg.stage,
-        count: sql<number>`count(*)`,
-        totalViews: sql<number>`coalesce(sum(${assetsAgg.pageviewsSum}), 0)`,
-        totalDownloads: sql<number>`coalesce(sum(${assetsAgg.downloadsSum}), 0)`,
-        totalLeads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
-        totalSqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
-        avgTime: sql<number>`coalesce(round(avg(${assetsAgg.timeAvg})::numeric, 1), 0)`,
-      })
-      .from(assetsAgg)
-      .groupBy(assetsAgg.stage);
-
-    const channelCounts = await db
-      .select({
-        channel: assetsAgg.utmChannel,
-        count: sql<number>`count(*)`,
-        totalViews: sql<number>`coalesce(sum(${assetsAgg.pageviewsSum}), 0)`,
-        totalLeads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
-        totalSqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
-      })
-      .from(assetsAgg)
-      .groupBy(assetsAgg.utmChannel)
-      .orderBy(sql`sum(${assetsAgg.sqoCount}) desc`)
-      .limit(15);
-
-    const productCounts = await db
-      .select({
-        product: assetsAgg.productFranchise,
-        count: sql<number>`count(*)`,
-        totalViews: sql<number>`coalesce(sum(${assetsAgg.pageviewsSum}), 0)`,
-        totalLeads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
-        totalSqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
-      })
-      .from(assetsAgg)
-      .groupBy(assetsAgg.productFranchise)
-      .orderBy(sql`sum(${assetsAgg.sqoCount}) desc`)
-      .limit(15);
-
-    const ctaCounts = await db
-      .select({
-        cta: assetsAgg.cta,
-        count: sql<number>`count(*)`,
-        totalLeads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
-        totalSqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
-      })
-      .from(assetsAgg)
-      .groupBy(assetsAgg.cta)
-      .orderBy(sql`sum(${assetsAgg.sqoCount}) desc`)
-      .limit(15);
-
-    const topContent = await db
-      .select({
-        contentId: assetsAgg.contentId,
-        stage: assetsAgg.stage,
-        product: assetsAgg.productFranchise,
-        channel: assetsAgg.utmChannel,
-        cta: assetsAgg.cta,
-        views: assetsAgg.pageviewsSum,
-        leads: assetsAgg.uniqueLeads,
-        sqos: assetsAgg.sqoCount,
-      })
-      .from(assetsAgg)
-      .orderBy(sql`${assetsAgg.sqoCount} desc`)
-      .limit(25);
-
-    let context = `=== DASHBOARD DATA CONTEXT ===\n`;
-    context += `Total content assets: ${total}\n\n`;
-
-    context += `--- STAGE BREAKDOWN ---\n`;
-    for (const s of stageCounts) {
-      context += `${s.stage}: ${s.count} assets | ${s.totalViews} page views | ${s.totalDownloads} downloads | ${s.totalLeads} leads | ${s.totalSqos} SQOs | avg time ${s.avgTime}s\n`;
-    }
-
-    context += `\n--- CHANNEL BREAKDOWN (Top 15 by SQOs) ---\n`;
-    for (const c of channelCounts) {
-      context += `${c.channel || "(unattributed)"}: ${c.count} assets | ${c.totalViews} views | ${c.totalLeads} leads | ${c.totalSqos} SQOs\n`;
-    }
-
-    context += `\n--- PRODUCT BREAKDOWN (Top 15 by SQOs) ---\n`;
-    for (const p of productCounts) {
-      context += `${p.product || "(unattributed)"}: ${p.count} assets | ${p.totalViews} views | ${p.totalLeads} leads | ${p.totalSqos} SQOs\n`;
-    }
-
-    context += `\n--- CTA BREAKDOWN (Top 15 by SQOs) ---\n`;
-    for (const c of ctaCounts) {
-      context += `${c.cta || "(no CTA)"}: ${c.count} assets | ${c.totalLeads} leads | ${c.totalSqos} SQOs\n`;
-    }
-
-    context += `\n--- TOP 25 CONTENT ASSETS (by SQOs) ---\n`;
-    for (const t of topContent) {
-      context += `${t.contentId} | ${t.stage} | ${t.product || "N/A"} | ${t.channel || "N/A"} | CTA: ${t.cta || "N/A"} | ${t.views} views | ${t.leads} leads | ${t.sqos} SQOs\n`;
-    }
-
-    return context;
-  } catch (error) {
-    console.error("Error fetching data context:", error);
-    return "Error fetching dashboard data. The chatbot will answer based on general marketing analytics knowledge.";
   }
+
+  if (missingMetrics.length === 0) return null;
+
+  const availableMetrics: string[] = [];
+  if (availability.pageviews) availableMetrics.push("pageviews");
+  if (availability.downloads) availableMetrics.push("downloads");
+  if (availability.time_on_page) availableMetrics.push("time on page");
+  if (availability.leads) availableMetrics.push("leads");
+  if (availability.sqos) availableMetrics.push("SQOs");
+
+  const stages = summary.stage_summary.map(s => `${s.stage} (${s.count})`).join(", ");
+  const products = summary.product_mix.slice(0, 5).map(p => p.product).join(", ");
+
+  let alternatives = "";
+  if (availability.pageviews || availability.time_on_page) {
+    alternatives += "\n- \"Which content assets have the highest engagement (page views / time on page)?\"";
+  }
+  if (summary.stage_summary.length > 0) {
+    alternatives += "\n- \"What is the content distribution across funnel stages (TOFU/MOFU/BOFU)?\"";
+  }
+  if (summary.cta_table.length > 0) {
+    alternatives += "\n- \"Which CTAs have the most content assets?\"";
+  }
+  if (summary.channel_mix.length > 0) {
+    alternatives += "\n- \"How is content distributed across channels?\"";
+  }
+
+  const altList = alternatives.split("\n").filter(Boolean).slice(0, 2).join("\n");
+
+  return `### Answer
+Cannot answer this question because **${missingMetrics.join(" and ")}** ${missingMetrics.length === 1 ? "is" : "are"} missing or zero across the entire dataset.
+
+### Data Check
+- **Available metrics**: ${availableMetrics.length > 0 ? availableMetrics.join(", ") : "none with non-zero values"}
+- **Missing/zero metrics**: ${missingMetrics.join(", ")}
+- Based on ${summary.dataset_info.total_rows} total content assets across stages: ${stages}
+- Products in dataset: ${products}
+
+### Evidence
+All rows in the dataset show 0 for ${missingMetrics.join(" and ")}. No conversion or pipeline data has been uploaded. This is a data gap, not an analysis limitation.
+
+### Next Best Actions
+Here are questions I CAN answer from your available data:
+${altList}`;
+}
+
+function buildGroundedContext(question: string, summary: InsightsSummary): string {
+  return JSON.stringify({
+    instruction: "Answer the user's question using ONLY the data below. Never invent numbers. Cite evidence from specific tables.",
+    question,
+    dataset_info: summary.dataset_info,
+    metric_availability: summary.metric_availability,
+    metric_totals: summary.metric_totals,
+    stage_summary: summary.stage_summary,
+    cta_table: summary.cta_table,
+    channel_mix: summary.channel_mix,
+    product_mix: summary.product_mix,
+    top_content: summary.top_content,
+  }, null, 2);
+}
+
+function buildPlannerContext(summary: InsightsSummary): string {
+  let context = `=== DASHBOARD DATA CONTEXT ===\n`;
+  context += `Total content assets: ${summary.dataset_info.total_rows}\n\n`;
+
+  context += `--- STAGE BREAKDOWN ---\n`;
+  for (const s of summary.stage_summary) {
+    context += `${s.stage}: ${s.count} assets | ${s.pageviews} page views | ${s.downloads} downloads | ${s.leads} leads | ${s.sqos} SQOs | avg time ${s.avg_time}s\n`;
+  }
+
+  context += `\n--- CHANNEL BREAKDOWN ---\n`;
+  for (const c of summary.channel_mix) {
+    context += `${c.channel}: ${c.count} assets | ${c.pageviews} views | ${c.leads} leads | ${c.sqos} SQOs\n`;
+  }
+
+  context += `\n--- PRODUCT BREAKDOWN ---\n`;
+  for (const p of summary.product_mix) {
+    context += `${p.product}: ${p.count} assets | ${p.pageviews} views | ${p.leads} leads | ${p.sqos} SQOs\n`;
+  }
+
+  context += `\n--- CTA BREAKDOWN ---\n`;
+  for (const c of summary.cta_table) {
+    context += `${c.cta}: ${c.count} assets | ${c.leads} leads | ${c.sqos} SQOs\n`;
+  }
+
+  context += `\n--- TOP 25 CONTENT ASSETS ---\n`;
+  for (const t of summary.top_content) {
+    context += `${t.contentId} | ${t.stage} | ${t.product} | ${t.channel} | CTA: ${t.cta} | ${t.pageviews} views | ${t.leads} leads | ${t.sqos} SQOs\n`;
+  }
+
+  return context;
 }
 
 export function registerChatRoutes(app: Express): void {
@@ -386,22 +311,76 @@ export function registerChatRoutes(app: Express): void {
         const fallback = content.slice(0, 60) + (content.length > 60 ? "..." : "");
         await chatStorage.updateConversationTitle(conversationId, fallback);
       }
-      const chatMessages = history.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
 
-      const dataContext = await getDataContext();
-      const systemPrompt = getSystemPrompt(agentType);
+      const summary = await buildInsightsSummary();
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
+      if (!summary) {
+        const noDataMsg = "No data has been uploaded to the dashboard yet. Please upload a CSV or Excel file first, then ask me your question.";
+        await chatStorage.createMessage(conversationId, "assistant", noDataMsg);
+        res.write(`data: ${JSON.stringify({ content: noDataMsg, grounded: true })}\n\n`);
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      if (agentType === "cia") {
+        const refusal = checkDeterministicRefusal(content, summary.metric_availability, summary);
+        if (refusal) {
+          await chatStorage.createMessage(conversationId, "assistant", refusal);
+          res.write(`data: ${JSON.stringify({ content: refusal, grounded: true })}\n\n`);
+
+          const isFirstExchange = history.length === 1;
+          if (isFirstExchange) {
+            try {
+              const titleResponse = await anthropic.messages.create({
+                model: "claude-sonnet-4-5",
+                max_tokens: 60,
+                system: "Generate a short, catchy one-liner title (max 6 words) for this chat conversation. Return ONLY the title text, no quotes, no punctuation at the end.",
+                messages: [
+                  { role: "user", content },
+                  { role: "assistant", content: refusal.slice(0, 300) },
+                ],
+              });
+              const title = (titleResponse.content[0] as any).text?.trim() || content.slice(0, 50);
+              await chatStorage.updateConversationTitle(conversationId, title);
+              res.write(`data: ${JSON.stringify({ title })}\n\n`);
+            } catch (e) {
+              console.error("Failed to generate title:", e);
+            }
+          }
+
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+      }
+
+      const chatMessages = history.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      let systemPrompt: string;
+      if (agentType === "cia") {
+        const groundedContext = buildGroundedContext(content, summary);
+        systemPrompt = `${CIA_SYSTEM_PROMPT}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
+      } else {
+        const plannerContext = buildPlannerContext(summary);
+        systemPrompt = `${CAMPAIGN_PLANNER_PROMPT}\n\n${plannerContext}`;
+      }
+
+      if (agentType === "cia") {
+        res.write(`data: ${JSON.stringify({ grounded: true })}\n\n`);
+      }
+
       const stream = anthropic.messages.stream({
         model: "claude-sonnet-4-5",
         max_tokens: 8192,
-        system: `${systemPrompt}\n\n${dataContext}`,
+        system: systemPrompt,
         messages: chatMessages,
       });
 

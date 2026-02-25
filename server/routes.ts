@@ -7,6 +7,7 @@ import https from "https";
 import http from "http";
 import Anthropic from "@anthropic-ai/sdk";
 import * as XLSX from "xlsx";
+import { buildInsightsSummary } from "./insights";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -633,6 +634,19 @@ Respond with ONLY valid JSON in this exact format:
       }
     } catch (err: any) {
       res.status(500).json({ message: "Proxy error: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.get("/api/insights/summary", async (_req, res) => {
+    try {
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        return res.json({ empty: true, message: "No data uploaded yet." });
+      }
+      res.json(summary);
+    } catch (err: any) {
+      console.error("Error building insights summary:", err);
+      res.status(500).json({ message: "Failed to build insights summary" });
     }
   });
 
