@@ -219,6 +219,11 @@ export default function AIChatbot() {
     setIsStreaming(true);
     setStreamingContent("");
 
+    if (msgs.length === 0) {
+      const fallbackTitle = userMsg.content.slice(0, 60) + (userMsg.content.length > 60 ? "..." : "");
+      setActiveConv((prev) => prev ? { ...prev, title: fallbackTitle } : prev);
+    }
+
     try {
       const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
         method: "POST",

@@ -246,6 +246,11 @@ export function registerChatRoutes(app: Express): void {
       await chatStorage.createMessage(conversationId, "user", content);
 
       const history = await chatStorage.getMessagesByConversation(conversationId);
+
+      if (history.length === 1) {
+        const fallback = content.slice(0, 60) + (content.length > 60 ? "..." : "");
+        await chatStorage.updateConversationTitle(conversationId, fallback);
+      }
       const chatMessages = history.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
