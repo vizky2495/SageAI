@@ -382,7 +382,6 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
           "campaign_name",
           "campaignname",
           "campaign",
-          "name",
         ]) ?? "",
       ).trim() || undefined;
 
