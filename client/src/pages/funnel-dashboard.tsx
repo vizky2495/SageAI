@@ -65,6 +65,7 @@ type NormalizedRow = {
   objective?: string;
   contentType?: string;
   cta?: string;
+  campaignName?: string;
   engagedSessions?: number;
   sessions?: number;
   pageViews?: number;
@@ -213,7 +214,7 @@ function aggregateRowsClientSide(
         objective: getMapped(row, "objective") || null,
         productCategory: getMapped(row, "product_category") || null,
         campaignId: getMapped(row, "campaign_id") || null,
-        campaignName: getMapped(row, "name") || null,
+        campaignName: getMapped(row, "campaign_name") || null,
         dateStamp: getMapped(row, "date_stamp") || null,
         clientIds: new Set<string>(),
         timeTotal: 0,
@@ -375,6 +376,16 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
     const cta =
       String(pickFirst(r, ["cta", "call_to_action", "cta_type"]) ?? "").trim() || undefined;
 
+    const campaignName =
+      String(
+        pickFirst(r, [
+          "campaign_name",
+          "campaignname",
+          "campaign",
+          "name",
+        ]) ?? "",
+      ).trim() || undefined;
+
     const engagedSessions = toNumber(
       pickFirst(r, [
         "engaged_sessions",
@@ -491,6 +502,7 @@ function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
       objective,
       contentType,
       cta,
+      campaignName,
       engagedSessions,
       sessions,
       pageViews,
@@ -581,6 +593,7 @@ export default function FunnelDashboard() {
   const [productFilter, setProductFilter] = useState<string>("ALL");
   const [productStageExpand, setProductStageExpand] = useState<{ product: string; stage: string } | null>(null);
   const [industryFilter, setIndustryFilter] = useState<string>("ALL");
+  const [campaignFilter, setCampaignFilter] = useState<string>("ALL");
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
   const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
 
@@ -768,6 +781,7 @@ export default function FunnelDashboard() {
           objective: a.objective || undefined,
           contentType: a.typecampaignmember || undefined,
           cta: a.cta || undefined,
+          campaignName: a.campaignName || undefined,
           engagedSessions: undefined,
           sessions: undefined,
           pageViews: a.pageviewsSum || 0,
@@ -796,15 +810,32 @@ export default function FunnelDashboard() {
     }
   }, [queryClient, safeJsonParse]);
 
+  const campaignList = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) {
+      if (r.campaignName) s.add(r.campaignName);
+    }
+    return Array.from(s).sort();
+  }, [rows]);
+
   const filtered = useMemo(() => {
-    const stageFiltered =
+    let result =
       stageFilter === "ALL" ? rows : rows.filter((r) => r.stage === stageFilter);
 
-    if (contentTypeFilter === "ALL") return stageFiltered;
-    return stageFiltered.filter(
-      (r) => (r.contentType || "(unattributed)") === contentTypeFilter,
-    );
-  }, [rows, stageFilter, contentTypeFilter]);
+    if (contentTypeFilter !== "ALL") {
+      result = result.filter(
+        (r) => (r.contentType || "(unattributed)") === contentTypeFilter,
+      );
+    }
+
+    if (campaignFilter !== "ALL") {
+      result = result.filter(
+        (r) => (r.campaignName || "(unattributed)") === campaignFilter,
+      );
+    }
+
+    return result;
+  }, [rows, stageFilter, contentTypeFilter, campaignFilter]);
 
   const byStage = useMemo(() => {
     const groups: Record<FunnelStage, NormalizedRow[]> = {
@@ -1668,6 +1699,21 @@ export default function FunnelDashboard() {
                         <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
                         {industryList.map((ind) => (
                           <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Campaign</span>
+                    <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+                      <SelectTrigger className="h-9 w-[180px] rounded-xl" data-testid="select-campaign-filter">
+                        <SelectValue placeholder="All campaigns" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL" data-testid="option-campaign-all">All campaigns</SelectItem>
+                        {campaignList.map((c) => (
+                          <SelectItem key={c} value={c} data-testid={`option-campaign-${c.replace(/\s+/g, "-").toLowerCase()}`}>{c}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
