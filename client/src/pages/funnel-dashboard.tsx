@@ -1591,150 +1591,147 @@ export default function FunnelDashboard() {
             </div>
 
             <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-muted-foreground" />
-                  <div className="text-sm font-medium" data-testid="text-filters">
-                    Filters & views
-                  </div>
+              <div className="flex items-center gap-2 mb-3">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <div className="text-sm font-medium" data-testid="text-filters">
+                  Filters & views
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="badge-rows"
+                  >
+                    {filtered.length} rows
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-xl"
+                    data-testid="badge-unknown"
+                  >
+                    {unknownCount} unknown
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Stage</span>
+                  <Select
+                    value={stageFilter}
+                    onValueChange={(v) =>
+                      setStageFilter(v as FunnelStage | "ALL")
+                    }
+                  >
+                    <SelectTrigger
+                      className="h-8 w-[120px] rounded-xl text-xs"
+                      data-testid="select-stage"
+                    >
+                      <SelectValue placeholder="All stages" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-stage-all">
+                        All stages
+                      </SelectItem>
+                      <SelectItem value="TOFU" data-testid="option-stage-tofu">
+                        TOFU
+                      </SelectItem>
+                      <SelectItem value="MOFU" data-testid="option-stage-mofu">
+                        MOFU
+                      </SelectItem>
+                      <SelectItem value="BOFU" data-testid="option-stage-bofu">
+                        BOFU
+                      </SelectItem>
+                      <SelectItem
+                        value="UNKNOWN"
+                        data-testid="option-stage-unknown"
+                      >
+                        UNKNOWN
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Stage</span>
-                    <Select
-                      value={stageFilter}
-                      onValueChange={(v) =>
-                        setStageFilter(v as FunnelStage | "ALL")
-                      }
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Type</span>
+                  <Select value={contentTypeFilter} onValueChange={setContentTypeFilter}>
+                    <SelectTrigger
+                      className="h-8 w-[130px] rounded-xl text-xs"
+                      data-testid="select-content-type"
                     >
-                      <SelectTrigger
-                        className="h-9 w-[160px] rounded-xl"
-                        data-testid="select-stage"
-                      >
-                        <SelectValue placeholder="All stages" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL" data-testid="option-stage-all">
-                          All stages
-                        </SelectItem>
-                        <SelectItem value="TOFU" data-testid="option-stage-tofu">
-                          TOFU
-                        </SelectItem>
-                        <SelectItem value="MOFU" data-testid="option-stage-mofu">
-                          MOFU
-                        </SelectItem>
-                        <SelectItem value="BOFU" data-testid="option-stage-bofu">
-                          BOFU
-                        </SelectItem>
+                      <SelectValue placeholder="All types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contentTypeOptions.map((opt) => (
                         <SelectItem
-                          value="UNKNOWN"
-                          data-testid="option-stage-unknown"
+                          key={opt}
+                          value={opt}
+                          data-testid={`option-content-type-${opt.replace(/\s+/g, "-").toLowerCase()}`}
                         >
-                          UNKNOWN
+                          {opt === "ALL" ? "All types" : opt}
                         </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Content type</span>
-                    <Select value={contentTypeFilter} onValueChange={setContentTypeFilter}>
-                      <SelectTrigger
-                        className="h-9 w-[220px] rounded-xl"
-                        data-testid="select-content-type"
-                      >
-                        <SelectValue placeholder="All types" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {contentTypeOptions.map((opt) => (
-                          <SelectItem
-                            key={opt}
-                            value={opt}
-                            data-testid={`option-content-type-${opt.replace(/\s+/g, "-").toLowerCase()}`}
-                          >
-                            {opt === "ALL" ? "All types" : opt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Channel</span>
+                  <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
+                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-channel-dimension">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="utmChannel">UTM Channel</SelectItem>
+                      <SelectItem value="productFranchise">Product</SelectItem>
+                      <SelectItem value="contentType">Content Type</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Channel</span>
-                    <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
-                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-channel-dimension">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="utmChannel">UTM Channel</SelectItem>
-                        <SelectItem value="productFranchise">Product</SelectItem>
-                        <SelectItem value="contentType">Content Type</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Product</span>
+                  <Select value={productFilter} onValueChange={setProductFilter}>
+                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-product-filter">
+                      <SelectValue placeholder="All products" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
+                      {productList.map((p) => (
+                        <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Product</span>
-                    <Select value={productFilter} onValueChange={setProductFilter}>
-                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-product-filter">
-                        <SelectValue placeholder="All products" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
-                        {productList.map((p) => (
-                          <SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Industry</span>
+                  <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-industry-filter">
+                      <SelectValue placeholder="All industries" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
+                      {industryList.map((ind) => (
+                        <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Industry</span>
-                    <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                      <SelectTrigger className="h-9 w-[160px] rounded-xl" data-testid="select-industry-filter">
-                        <SelectValue placeholder="All industries" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
-                        {industryList.map((ind) => (
-                          <SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Campaign</span>
-                    <Select value={campaignFilter} onValueChange={setCampaignFilter}>
-                      <SelectTrigger className="h-9 w-[180px] rounded-xl" data-testid="select-campaign-filter">
-                        <SelectValue placeholder="All campaigns" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL" data-testid="option-campaign-all">All campaigns</SelectItem>
-                        {campaignList.map((c) => (
-                          <SelectItem key={c} value={c} data-testid={`option-campaign-${c.replace(/\s+/g, "-").toLowerCase()}`}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="hidden items-center gap-2 md:flex">
-                    <Badge
-                      variant="secondary"
-                      className="rounded-xl"
-                      data-testid="badge-rows"
-                    >
-                      {filtered.length} rows
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className="rounded-xl"
-                      data-testid="badge-unknown"
-                    >
-                      {unknownCount} unknown
-                    </Badge>
-                  </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Campaign</span>
+                  <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+                    <SelectTrigger className="h-8 w-[140px] rounded-xl text-xs" data-testid="select-campaign-filter">
+                      <SelectValue placeholder="All campaigns" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" data-testid="option-campaign-all">All campaigns</SelectItem>
+                      {campaignList.map((c) => (
+                        <SelectItem key={c} value={c} data-testid={`option-campaign-${c.replace(/\s+/g, "-").toLowerCase()}`}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </Card>
