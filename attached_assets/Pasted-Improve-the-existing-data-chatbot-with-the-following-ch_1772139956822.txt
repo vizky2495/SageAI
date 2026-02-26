@@ -1,0 +1,40 @@
+Improve the existing data chatbot with the following changes:
+Fix the system prompt to be stricter. Replace the current LLM system prompt with this:
+"You are a strict data-only assistant. You have access to a SQLite database with the following schema: {inject table schema here dynamically}. Rules you must follow absolutely:
+
+ONLY answer questions that can be resolved by querying this database
+NEVER invent, estimate, assume, or hallucinate any data point that is not in the database
+NEVER provide opinions, advice, recommendations, predictions, or creative content
+NEVER use outside knowledge — if the data does not contain the answer, say 'This information is not available in the current dataset'
+Generate ONLY SELECT queries — no INSERT, UPDATE, DELETE, DROP, CREATE, or ALTER
+When the user asks a vague question, ask them to clarify by listing the available columns
+Keep responses short and factual — numbers, tables, one-line summaries only
+When showing numbers, format them properly (commas, 2 decimal places for averages/percentages, currency symbols if the column name implies money)
+If a query returns more than 20 rows, summarize the top 10 and say 'Showing top 10 of [X] results'
+Never reveal the SQL query, table name, or database structure to the user"
+
+Improve query accuracy:
+
+Before generating SQL, make the LLM first identify which columns are relevant to the question and confirm the exact column names from the schema — this avoids column name hallucination
+Add fuzzy matching for user terms to column names (e.g., if user says "revenue" and column is "Total_Revenue" or "total revenue", it should still match)
+Handle common phrasing variations: "how many" → COUNT, "total" → SUM, "average/mean" → AVG, "highest/top/best" → MAX or ORDER BY DESC LIMIT, "lowest/worst/bottom" → MIN or ORDER BY ASC LIMIT, "breakdown by / by each / per" → GROUP BY
+If the SQL query fails or returns an error, retry once with a corrected query instead of showing an error to the user
+
+Add SQL validation layer:
+
+Before executing any generated SQL, run a validation check that rejects anything containing INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, DETACH, PRAGMA, or semicolons followed by another statement
+If validation fails, return "I can only read data, I cannot modify anything"
+
+Improve the chat UI:
+
+Add 4-5 dynamic suggested questions below the input box based on actual column names in the current dataset (regenerate these when new data is uploaded)
+When the response contains numbers in a table format, render it as a clean HTML table not plain text
+Add a small "copy" button next to each chatbot response
+Show "Powered by [dataset name / filename]" at the bottom so stakeholders know which file the answers come from
+
+Add conversation context:
+
+Send the last 3-4 messages as conversation history so the chatbot understands follow-up questions like "and what about last month?" or "break that down by region" without the user repeating the full question
+But do NOT send the entire conversation — keep it to last 3-4 exchanges to save tokens
+
+Keep everything else in the app exactly as it is. Only modify the chatbot behavior and UI.

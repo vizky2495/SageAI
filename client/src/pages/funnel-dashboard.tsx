@@ -5,15 +5,10 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
-  Brain,
-  CheckCircle2,
-  FileUp,
   Filter,
   Loader2,
   LineChart,
-  Sparkles,
   Table as TableIcon,
-  XCircle,
 } from "lucide-react";
 import {
   Area,
@@ -551,39 +546,7 @@ const stageMeta: Record<FunnelStage, { label: string; tone: string }> = {
   UNKNOWN: { label: "UNKNOWN", tone: "bg-muted text-muted-foreground border-border" },
 };
 
-const mockCSV = `CONTENT,UTM_CHANNEL,UTM_MEDIUM,PRODUCT_FRANCHISE__C,INDUSTRY,TYPECAMPAIGNMEMBER__C,OBJECTIVE,ENGAGED_SESSIONS,SESSIONS,PAGEVIEWS,AVG_TIME_ON_PAGE,AVG_SCROLL_DEPTH,NEW_USERS,RETURNING_USERS,NEWSLETTER_SIGNUPS,NEXT_CONTENT_VIEWS,NEW_CONTACTS,FORM_SUBMISSIONS,MQL_FLAG,QDC_COUNT,SQO_FLAG,FORM_SCORE1
-TOFU_Cloud_Security_101,Organic,Search,CloudShield,Financial Services,Blog,NCA,980,1520,4200,64,58,510,210,22,380,64,18,0,0,0,18
-TOFU_Zero_Trust_Checklist,Paid,Search,CloudShield,Technology,Landing Page,NCA,720,1200,3100,49,52,402,160,19,240,51,16,0,0,0,22
-MOFU_CloudShield_Webinar_Threats,Email,Email,CloudShield,Financial Services,Webinar,NCA,410,620,1200,71,63,180,110,8,120,44,44,21,6,2,51
-MOFU_Threat_Model_Whitepaper,Partner,Referral,CloudShield,Healthcare,Whitepaper,NCA,330,470,1400,83,66,190,120,11,150,39,39,17,4,1,47
-BOFU_CloudShield_Demo_Request,Paid,Social,CloudShield,Technology,Landing Page,NCA,120,200,640,58,50,70,60,2,44,28,28,14,7,9,72
-BOFU_CaseStudy_FinServ,Email,Email,CloudShield,Financial Services,Case Study,NCA,140,210,880,92,71,90,75,4,62,19,19,9,3,7,68
-TOFU_Data_Privacy_Basics,Organic,Search,DataGuard,Healthcare,Blog,NCA,640,980,2600,61,56,350,180,14,190,41,10,0,0,0,16
-MOFU_DataGuard_Interactive_Guide,Organic,Search,DataGuard,Technology,Landing Page,NCA,260,420,1100,77,65,140,95,9,130,25,25,10,2,1,44
-BOFU_DataGuard_Pricing,Direct,Direct,DataGuard,Financial Services,Landing Page,NCA,90,140,520,44,47,55,45,1,38,10,10,6,2,4,66`;
-
-type AiAnalysis = {
-  mapping: Record<string, string | null>;
-  contentIdColumn: string;
-  stageSignals: string[];
-  unmappedColumns: string[];
-  dataQualityNotes: string[];
-  confidence: string;
-};
-
-type UploadDiagnostics = {
-  ingested: number;
-  totalRows: number;
-  skippedNoContentId: number;
-  uniqueContentIds: number;
-  stageBreakdown: Record<string, number>;
-};
-
-type AiStep = "idle" | "parsing" | "analyzing" | "ingesting" | "done" | "error";
-
 export default function FunnelDashboard() {
-  const [csvText, setCsvText] = useState<string>(mockCSV);
-  const [fileName, setFileName] = useState<string>("sample.csv");
   const [stageFilter, setStageFilter] = useState<FunnelStage | "ALL">("ALL");
   const [dimension, setDimension] = useState<
     "utmChannel" | "productFranchise" | "contentType"
@@ -596,218 +559,62 @@ export default function FunnelDashboard() {
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
   const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
 
-  const [aiStep, setAiStep] = useState<AiStep>("idle");
-  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
-  const [uploadDiagnostics, setUploadDiagnostics] = useState<UploadDiagnostics | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [dbRows, setDbRows] = useState<NormalizedRow[] | null>(null);
-
-  const parsedRows = useMemo(() => parseCSV(csvText), [csvText]);
-  const csvRows = useMemo(() => normalizeRows(parsedRows), [parsedRows]);
-  const rows = dbRows ?? csvRows;
+  const [rows, setRows] = useState<NormalizedRow[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [uploadDiagnostics, setUploadDiagnostics] = useState<{ stageBreakdown: Record<string, number> } | null>(null);
 
   const queryClient = useQueryClient();
-  const ingestedRef = useRef<string>("");
-
-  const aiActiveRef = useRef(false);
 
   useEffect(() => {
-    if (aiActiveRef.current) return;
-    const key = csvText.slice(0, 200);
-    if (key === ingestedRef.current || parsedRows.length === 0) return;
-    ingestedRef.current = key;
-    fetch("/api/assets/ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: parsedRows }),
-    })
-      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/assets"] }))
-      .catch((err) => console.error("Ingest failed:", err));
-  }, [parsedRows, csvText, queryClient]);
-
-  const safeJsonParse = useCallback(async (res: globalThis.Response, fallbackMsg: string): Promise<any> => {
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      if (text.trim().startsWith("<")) {
-        throw new Error(`${fallbackMsg} (server returned an unexpected response — the file may be too large or the server timed out)`);
-      }
-      throw new Error(`${fallbackMsg}: ${text.slice(0, 200)}`);
-    }
+    let cancelled = false;
+    setDataLoading(true);
+    fetch("/api/assets/all")
+      .then((res) => res.ok ? res.json() : [])
+      .then((dbAssets: any[]) => {
+        if (cancelled) return;
+        if (dbAssets.length > 0) {
+          const converted: NormalizedRow[] = dbAssets.map((a, idx) => ({
+            id: a.id || `db-${idx}`,
+            content: a.contentId || "",
+            stage: (a.stage || "UNKNOWN") as FunnelStage,
+            utmChannel: a.utmChannel || undefined,
+            utmMedium: a.utmMedium || undefined,
+            utmContent: a.utmContent || undefined,
+            productFranchise: a.productFranchise || undefined,
+            objective: a.objective || undefined,
+            contentType: a.typecampaignmember || undefined,
+            cta: a.cta || undefined,
+            campaignName: a.campaignName || undefined,
+            engagedSessions: undefined,
+            sessions: undefined,
+            pageViews: a.pageviewsSum || 0,
+            timeSpentSeconds: a.timeAvg || undefined,
+            scrollDepth: undefined,
+            newUsers: undefined,
+            returningUsers: undefined,
+            newsletterSignups: undefined,
+            nextContentViews: undefined,
+            newContacts: a.uniqueLeads || 0,
+            formSubmissions: undefined,
+            mqls: undefined,
+            qdcs: undefined,
+            sqos: a.sqoCount || 0,
+            leadScore: undefined,
+          }));
+          setRows(converted);
+          const breakdown: Record<string, number> = {};
+          for (const r of converted) {
+            breakdown[r.stage] = (breakdown[r.stage] || 0) + 1;
+          }
+          setUploadDiagnostics({ stageBreakdown: breakdown });
+        }
+        setDataLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setDataLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
-
-  const ALLOWED_EXTENSIONS = /\.(csv|xlsx?)$/i;
-  const MAX_FILE_SIZE_MB = 50;
-
-  const handleAiUpload = useCallback(async (file: File) => {
-    aiActiveRef.current = true;
-    setAiStep("parsing");
-    setAiError(null);
-    setAiAnalysis(null);
-    setUploadDiagnostics(null);
-    setFileName(file.name);
-
-    try {
-      if (!ALLOWED_EXTENSIONS.test(file.name)) {
-        throw new Error(`Unsupported file type. Please upload a CSV or Excel (.xlsx) file.`);
-      }
-
-      const fileSizeMB = file.size / (1024 * 1024);
-      if (fileSizeMB > MAX_FILE_SIZE_MB) {
-        throw new Error(`File is too large (${fileSizeMB.toFixed(1)} MB). Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`);
-      }
-
-      const isExcel = file.name.match(/\.xlsx?$/i);
-      let headers: string[];
-      let sampleRows: Record<string, any>[];
-      let allRows: Record<string, any>[];
-
-      if (isExcel) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]);
-          };
-          reader.onerror = () => reject(new Error("Failed to read file. Please try again."));
-          reader.readAsDataURL(file);
-        });
-
-        let parseRes: globalThis.Response;
-        try {
-          parseRes = await fetch("/api/assets/upload-excel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base64, filename: file.name }),
-          });
-        } catch (networkErr: any) {
-          throw new Error("Network error while uploading file. Please check your connection and try again.");
-        }
-
-        if (!parseRes.ok) {
-          const err = await safeJsonParse(parseRes, "Failed to parse Excel file");
-          throw new Error(err.message || "Failed to parse Excel file");
-        }
-
-        const parseData = await safeJsonParse(parseRes, "Failed to parse server response");
-        headers = parseData.headers;
-        sampleRows = parseData.sampleRows;
-        allRows = parseData.rows;
-      } else {
-        let text: string;
-        try {
-          text = await file.text();
-        } catch {
-          throw new Error("Failed to read the CSV file. The file may be corrupted.");
-        }
-        setCsvText(text);
-        const parsed = parseCSV(text);
-        if (parsed.length === 0) throw new Error("No data rows found in the file. Please check the file contains data rows with headers.");
-        headers = Object.keys(parsed[0]);
-        if (headers.length === 0) throw new Error("Could not detect column headers. Please ensure the first row contains column names.");
-        sampleRows = parsed.slice(0, 5) as Record<string, any>[];
-        allRows = parsed as Record<string, any>[];
-      }
-
-      if (headers.length === 0) {
-        throw new Error("No column headers found in the file. Please check the file format.");
-      }
-
-      setAiStep("analyzing");
-
-      let analyzeRes: globalThis.Response;
-      try {
-        analyzeRes = await fetch("/api/assets/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ headers, sampleRows }),
-        });
-      } catch (networkErr: any) {
-        throw new Error("Network error during AI analysis. Please try again.");
-      }
-
-      if (!analyzeRes.ok) {
-        const err = await safeJsonParse(analyzeRes, "AI analysis failed");
-        throw new Error(err.message || "AI analysis failed");
-      }
-
-      const analysis: AiAnalysis = await safeJsonParse(analyzeRes, "Failed to parse AI analysis response");
-      if (!analysis.mapping || typeof analysis.mapping !== "object") {
-        throw new Error("AI returned an invalid column mapping. Please try uploading again.");
-      }
-      setAiAnalysis(analysis);
-
-      setAiStep("ingesting");
-
-      const { assets: aggregatedAssets, skippedNoContentId } = aggregateRowsClientSide(allRows, analysis.mapping);
-
-      let ingestRes: globalThis.Response;
-      try {
-        ingestRes = await fetch("/api/assets/ingest-aggregated", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assets: aggregatedAssets, totalRows: allRows.length, skippedNoContentId }),
-        });
-      } catch (networkErr: any) {
-        throw new Error("Network error during data ingestion. Please try again.");
-      }
-
-      if (!ingestRes.ok) {
-        const err = await safeJsonParse(ingestRes, "Data ingestion failed");
-        throw new Error(err.message || "Ingestion failed");
-      }
-
-      const diagnostics: UploadDiagnostics = await safeJsonParse(ingestRes, "Failed to parse ingestion results");
-      setUploadDiagnostics(diagnostics);
-
-      let allAssetsRes: globalThis.Response;
-      try {
-        allAssetsRes = await fetch("/api/assets/all");
-      } catch {
-        allAssetsRes = new Response(null, { status: 500 });
-      }
-      if (allAssetsRes.ok) {
-        const dbAssets: any[] = await safeJsonParse(allAssetsRes, "Failed to load assets");
-        const converted: NormalizedRow[] = dbAssets.map((a, idx) => ({
-          id: a.id || `db-${idx}`,
-          content: a.contentId || "",
-          stage: (a.stage || "UNKNOWN") as FunnelStage,
-          utmChannel: a.utmChannel || undefined,
-          utmMedium: a.utmMedium || undefined,
-          utmContent: a.utmContent || undefined,
-          productFranchise: a.productFranchise || undefined,
-          objective: a.objective || undefined,
-          contentType: a.typecampaignmember || undefined,
-          cta: a.cta || undefined,
-          campaignName: a.campaignName || undefined,
-          engagedSessions: undefined,
-          sessions: undefined,
-          pageViews: a.pageviewsSum || 0,
-          timeSpentSeconds: a.timeAvg || undefined,
-          scrollDepth: undefined,
-          newUsers: undefined,
-          returningUsers: undefined,
-          newsletterSignups: undefined,
-          nextContentViews: undefined,
-          newContacts: a.uniqueLeads || 0,
-          formSubmissions: undefined,
-          mqls: undefined,
-          qdcs: undefined,
-          sqos: a.sqoCount || 0,
-          leadScore: undefined,
-        }));
-        setDbRows(converted);
-      }
-
-      setAiStep("done");
-      queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
-    } catch (err: any) {
-      console.error("AI upload error:", err);
-      setAiError(err.message || "Upload failed");
-      setAiStep("error");
-    }
-  }, [queryClient, safeJsonParse]);
 
   const campaignList = useMemo(() => {
     const s = new Set<string>();

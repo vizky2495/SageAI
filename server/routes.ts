@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPromptVersionSchema, insertCollaboratorSchema } from "@shared/schema";
@@ -7,12 +7,45 @@ import https from "https";
 import http from "http";
 import Anthropic from "@anthropic-ai/sdk";
 import * as XLSX from "xlsx";
+import crypto from "crypto";
 import { buildInsightsSummary } from "./insights";
+
+const adminTokens = new Set<string>();
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  const token = auth.slice(7);
+  if (!adminTokens.has(token)) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+  next();
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.post("/api/admin/login", (req: Request, res: Response) => {
+    const { password } = req.body as { password?: string };
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) {
+      return res.status(500).json({ message: "Admin password not configured" });
+    }
+    if (!password || password !== adminPassword) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+    const token = crypto.randomUUID();
+    adminTokens.add(token);
+    res.json({ token });
+  });
+
+  app.get("/api/admin/check", requireAdmin, (_req: Request, res: Response) => {
+    res.json({ ok: true });
+  });
 
   app.get("/api/versions", async (_req, res) => {
     const versions = await storage.getPromptVersions();
@@ -91,7 +124,7 @@ export async function registerRoutes(
     res.json({ compiled, size, layerCount: layers.length });
   });
 
-  app.post("/api/assets/ingest", async (req, res) => {
+  app.post("/api/assets/ingest", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body as { rows: any[] };
       if (!Array.isArray(rows) || rows.length === 0) {
@@ -210,7 +243,7 @@ export async function registerRoutes(
     res.json(assets);
   });
 
-  app.post("/api/assets/upload-excel", async (req: Request, res: Response) => {
+  app.post("/api/assets/upload-excel", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { base64, filename } = req.body as { base64: string; filename: string };
       if (!base64) {
@@ -245,7 +278,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/assets/analyze", async (req: Request, res: Response) => {
+  app.post("/api/assets/analyze", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { headers, sampleRows } = req.body as { headers: string[]; sampleRows: Record<string, any>[] };
       if (!headers || !Array.isArray(headers) || headers.length === 0) {
@@ -341,7 +374,7 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
-  app.post("/api/assets/ingest-aggregated", async (req: Request, res: Response) => {
+  app.post("/api/assets/ingest-aggregated", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { assets, totalRows, skippedNoContentId } = req.body as {
         assets: any[];
@@ -400,7 +433,7 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
-  app.post("/api/assets/ingest-mapped", async (req: Request, res: Response) => {
+  app.post("/api/assets/ingest-mapped", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { rows, mapping } = req.body as {
         rows: Record<string, any>[];
