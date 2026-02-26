@@ -77,7 +77,7 @@ client/           → React frontend
     components/   → Shared components (top-nav, ui/)
     hooks/        → Custom React hooks
     lib/          → Utilities (queryClient, utils)
-    pages/        → Page components (funnel-dashboard, prompt-studio, not-found)
+    pages/        → Page components (funnel-dashboard, prompt-studio, admin, not-found)
 server/           → Express backend
   index.ts        → Entry point, middleware setup
   routes.ts       → API route registration
@@ -94,7 +94,8 @@ attached_assets/  → Reference documents (agent prompts/specs)
 # External Dependencies
 
 - **PostgreSQL** — Primary database, connected via `DATABASE_URL` environment variable. Uses `pg` (node-postgres) connection pool
-- **No authentication** — The app currently has no auth mechanism; all API endpoints are open
-- **No external AI API calls in current code** — The attached assets describe an AI agent persona, but the current codebase handles CSV parsing and prompt management locally. The build script includes `@google/generative-ai` and `openai` in its bundle allowlist, suggesting planned AI integrations
+- **Admin authentication** — Upload/ingest routes protected by `requireAdmin` middleware; token-based auth via `POST /api/admin/login` with `ADMIN_PASSWORD` secret; tokens stored in `sessionStorage` as `"admin_token"`
+- **Claude AI (Anthropic)** — CIA Agent and Campaign Planner use `claude-sonnet-4-5` via Replit AI integrations (`@anthropic-ai/sdk`). CIA agent uses grounded context from `buildInsightsSummary()` (server/insights.ts) with deterministic pre-checks for missing metrics, fuzzy field matching, and strict data-only system prompt. Conversation history limited to last 4 exchanges to save tokens. Retry logic on failed LLM streams.
+- **Chat API**: `GET /api/chat/suggestions` returns dynamic suggested questions and dataset label based on actual data; `GET /api/insights/summary` returns structured JSON truth layer
 - **Replit-specific plugins** — `@replit/vite-plugin-runtime-error-modal`, `@replit/vite-plugin-cartographer`, `@replit/vite-plugin-dev-banner` for development on Replit
 - **Google Fonts** — DM Sans, Geist, Geist Mono loaded via CDN

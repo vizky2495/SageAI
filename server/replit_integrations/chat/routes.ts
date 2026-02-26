@@ -8,16 +8,51 @@ const anthropic = new Anthropic({
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
-const CIA_SYSTEM_PROMPT = `You are the **CIA Agent** (Content Intelligence Analyst), a strictly data-grounded marketing analytics expert.
+const SCHEMA_DESCRIPTION = `Database: PostgreSQL — Table: assets_agg
+Columns:
+  - content_id (text): Unique identifier for each content asset
+  - stage (enum: TOFU, MOFU, BOFU, UNKNOWN): Funnel stage classification
+  - name (text): Asset display name
+  - url (text): Asset URL
+  - typecampaignmember (text): Campaign member type
+  - product_franchise (text): Product/brand name (e.g., CloudShield, DataGuard)
+  - utm_channel (text): Marketing channel (Organic, Paid, Email, Partner, Direct)
+  - utm_campaign (text): Campaign identifier
+  - utm_medium (text): Traffic medium (Search, Social, Email, Referral, Direct)
+  - utm_term (text): Paid search keyword
+  - utm_content (text): Ad/content variant
+  - form_name (text): Lead capture form name
+  - cta (text): Call-to-action label
+  - objective (text): Business objective (e.g., NCA, Retention)
+  - product_category (text): Product category
+  - campaign_id (text): Campaign ID
+  - campaign_name (text): Campaign name
+  - date_stamp (text): Date of record
+  - pageviews_sum (integer): Total page views
+  - time_avg (real): Average time on page in seconds
+  - downloads_sum (integer): Total downloads
+  - unique_leads (integer): Number of unique leads generated
+  - sqo_count (integer): Sales Qualified Opportunities count`;
 
-CRITICAL RULES — NEVER BREAK THESE:
-1. You are provided a JSON object called "grounded_context". This is the ONLY source of truth.
-2. NEVER invent, estimate, or hallucinate any number. Every number you cite must exist in the grounded_context JSON.
-3. If a metric is zero or unavailable (metric_availability shows false), you MUST say: "This metric is not available in the current dataset."
-4. If the user asks about a metric that is zero/missing, do NOT attempt analysis. Instead state clearly what is missing and suggest 2 alternative questions you CAN answer from available data.
-5. Always cite your evidence by referencing the exact table and field from grounded_context (e.g., "cta_table shows: Ask An Expert has 456 assets, 0 leads, 0 SQOs").
+function buildCIASystemPrompt(summary: InsightsSummary): string {
+  return `You are a strict data-only assistant. You have access to a PostgreSQL database with the following schema:
 
-MANDATORY RESPONSE FORMAT — use these sections for every answer:
+${SCHEMA_DESCRIPTION}
+
+Rules you must follow absolutely:
+
+1. ONLY answer questions that can be resolved using the provided aggregated data context below.
+2. NEVER invent, estimate, assume, or hallucinate any data point that is not in the data context.
+3. NEVER provide opinions, advice, recommendations, predictions, or creative content.
+4. NEVER use outside knowledge — if the data does not contain the answer, say "This information is not available in the current dataset."
+5. When the user asks a vague question, ask them to clarify by listing the available data dimensions (stages, channels, products, CTAs, etc.).
+6. Keep responses short and factual — numbers, tables, one-line summaries only.
+7. When showing numbers, format them properly: use commas for thousands (e.g., 1,234), 2 decimal places for averages/percentages, and label units clearly (e.g., "58.0 seconds").
+8. If data has more than 20 items in a category, summarize the top 10 and say "Showing top 10 of [X] results."
+9. Never reveal raw SQL queries, internal table names, or database structure in your responses to the user. The schema above is for your reference only — never quote it back.
+10. If a metric is zero or unavailable (metric_availability shows false), you MUST say: "This metric is not available in the current dataset." Then suggest 2 alternative questions you CAN answer.
+
+MANDATORY RESPONSE FORMAT — use these exact sections for every answer:
 
 ### Answer
 A concise, direct answer to the user's question (2-5 sentences max). If the data cannot answer the question, say so here.
@@ -25,16 +60,17 @@ A concise, direct answer to the user's question (2-5 sentences max). If the data
 ### Data Check
 - List which metrics were AVAILABLE and used
 - List which metrics were MISSING or ZERO
-- State: "Based on [N] total content assets across [stages]"
+- State: "Based on ${summary.dataset_info.total_rows} content assets across ${summary.stage_summary.map(s => s.stage).join("/")}"
 
 ### Evidence
-Cite the exact rows/fields from the grounded_context JSON that support your answer. Use bullet points.
-Example: "- cta_table: 'PDF' has 801 assets, 0 leads, 0 SQOs"
+Cite the exact values from the data context that support your answer. Use bullet points.
+Example: "- Channel: Email has 2 assets, 0 page views, 0 leads"
 
 ### Next Best Actions
-1-3 actionable recommendations or alternative questions the user should explore.
+1-3 alternative questions the user could explore with the available data. Keep these data-grounded.
 
-TONE: Professional, concise, transparent about data limitations. Never apologize excessively — just state facts clearly.`;
+TONE: Professional, concise, transparent about data limitations. Never apologize — just state facts clearly.`;
+}
 
 const CAMPAIGN_PLANNER_PROMPT = `You are **Campaign Planner**, a senior-level Marketing Campaign Manager and Strategist.
 
@@ -125,6 +161,73 @@ const METRIC_CHECKS: MetricCheck[] = [
   { keyword: "visit", metricKey: "pageviews", label: "pageviews/visit data" },
 ];
 
+const FUZZY_FIELD_MAP: Record<string, string[]> = {
+  "content_id": ["content", "asset", "content id", "asset id", "content name"],
+  "stage": ["funnel", "stage", "funnel stage", "tofu", "mofu", "bofu"],
+  "product_franchise": ["product", "brand", "franchise", "product name"],
+  "utm_channel": ["channel", "marketing channel", "traffic source", "source"],
+  "utm_medium": ["medium", "traffic medium"],
+  "utm_campaign": ["campaign", "campaign name", "campaign id"],
+  "cta": ["cta", "call to action", "button", "action"],
+  "objective": ["objective", "goal", "business objective"],
+  "pageviews_sum": ["views", "page views", "pageviews", "traffic", "visits", "impressions"],
+  "time_avg": ["time", "time on page", "dwell time", "engagement time", "duration", "avg time", "average time"],
+  "downloads_sum": ["downloads", "download count", "assets downloaded"],
+  "unique_leads": ["leads", "lead count", "contacts", "new contacts", "lead generation", "lead gen"],
+  "sqo_count": ["sqo", "sqos", "sales qualified", "qualified opportunities", "pipeline", "revenue"],
+};
+
+const PHRASING_MAP: Record<string, string> = {
+  "how many": "COUNT",
+  "count": "COUNT",
+  "total": "SUM",
+  "sum": "SUM",
+  "average": "AVG",
+  "mean": "AVG",
+  "avg": "AVG",
+  "highest": "ORDER BY DESC (Top)",
+  "top": "ORDER BY DESC (Top)",
+  "best": "ORDER BY DESC (Top)",
+  "most": "ORDER BY DESC (Top)",
+  "lowest": "ORDER BY ASC (Bottom)",
+  "worst": "ORDER BY ASC (Bottom)",
+  "bottom": "ORDER BY ASC (Bottom)",
+  "least": "ORDER BY ASC (Bottom)",
+  "fewest": "ORDER BY ASC (Bottom)",
+  "breakdown": "GROUP BY",
+  "by each": "GROUP BY",
+  "per": "GROUP BY",
+  "distribution": "GROUP BY",
+  "split by": "GROUP BY",
+  "compare": "GROUP BY",
+};
+
+function resolveUserTerms(question: string): { resolvedFields: string[]; operation: string | null } {
+  const q = question.toLowerCase();
+  const resolvedFields: string[] = [];
+
+  for (const [dbField, aliases] of Object.entries(FUZZY_FIELD_MAP)) {
+    for (const alias of aliases) {
+      if (q.includes(alias)) {
+        if (!resolvedFields.includes(dbField)) {
+          resolvedFields.push(dbField);
+        }
+        break;
+      }
+    }
+  }
+
+  let operation: string | null = null;
+  for (const [phrase, op] of Object.entries(PHRASING_MAP)) {
+    if (q.includes(phrase)) {
+      operation = op;
+      break;
+    }
+  }
+
+  return { resolvedFields, operation };
+}
+
 function checkDeterministicRefusal(
   question: string,
   availability: InsightsSummary["metric_availability"],
@@ -179,7 +282,7 @@ Cannot answer this question because **${missingMetrics.join(" and ")}** ${missin
 - Products in dataset: ${products}
 
 ### Evidence
-All rows in the dataset show 0 for ${missingMetrics.join(" and ")}. No conversion or pipeline data has been uploaded. This is a data gap, not an analysis limitation.
+All rows in the dataset show 0 for ${missingMetrics.join(" and ")}. No data has been uploaded for these metrics. This is a data gap, not an analysis limitation.
 
 ### Next Best Actions
 Here are questions I CAN answer from your available data:
@@ -187,9 +290,13 @@ ${altList}`;
 }
 
 function buildGroundedContext(question: string, summary: InsightsSummary): string {
+  const { resolvedFields, operation } = resolveUserTerms(question);
+
   return JSON.stringify({
-    instruction: "Answer the user's question using ONLY the data below. Never invent numbers. Cite evidence from specific tables.",
+    instruction: "Answer the user's question using ONLY the data below. Never invent numbers. Cite evidence from specific tables. Format numbers with commas for thousands, 2 decimal places for averages.",
     question,
+    resolved_fields: resolvedFields.length > 0 ? resolvedFields : "No specific fields matched — use all available data",
+    detected_operation: operation || "Not detected — infer from question",
     dataset_info: summary.dataset_info,
     metric_availability: summary.metric_availability,
     metric_totals: summary.metric_totals,
@@ -232,6 +339,57 @@ function buildPlannerContext(summary: InsightsSummary): string {
 
   return context;
 }
+
+function buildDynamicSuggestions(summary: InsightsSummary): string[] {
+  const suggestions: string[] = [];
+
+  if (summary.stage_summary.length > 1) {
+    suggestions.push("What is the content breakdown across funnel stages?");
+  }
+
+  if (summary.channel_mix.length > 1) {
+    const topChannel = summary.channel_mix[0]?.channel;
+    if (topChannel) {
+      suggestions.push(`How does ${topChannel} compare to other channels?`);
+    }
+  }
+
+  if (summary.product_mix.length > 1) {
+    suggestions.push("Which product has the most content assets?");
+  }
+
+  if (summary.metric_availability.time_on_page) {
+    suggestions.push("Which content has the highest average time on page?");
+  }
+
+  if (summary.metric_availability.pageviews) {
+    suggestions.push("What are the top 10 content assets by page views?");
+  }
+
+  if (summary.metric_availability.leads) {
+    suggestions.push("Which funnel stage generates the most leads?");
+  }
+
+  if (summary.metric_availability.sqos) {
+    suggestions.push("What content drives the most SQOs?");
+  }
+
+  if (summary.cta_table.length > 1) {
+    suggestions.push("Which CTAs have the most associated content?");
+  }
+
+  return suggestions.slice(0, 5);
+}
+
+function getDatasetLabel(summary: InsightsSummary): string {
+  const products = summary.product_mix.map(p => p.product).filter(p => p !== "(unattributed)");
+  if (products.length > 0) {
+    return `${summary.dataset_info.total_rows} assets — ${products.slice(0, 3).join(", ")}`;
+  }
+  return `${summary.dataset_info.total_rows} content assets`;
+}
+
+const MAX_CONTEXT_EXCHANGES = 4;
 
 export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations", async (req: Request, res: Response) => {
@@ -295,6 +453,22 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/chat/suggestions", async (_req: Request, res: Response) => {
+    try {
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        res.json({ suggestions: [], datasetLabel: "No data uploaded" });
+        return;
+      }
+      const suggestions = buildDynamicSuggestions(summary);
+      const datasetLabel = getDatasetLabel(summary);
+      res.json({ suggestions, datasetLabel });
+    } catch (error) {
+      console.error("Error generating suggestions:", error);
+      res.json({ suggestions: [], datasetLabel: "Unknown" });
+    }
+  });
+
   app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
@@ -305,9 +479,9 @@ export function registerChatRoutes(app: Express): void {
       const conversation = await chatStorage.getConversation(conversationId);
       const agentType = conversation?.agent || "cia";
 
-      const history = await chatStorage.getMessagesByConversation(conversationId);
+      const allHistory = await chatStorage.getMessagesByConversation(conversationId);
 
-      if (history.length === 1) {
+      if (allHistory.length === 1) {
         const fallback = content.slice(0, 60) + (content.length > 60 ? "..." : "");
         await chatStorage.updateConversationTitle(conversationId, fallback);
       }
@@ -333,7 +507,7 @@ export function registerChatRoutes(app: Express): void {
           await chatStorage.createMessage(conversationId, "assistant", refusal);
           res.write(`data: ${JSON.stringify({ content: refusal, grounded: true })}\n\n`);
 
-          const isFirstExchange = history.length === 1;
+          const isFirstExchange = allHistory.length === 1;
           if (isFirstExchange) {
             try {
               const titleResponse = await anthropic.messages.create({
@@ -359,7 +533,12 @@ export function registerChatRoutes(app: Express): void {
         }
       }
 
-      const chatMessages = history.map((m) => ({
+      const maxMessages = MAX_CONTEXT_EXCHANGES * 2;
+      const recentHistory = allHistory.length > maxMessages
+        ? allHistory.slice(-maxMessages)
+        : allHistory;
+
+      const chatMessages = recentHistory.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
@@ -367,7 +546,7 @@ export function registerChatRoutes(app: Express): void {
       let systemPrompt: string;
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
-        systemPrompt = `${CIA_SYSTEM_PROMPT}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
+        systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
       } else {
         const plannerContext = buildPlannerContext(summary);
         systemPrompt = `${CAMPAIGN_PLANNER_PROMPT}\n\n${plannerContext}`;
@@ -377,28 +556,53 @@ export function registerChatRoutes(app: Express): void {
         res.write(`data: ${JSON.stringify({ grounded: true })}\n\n`);
       }
 
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: chatMessages,
-      });
-
       let fullResponse = "";
+      let retryAttempt = false;
 
-      for await (const event of stream) {
-        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-          const text = event.delta.text;
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      const runStream = async () => {
+        const stream = anthropic.messages.stream({
+          model: "claude-sonnet-4-5",
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: chatMessages,
+        });
+
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            const text = event.delta.text;
+            if (text) {
+              fullResponse += text;
+              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            }
+          }
+        }
+      };
+
+      try {
+        await runStream();
+      } catch (streamError) {
+        if (!retryAttempt) {
+          retryAttempt = true;
+          console.error("First stream attempt failed, retrying:", streamError);
+          fullResponse = "";
+          try {
+            await runStream();
+          } catch (retryError) {
+            console.error("Retry also failed:", retryError);
+            const errMsg = "I encountered an issue processing your question. Please try rephrasing it.";
+            fullResponse = errMsg;
+            res.write(`data: ${JSON.stringify({ content: errMsg, error: true })}\n\n`);
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            await chatStorage.createMessage(conversationId, "assistant", fullResponse);
+            res.end();
+            return;
           }
         }
       }
 
       await chatStorage.createMessage(conversationId, "assistant", fullResponse);
 
-      const isFirstExchange = chatMessages.length === 1;
+      const isFirstExchange = allHistory.length === 1;
       if (isFirstExchange && fullResponse.length > 0) {
         try {
           const titleResponse = await anthropic.messages.create({

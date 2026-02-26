@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, ShieldCheck } from "lucide-react";
+import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, ShieldCheck, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -14,7 +14,7 @@ interface AgentConfig {
   activeColor: string;
   description: string;
   placeholder: string;
-  suggestions: string[];
+  fallbackSuggestions: string[];
 }
 
 const AGENTS: AgentConfig[] = [
@@ -27,11 +27,11 @@ const AGENTS: AgentConfig[] = [
     activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/50 text-emerald-400",
     description: "Ask me about your marketing data, funnel performance, channel analysis, or any KPI.",
     placeholder: "Ask about your marketing data...",
-    suggestions: [
-      "What are the top performing channels by SQOs?",
-      "Show me the funnel stage breakdown",
-      "Which products have the best lead-to-SQO conversion?",
-      "What CTAs drive the most conversions?",
+    fallbackSuggestions: [
+      "What is the content breakdown across funnel stages?",
+      "Show me the channel distribution",
+      "Which product has the most content?",
+      "What are the top content assets by time on page?",
     ],
   },
   {
@@ -43,7 +43,7 @@ const AGENTS: AgentConfig[] = [
     activeColor: "bg-sky-400/20 ring-1 ring-sky-400/50 text-sky-400",
     description: "I'll build a campaign strategy based on your data — industry, products, channels, budget & more.",
     placeholder: "Describe your campaign goals...",
-    suggestions: [
+    fallbackSuggestions: [
       "Create a campaign plan for our top product",
       "Design a full-funnel strategy for lead generation",
       "What channels should we use for awareness?",
@@ -110,7 +110,7 @@ function renderMarkdown(text: string) {
       const dataRows = tableLines.slice(2);
       elements.push(
         <div key={i} className="overflow-x-auto my-2">
-          <table className="w-full text-xs border-collapse">
+          <table className="w-full text-xs border-collapse" data-testid="response-table">
             <thead>
               <tr>
                 {headerCells.map((cell, ci) => (
@@ -173,6 +173,38 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
+function CopyButton({ text, msgId }: { text: string; msgId: number }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground/60 hover:text-muted-foreground"
+      title={copied ? "Copied!" : "Copy response"}
+      data-testid={`btn-copy-msg-${msgId}`}
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
 export default function AIChatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeAgent, setActiveAgent] = useState<AgentType>("cia");
@@ -183,6 +215,8 @@ export default function AIChatbot() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [showList, setShowList] = useState(true);
+  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
+  const [datasetLabel, setDatasetLabel] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -201,8 +235,28 @@ export default function AIChatbot() {
   useEffect(() => {
     if (isOpen) {
       fetchConversations();
+      fetchSuggestions();
     }
   }, [isOpen, activeAgent]);
+
+  async function fetchSuggestions() {
+    try {
+      const res = await fetch("/api/chat/suggestions");
+      const data = await res.json();
+      if (data.suggestions && data.suggestions.length > 0) {
+        setDynamicSuggestions(data.suggestions);
+      } else {
+        setDynamicSuggestions([]);
+      }
+      setDatasetLabel(data.datasetLabel || "");
+    } catch {
+      setDynamicSuggestions([]);
+    }
+  }
+
+  const suggestions = activeAgent === "cia" && dynamicSuggestions.length > 0
+    ? dynamicSuggestions
+    : agentConfig.fallbackSuggestions;
 
   async function fetchConversations() {
     try {
@@ -502,7 +556,7 @@ export default function AIChatbot() {
                         {agentConfig.description}
                       </div>
                       <div className="grid gap-2">
-                        {agentConfig.suggestions.map((q) => (
+                        {suggestions.map((q) => (
                           <button
                             key={q}
                             onClick={() => {
@@ -535,10 +589,15 @@ export default function AIChatbot() {
                         >
                           {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
                         </div>
-                        {msg.role === "assistant" && msg.grounded && (
-                          <div className="flex items-center gap-1 mt-1 ml-1" data-testid={`badge-grounded-${msg.id}`}>
-                            <ShieldCheck className="h-3 w-3 text-emerald-400" />
-                            <span className="text-[10px] text-emerald-400/80 font-medium">Grounded</span>
+                        {msg.role === "assistant" && (
+                          <div className="flex items-center gap-2 mt-1 ml-1">
+                            {msg.grounded && (
+                              <div className="flex items-center gap-1" data-testid={`badge-grounded-${msg.id}`}>
+                                <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                                <span className="text-[10px] text-emerald-400/80 font-medium">Grounded</span>
+                              </div>
+                            )}
+                            <CopyButton text={msg.content} msgId={msg.id} />
                           </div>
                         )}
                       </div>
@@ -568,6 +627,23 @@ export default function AIChatbot() {
                 </div>
 
                 <div className="p-3 border-t shrink-0">
+                  {msgs.length > 0 && suggestions.length > 0 && !isStreaming && (
+                    <div className="flex flex-wrap gap-1.5 mb-2" data-testid="inline-suggestions">
+                      {suggestions.slice(0, 3).map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => {
+                            setInput(q);
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          className="text-[10px] rounded-lg border bg-card/60 px-2 py-1 hover:bg-card/80 transition text-muted-foreground hover:text-foreground truncate max-w-[180px]"
+                          data-testid={`inline-suggestion-${q.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-end gap-2">
                     <textarea
                       ref={inputRef}
@@ -590,9 +666,11 @@ export default function AIChatbot() {
                       <Send className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="text-center mt-1.5">
+                  <div className="text-center mt-1.5" data-testid="powered-by-footer">
                     <span className="text-[10px] text-muted-foreground/50">
-                      Powered by Claude — answers based on your uploaded data
+                      {datasetLabel
+                        ? `Powered by ${datasetLabel}`
+                        : "Powered by Claude — answers based on your uploaded data"}
                     </span>
                   </div>
                 </div>
@@ -604,11 +682,7 @@ export default function AIChatbot() {
 
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 ${
-          isOpen
-            ? "bg-muted border"
-            : "bg-primary text-primary-foreground"
-        }`}
+        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
         data-testid="btn-toggle-chatbot"
       >
         {isOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
