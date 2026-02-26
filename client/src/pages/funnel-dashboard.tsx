@@ -1596,13 +1596,6 @@ export default function FunnelDashboard() {
                 <div className="text-sm font-medium" data-testid="text-filters">
                   Filters & views
                 </div>
-                <Badge
-                  variant="secondary"
-                  className="ml-auto rounded-xl"
-                  data-testid="badge-unknown"
-                >
-                  {unknownCount} unknown
-                </Badge>
               </div>
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
