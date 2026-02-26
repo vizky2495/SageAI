@@ -1,10 +1,8 @@
 import TopNav from "@/components/top-nav";
 import ContentLibrary from "@/components/content-library";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  ArrowRight,
   Filter,
   Loader2,
   LineChart,
@@ -45,8 +43,6 @@ import {
 } from "@/components/ui/table";
 
 type FunnelStage = "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
-
-type ParsedRow = Record<string, string | number | null | undefined>;
 
 type NormalizedRow = {
   id: string;
@@ -90,431 +86,6 @@ type StageKey = Exclude<FunnelStage, "UNKNOWN">;
 
 type TopByStage = Record<StageKey, TopContentRow[]>;
 
-function toNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
-  const s = String(value).trim();
-  if (!s) return undefined;
-  const n = Number(s.replace(/,/g, ""));
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function normalizeKey(key: string) {
-  return key
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function pickFirst(row: ParsedRow, keys: string[]) {
-  for (const k of keys) {
-    const v = row[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return undefined;
-}
-
-function classifyStage(contentRaw: string, explicitStage?: string): FunnelStage {
-  const exp = (explicitStage || "").toUpperCase();
-  if (exp.includes("BOFU")) return "BOFU";
-  if (exp.includes("MOFU")) return "MOFU";
-  if (exp.includes("TOFU")) return "TOFU";
-
-  const s = (contentRaw || "").toUpperCase();
-  const hasTOFU = s.includes("TOFU");
-  const hasMOFU = s.includes("MOFU");
-  const hasBOFU = s.includes("BOFU");
-  if (hasBOFU) return "BOFU";
-  if (hasMOFU) return "MOFU";
-  if (hasTOFU) return "TOFU";
-  return "UNKNOWN";
-}
-
-function classifyStageFull(contentId: string, row: Record<string, any>, reverseMap: Record<string, string>): FunnelStage {
-  const s = contentId.toUpperCase();
-  if (s.includes("BOFU")) return "BOFU";
-  if (s.includes("MOFU")) return "MOFU";
-  if (s.includes("TOFU")) return "TOFU";
-
-  const getMapped = (field: string) => {
-    const col = reverseMap[field];
-    if (!col) return "";
-    const val = row[col];
-    if (val === null || val === undefined) return "";
-    return String(val).trim();
-  };
-
-  const sqo = toNumber(getMapped("is_sqo"));
-  if (sqo && sqo > 0) return "BOFU";
-  const leadId = getMapped("leadorcontactid");
-  if (leadId) return "MOFU";
-  const clientId = getMapped("google_clientid1");
-  const time = toNumber(getMapped("total_time_on_page_seconds"));
-  if (clientId || (time && time > 0)) return "TOFU";
-  return "UNKNOWN";
-}
-
-function isValidUrl(v: string): boolean {
-  if (!v) return false;
-  try {
-    const url = new URL(v.startsWith("http") ? v : `https://${v}`);
-    return url.hostname.includes(".");
-  } catch {
-    return false;
-  }
-}
-
-function aggregateRowsClientSide(
-  rows: Record<string, any>[],
-  mapping: Record<string, string | null>,
-): { assets: any[]; skippedNoContentId: number } {
-  const reverseMap: Record<string, string> = {};
-  for (const [originalCol, targetField] of Object.entries(mapping)) {
-    if (targetField) reverseMap[targetField] = originalCol;
-  }
-
-  const getMapped = (row: Record<string, any>, field: string): string => {
-    const col = reverseMap[field];
-    if (!col) return "";
-    const val = row[col];
-    if (val === null || val === undefined) return "";
-    return String(val).trim();
-  };
-
-  const aggMap = new Map<string, any>();
-  let skippedNoContentId = 0;
-
-  for (const row of rows) {
-    const contentId = getMapped(row, "content");
-    if (!contentId) { skippedNoContentId++; continue; }
-
-    const stage = classifyStageFull(contentId, row, reverseMap);
-
-    if (!aggMap.has(contentId)) {
-      aggMap.set(contentId, {
-        contentId,
-        stage,
-        name: getMapped(row, "name") || null,
-        url: isValidUrl(getMapped(row, "url")) ? getMapped(row, "url") : null,
-        typecampaignmember: getMapped(row, "typecampaignmember") || null,
-        productFranchise: getMapped(row, "product_franchise") || null,
-        utmChannel: getMapped(row, "utm_channel") || null,
-        utmCampaign: getMapped(row, "utm_campaign") || null,
-        utmMedium: getMapped(row, "utm_medium") || null,
-        utmTerm: getMapped(row, "utm_term") || null,
-        utmContent: getMapped(row, "utm_content") || null,
-        formName: getMapped(row, "form_name") || null,
-        cta: getMapped(row, "cta") || null,
-        objective: getMapped(row, "objective") || null,
-        productCategory: getMapped(row, "product_category") || null,
-        campaignId: getMapped(row, "campaign_id") || null,
-        campaignName: getMapped(row, "campaign_name") || null,
-        dateStamp: getMapped(row, "date_stamp") || null,
-        clientIds: new Set<string>(),
-        timeTotal: 0,
-        timeCount: 0,
-        downloadsSum: 0,
-        leadIds: new Set<string>(),
-        sqoLeadIds: new Set<string>(),
-      });
-    }
-
-    const agg = aggMap.get(contentId)!;
-    const clientId = getMapped(row, "google_clientid1");
-    if (clientId) agg.clientIds.add(clientId);
-    const timeVal = toNumber(getMapped(row, "total_time_on_page_seconds"));
-    if (timeVal) { agg.timeTotal += timeVal; agg.timeCount += 1; }
-    const downloads = toNumber(getMapped(row, "total_downloads"));
-    agg.downloadsSum += downloads || 0;
-    const leadId = getMapped(row, "leadorcontactid");
-    if (leadId) agg.leadIds.add(leadId);
-    const isSqo = toNumber(getMapped(row, "is_sqo"));
-    if (isSqo && isSqo > 0 && leadId) agg.sqoLeadIds.add(leadId);
-  }
-
-  const assets = Array.from(aggMap.values()).map((a) => ({
-    contentId: a.contentId,
-    stage: a.stage,
-    name: a.name,
-    url: a.url,
-    typecampaignmember: a.typecampaignmember,
-    productFranchise: a.productFranchise,
-    utmChannel: a.utmChannel,
-    utmCampaign: a.utmCampaign,
-    utmMedium: a.utmMedium,
-    utmTerm: a.utmTerm,
-    utmContent: a.utmContent,
-    formName: a.formName,
-    cta: a.cta,
-    objective: a.objective,
-    productCategory: a.productCategory,
-    campaignId: a.campaignId,
-    campaignName: a.campaignName,
-    dateStamp: a.dateStamp,
-    pageviewsSum: a.clientIds.size,
-    timeAvg: a.timeCount > 0 ? Math.round(a.timeTotal / a.timeCount) : 0,
-    downloadsSum: a.downloadsSum,
-    uniqueLeads: a.leadIds.size,
-    sqoCount: a.sqoLeadIds.size,
-  }));
-
-  return { assets, skippedNoContentId };
-}
-
-function parseCSV(text: string): ParsedRow[] {
-  const lines = text
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
-
-  const parseLine = (line: string) => {
-    const out: string[] = [];
-    let cur = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      const next = line[i + 1];
-
-      if (c === '"') {
-        if (inQuotes && next === '"') {
-          cur += '"';
-          i++;
-          continue;
-        }
-        inQuotes = !inQuotes;
-        continue;
-      }
-
-      if (c === "," && !inQuotes) {
-        out.push(cur);
-        cur = "";
-        continue;
-      }
-
-      cur += c;
-    }
-
-    out.push(cur);
-    return out;
-  };
-
-  const headersRaw = parseLine(lines[0]);
-  const headers = headersRaw.map((h) => normalizeKey(h));
-
-  const rows: ParsedRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = parseLine(lines[i]);
-    const row: ParsedRow = {};
-    for (let c = 0; c < headers.length; c++) {
-      row[headers[c]] = cells[c] ?? "";
-    }
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function normalizeRows(rows: ParsedRow[]): NormalizedRow[] {
-  return rows.map((r, idx) => {
-    const content = String(
-      pickFirst(r, ["content", "utm_content", "name", "url_path_only", "url"]) ??
-        "",
-    ).trim();
-
-    const explicitStage = String(
-      pickFirst(r, ["funnel_stage", "stage", "funnel", "lifecycle_stage"]) ?? "",
-    ).trim();
-
-    const stage = classifyStage(content, explicitStage);
-
-    const utmChannel =
-      String(pickFirst(r, ["utm_channel", "channel"]) ?? "").trim() || undefined;
-    const utmMedium =
-      String(pickFirst(r, ["utm_medium", "medium"]) ?? "").trim() || undefined;
-    const utmContent =
-      String(pickFirst(r, ["utm_content", "utmcontent"]) ?? "").trim() ||
-      undefined;
-
-    const productFranchise =
-      String(
-        pickFirst(r, [
-          "product_franchise__c",
-          "product_franchise",
-          "product",
-        ]) ?? "",
-      ).trim() || undefined;
-
-    const industry =
-      String(
-        pickFirst(r, [
-          "industry",
-          "industry__c",
-          "vertical",
-          "verticals",
-          "sector",
-        ]) ?? "",
-      ).trim() || undefined;
-
-    const objective =
-      String(pickFirst(r, ["objective", "campaign_objective"]) ?? "").trim() ||
-      undefined;
-
-    const contentType =
-      String(
-        pickFirst(r, ["typecampaignmember__c", "content_type", "type"]) ?? "",
-      ).trim() || undefined;
-
-    const cta =
-      String(pickFirst(r, ["cta", "call_to_action", "cta_type"]) ?? "").trim() || undefined;
-
-    const campaignName =
-      String(
-        pickFirst(r, [
-          "campaign_name",
-          "campaignname",
-          "campaign",
-        ]) ?? "",
-      ).trim() || undefined;
-
-    const engagedSessions = toNumber(
-      pickFirst(r, [
-        "engaged_sessions",
-        "engaged_session",
-        "sessions_engaged",
-        "engagedsession",
-      ]),
-    );
-
-    const sessions = toNumber(
-      pickFirst(r, ["sessions", "visits", "traffic", "visitors"]),
-    );
-
-    const pageViews = toNumber(
-      pickFirst(r, ["pageviews", "page_views", "views", "page_views_total"]),
-    );
-
-    const timeSpentSeconds = toNumber(
-      pickFirst(r, [
-        "avg_time_on_page",
-        "time_on_page",
-        "time_spent_seconds",
-        "avg_time_seconds",
-      ]),
-    );
-
-    const scrollDepth = toNumber(
-      pickFirst(r, [
-        "scroll_depth",
-        "avg_scroll_depth",
-        "max_scroll_depth",
-      ]),
-    );
-
-    const newUsers = toNumber(
-      pickFirst(r, [
-        "new_users",
-        "new_user",
-        "first_time_users",
-        "first_time_contacts",
-      ]),
-    );
-
-    const returningUsers = toNumber(
-      pickFirst(r, ["returning_users", "returning_user"]),
-    );
-
-    const newsletterSignups = toNumber(
-      pickFirst(r, [
-        "newsletter_signups",
-        "newsletter_opt_ins",
-        "newsletter_subscriptions",
-      ]),
-    );
-
-    const nextContentViews = toNumber(
-      pickFirst(r, [
-        "next_content_views",
-        "subsequent_pageviews",
-        "secondary_content_views",
-      ]),
-    );
-
-    const newContacts = toNumber(
-      pickFirst(r, [
-        "new_contacts",
-        "contacts_created",
-        "new_leads",
-        "first_time_contacts",
-        "new_contact",
-      ]),
-    );
-
-    const formSubmissions = toNumber(
-      pickFirst(r, [
-        "form_submissions",
-        "form_submission",
-        "submissions",
-        "forms_submitted",
-      ]),
-    );
-
-    const mqls = toNumber(pickFirst(r, ["mqls", "mql", "mql_flag", "is_mql"]));
-
-    const qdcs = toNumber(
-      pickFirst(r, [
-        "qdc",
-        "qdcs",
-        "qdc_flag",
-        "qdc_count",
-        "qualified_discovery_calls",
-      ]),
-    );
-
-    const sqos = toNumber(
-      pickFirst(r, ["sqos", "sqo", "sqo_flag", "is_sqo", "sql"]),
-    );
-
-    const leadScore = toNumber(
-      pickFirst(r, ["lead_score", "form_score1", "score", "leadscore"]),
-    );
-
-    const id = `${idx + 1}`;
-
-    return {
-      id,
-      content,
-      stage,
-      utmChannel,
-      utmMedium,
-      utmContent,
-      productFranchise,
-      industry,
-      objective,
-      contentType,
-      cta,
-      campaignName,
-      engagedSessions,
-      sessions,
-      pageViews,
-      timeSpentSeconds,
-      scrollDepth,
-      newUsers,
-      returningUsers,
-      newsletterSignups,
-      nextContentViews,
-      newContacts,
-      formSubmissions,
-      mqls,
-      qdcs,
-      sqos,
-      leadScore,
-    };
-  });
-}
 
 function sum(rows: NormalizedRow[], key: keyof NormalizedRow) {
   return rows.reduce(
@@ -562,8 +133,6 @@ export default function FunnelDashboard() {
   const [rows, setRows] = useState<NormalizedRow[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [uploadDiagnostics, setUploadDiagnostics] = useState<{ stageBreakdown: Record<string, number> } | null>(null);
-
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -1066,8 +635,20 @@ export default function FunnelDashboard() {
     ];
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStage]);
 
-  function onPickFile(file: File) {
-    handleAiUpload(file);
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen">
+        <TopNav />
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,hsl(var(--chart-1)/0.16),transparent_58%),radial-gradient(900px_circle_at_80%_0%,hsl(var(--chart-2)/0.14),transparent_62%),radial-gradient(900px_circle_at_75%_80%,hsl(var(--chart-3)/0.12),transparent_58%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/40" />
+          <div className="absolute inset-0 grain" />
+        </div>
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-center px-4 py-24">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1112,202 +693,26 @@ export default function FunnelDashboard() {
                     className="mt-1 max-w-2xl text-sm text-muted-foreground"
                     data-testid="text-subtitle"
                   >
-                    Upload your daily export and get a TOFU/MOFU/BOFU view with
-                    stage KPIs, top content, and drilldowns by channel, product,
-                    and content type.
+                    TOFU/MOFU/BOFU funnel view with stage KPIs, top content,
+                    and drilldowns by channel, product, and content type.
                   </p>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-2 md:items-end">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-card/70 px-3 py-2 text-sm shadow-sm backdrop-blur hover:shadow"
-                    data-testid="button-upload"
-                  >
-                    {aiStep !== "idle" && aiStep !== "done" && aiStep !== "error" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <FileUp className="h-4 w-4" />
-                    )}
-                    <span className="font-medium">Upload CSV / Excel</span>
-                    <input
-                      type="file"
-                      accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                      className="hidden"
-                      disabled={aiStep !== "idle" && aiStep !== "done" && aiStep !== "error"}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) onPickFile(f);
-                        e.target.value = "";
-                      }}
-                      data-testid="input-file"
-                    />
-                  </label>
-
-                  <Button
-                    variant="secondary"
-                    className="rounded-xl"
-                    onClick={() => {
-                      aiActiveRef.current = false;
-                      setAiStep("idle");
-                      setAiAnalysis(null);
-                      setUploadDiagnostics(null);
-                      setAiError(null);
-                      setDbRows(null);
-                      setCsvText(mockCSV);
-                      setFileName("sample.csv");
-                    }}
-                    data-testid="button-load-sample"
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Load sample
-                  </Button>
+              {rows.length > 0 && (
+                <div className="text-xs text-muted-foreground" data-testid="text-asset-count">
+                  {rows.length.toLocaleString()} content assets loaded
                 </div>
-                <div className="text-xs text-muted-foreground" data-testid="text-filename">
-                  Currently loaded:{" "}
-                  <span className="font-medium text-foreground">{fileName}</span>
-                </div>
-              </div>
+              )}
             </div>
 
-            {aiStep !== "idle" && (
-              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ai-analysis-panel">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
-                    <Brain className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">AI-Powered File Analysis</div>
-                    <div className="text-xs text-muted-foreground">
-                      Claude Opus analyzes your file to map columns intelligently
-                    </div>
-                  </div>
+            {rows.length === 0 && (
+              <Card className="rounded-2xl border bg-card/70 p-6 shadow-sm backdrop-blur text-center" data-testid="no-data-card">
+                <div className="text-sm text-muted-foreground">
+                  No data available yet. An admin needs to upload data via the{" "}
+                  <a href="/admin" className="text-foreground underline underline-offset-2 hover:text-chart-1 transition" data-testid="link-admin">
+                    admin panel
+                  </a>.
                 </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    {aiStep === "parsing" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4 text-chart-1" />
-                    )}
-                    <span className={aiStep === "parsing" ? "font-medium" : "text-muted-foreground"}>
-                      Parsing file…
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {aiStep === "analyzing" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-chart-2" />
-                    ) : aiStep === "ingesting" || aiStep === "done" ? (
-                      <CheckCircle2 className="h-4 w-4 text-chart-2" />
-                    ) : aiStep === "error" && !aiAnalysis ? (
-                      <XCircle className="h-4 w-4 text-destructive" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border-2 border-muted" />
-                    )}
-                    <span className={aiStep === "analyzing" ? "font-medium" : "text-muted-foreground"}>
-                      AI analyzing columns with Claude Opus…
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    {aiStep === "ingesting" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-chart-3" />
-                    ) : aiStep === "done" ? (
-                      <CheckCircle2 className="h-4 w-4 text-chart-3" />
-                    ) : aiStep === "error" && aiAnalysis ? (
-                      <XCircle className="h-4 w-4 text-destructive" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border-2 border-muted" />
-                    )}
-                    <span className={aiStep === "ingesting" ? "font-medium" : "text-muted-foreground"}>
-                      Processing data with AI mapping…
-                    </span>
-                  </div>
-                </div>
-
-                {aiError && (
-                  <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" data-testid="ai-error">
-                    {aiError}
-                  </div>
-                )}
-
-                {aiAnalysis && (
-                  <div className="mt-3 rounded-xl border bg-muted/30 p-3" data-testid="ai-analysis-results">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="rounded-lg border bg-card/60">
-                        Confidence: {aiAnalysis.confidence}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Content ID column: <span className="font-medium text-foreground">{aiAnalysis.contentIdColumn}</span>
-                      </span>
-                    </div>
-
-                    {aiAnalysis.dataQualityNotes.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {aiAnalysis.dataQualityNotes.map((note, i) => (
-                          <div key={i} className="text-xs text-muted-foreground">
-                            • {note}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {Object.entries(aiAnalysis.mapping)
-                        .filter(([, v]) => v !== null)
-                        .slice(0, 8)
-                        .map(([orig, target]) => (
-                          <Badge key={orig} variant="secondary" className="rounded-lg border bg-card/60 text-[10px]">
-                            {orig} → {target}
-                          </Badge>
-                        ))}
-                      {Object.values(aiAnalysis.mapping).filter(Boolean).length > 8 && (
-                        <Badge variant="secondary" className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground">
-                          +{Object.values(aiAnalysis.mapping).filter(Boolean).length - 8} more
-                        </Badge>
-                      )}
-                    </div>
-
-                    {aiAnalysis.unmappedColumns.length > 0 && (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        Unmapped: {aiAnalysis.unmappedColumns.join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {uploadDiagnostics && (
-                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="upload-diagnostics">
-                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
-                      <div className="text-lg font-[650]">{uploadDiagnostics.totalRows.toLocaleString()}</div>
-                      <div className="text-[10px] text-muted-foreground">Total rows</div>
-                    </div>
-                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
-                      <div className="text-lg font-[650]">{uploadDiagnostics.uniqueContentIds.toLocaleString()}</div>
-                      <div className="text-[10px] text-muted-foreground">Unique content IDs</div>
-                    </div>
-                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
-                      <div className="text-lg font-[650]">{uploadDiagnostics.ingested.toLocaleString()}</div>
-                      <div className="text-[10px] text-muted-foreground">Ingested</div>
-                    </div>
-                    <div className="rounded-xl border bg-card/60 p-2.5 text-center">
-                      <div className={`text-lg font-[650] ${uploadDiagnostics.skippedNoContentId > 0 ? "text-destructive" : ""}`}>
-                        {uploadDiagnostics.skippedNoContentId.toLocaleString()}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">Skipped (no ID)</div>
-                    </div>
-                    <div className="col-span-2 sm:col-span-4 flex flex-wrap gap-2 justify-center">
-                      {Object.entries(uploadDiagnostics.stageBreakdown).map(([stage, count]) => (
-                        <Badge key={stage} className={`border ${(stageMeta as any)[stage]?.tone || ""}`}>
-                          {stage}: {count}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </Card>
             )}
 
@@ -1890,14 +1295,6 @@ export default function FunnelDashboard() {
                 <TableIcon className="mr-2 h-4 w-4" />
                 Top content
               </TabsTrigger>
-              <TabsTrigger
-                value="data"
-                className="rounded-xl"
-                data-testid="tab-data"
-              >
-                <ArrowRight className="mr-2 h-4 w-4" />
-                Raw CSV
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="cta-analysis" className="mt-4">
@@ -2059,104 +1456,6 @@ export default function FunnelDashboard() {
               </div>
             </TabsContent>
 
-            <TabsContent value="data" className="mt-4">
-              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium" data-testid="text-raw-title">
-                      CSV text
-                    </div>
-                    <div
-                      className="mt-1 text-xs text-muted-foreground"
-                      data-testid="text-raw-subtitle"
-                    >
-                      Paste your CSV here, or upload a file above.
-                    </div>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className="rounded-xl"
-                    data-testid="badge-rows-raw"
-                  >
-                    {rows.length} parsed
-                  </Badge>
-                </div>
-
-                <div className="mt-3 grid gap-3 lg:grid-cols-5">
-                  <div className="lg:col-span-3">
-                    <textarea
-                      value={csvText}
-                      onChange={(e) => setCsvText(e.target.value)}
-                      className="min-h-[260px] w-full resize-y rounded-2xl border bg-card/60 px-3 py-3 font-mono text-xs leading-relaxed shadow-sm outline-none focus:ring-2 focus:ring-ring/30"
-                      data-testid="textarea-csv"
-                    />
-                  </div>
-                  <div className="lg:col-span-2">
-                    <div className="rounded-2xl border bg-card/60 p-3">
-                      <div className="text-sm font-medium" data-testid="text-schema-title">
-                        Detected columns
-                      </div>
-                      <div
-                        className="mt-1 text-xs text-muted-foreground"
-                        data-testid="text-schema-subtitle"
-                      >
-                        Normalized keys from your header row.
-                      </div>
-                      <Separator className="my-3" />
-                      <ScrollArea className="h-[210px] pr-3" data-testid="scroll-columns">
-                        <div className="flex flex-wrap gap-2">
-                          {Object.keys(parsedRows[0] || {}).map((k) => (
-                            <Badge
-                              key={k}
-                              variant="secondary"
-                              className="rounded-xl border bg-card"
-                              data-testid={`badge-col-${k}`}
-                            >
-                              {k}
-                            </Badge>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-
-                    <div className="mt-3 rounded-2xl border bg-card/60 p-3">
-                      <div className="text-sm font-medium" data-testid="text-mapping-title">
-                        Metric mapping (preview)
-                      </div>
-                      <div
-                        className="mt-1 text-xs text-muted-foreground"
-                        data-testid="text-mapping-subtitle"
-                      >
-                        What the dashboard is currently using, based on your CSV.
-                      </div>
-                      <Separator className="my-3" />
-                      <div className="grid gap-2 text-sm">
-                        <div className="flex items-center justify-between" data-testid="map-engaged">
-                          <span className="text-muted-foreground">Engaged sessions</span>
-                          <span className="font-medium">engaged_sessions → engagedSessions</span>
-                        </div>
-                        <div className="flex items-center justify-between" data-testid="map-new-contacts">
-                          <span className="text-muted-foreground">New contacts</span>
-                          <span className="font-medium">new_contacts → newContacts</span>
-                        </div>
-                        <div className="flex items-center justify-between" data-testid="map-mql">
-                          <span className="text-muted-foreground">MQLs</span>
-                          <span className="font-medium">mql_flag → mqls</span>
-                        </div>
-                        <div className="flex items-center justify-between" data-testid="map-sqo">
-                          <span className="text-muted-foreground">SQOs</span>
-                          <span className="font-medium">sqo_flag → sqos</span>
-                        </div>
-                        <div className="flex items-center justify-between" data-testid="map-score">
-                          <span className="text-muted-foreground">Lead score</span>
-                          <span className="font-medium">form_score1 → leadScore</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </TabsContent>
           </Tabs>
         </motion.div>
 

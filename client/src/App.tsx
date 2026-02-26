@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import FunnelDashboard from "@/pages/funnel-dashboard";
 import PromptStudio from "@/pages/prompt-studio";
+import AdminPage from "@/pages/admin";
 import AIChatbot from "@/components/ai-chatbot";
 import { queryClient } from "./lib/queryClient";
 
@@ -12,6 +13,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={FunnelDashboard} />
+      <Route path="/admin" component={AdminPage} />
       <Route path="/prompt-studio" component={PromptStudio} />
       <Route component={NotFound} />
     </Switch>
