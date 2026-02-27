@@ -991,7 +991,7 @@ export default function FunnelDashboard() {
 
           <div className="grid gap-4 lg:grid-cols-3">
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-channel-mix">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-channel-mix">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium" data-testid="text-channel-mix-title">Channel mix</div>
@@ -1023,33 +1023,33 @@ export default function FunnelDashboard() {
                   return (
                     <div key={d.key}>
                       <div
-                        className="w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer"
+                        className="w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden"
                         data-testid={`row-channel-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
                       >
-                        <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>{d.count} assets</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            {stageButtons.map((sb) => (
-                              <button
-                                key={sb.stage}
-                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
-                                onClick={(e) => toggleStage(sb.stage, e)}
-                                title={`Show ${sb.stage} content IDs for ${d.key}`}
-                                data-testid={`btn-channel-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
-                              >
-                                {sb.count} {sb.stage}
-                              </button>
-                            ))}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                            {uploadDiagnostics ? (
+                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            ) : (
+                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
-                          {uploadDiagnostics ? (
-                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          ) : (
-                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          )}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>{d.count} assets</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          {stageButtons.map((sb) => (
+                            <button
+                              key={sb.stage}
+                              className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                              onClick={(e) => toggleStage(sb.stage, e)}
+                              title={`Show ${sb.stage} content IDs for ${d.key}`}
+                              data-testid={`btn-channel-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                            >
+                              {sb.count} {sb.stage}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
@@ -1085,7 +1085,7 @@ export default function FunnelDashboard() {
               </div>
             </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-product-mix">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-product-mix">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium" data-testid="text-product-mix-title">Product mix</div>
@@ -1117,34 +1117,34 @@ export default function FunnelDashboard() {
                   return (
                     <div key={d.key}>
                       <div
-                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${productFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
+                        className={`w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden ${productFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
                         onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)}
                         data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
                       >
-                        <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>{d.count} assets</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            {stageButtons.map((sb) => (
-                              <button
-                                key={sb.stage}
-                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
-                                onClick={(e) => toggleStage(sb.stage, e)}
-                                title={`Show ${sb.stage} content IDs for ${d.key}`}
-                                data-testid={`btn-product-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
-                              >
-                                {sb.count} {sb.stage}
-                              </button>
-                            ))}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                            {uploadDiagnostics ? (
+                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            ) : (
+                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
-                          {uploadDiagnostics ? (
-                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          ) : (
-                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          )}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>{d.count} assets</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          {stageButtons.map((sb) => (
+                            <button
+                              key={sb.stage}
+                              className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                              onClick={(e) => toggleStage(sb.stage, e)}
+                              title={`Show ${sb.stage} content IDs for ${d.key}`}
+                              data-testid={`btn-product-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                            >
+                              {sb.count} {sb.stage}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
@@ -1180,7 +1180,7 @@ export default function FunnelDashboard() {
               </div>
             </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-industry-mix">
+            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-industry-mix">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium" data-testid="text-industry-mix-title">Industry mix</div>
@@ -1212,34 +1212,34 @@ export default function FunnelDashboard() {
                   return (
                     <div key={d.key}>
                       <div
-                        className={`w-full flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer ${industryFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
+                        className={`w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden ${industryFilter === d.key ? "ring-1 ring-primary/40" : ""}`}
                         onClick={() => setIndustryFilter(d.key === industryFilter ? "ALL" : d.key)}
                         data-testid={`row-industry-${d.key.replace(/\s+/g, "-").toLowerCase()}`}
                       >
-                        <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>{d.count} assets</span>
-                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                            {stageButtons.map((sb) => (
-                              <button
-                                key={sb.stage}
-                                className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
-                                onClick={(e) => toggleStage(sb.stage, e)}
-                                title={`Show ${sb.stage} content IDs for ${d.key}`}
-                                data-testid={`btn-industry-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
-                              >
-                                {sb.count} {sb.stage}
-                              </button>
-                            ))}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                            {uploadDiagnostics ? (
+                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            ) : (
+                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
-                          {uploadDiagnostics ? (
-                            <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          ) : (
-                            <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                          )}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>{d.count} assets</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          {stageButtons.map((sb) => (
+                            <button
+                              key={sb.stage}
+                              className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`}
+                              onClick={(e) => toggleStage(sb.stage, e)}
+                              title={`Show ${sb.stage} content IDs for ${d.key}`}
+                              data-testid={`btn-industry-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}
+                            >
+                              {sb.count} {sb.stage}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
