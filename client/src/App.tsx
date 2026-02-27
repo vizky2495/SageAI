@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import FunnelDashboard from "@/pages/funnel-dashboard";
+import AnalyticsPage from "@/pages/analytics";
+import ContentLibraryPage from "@/pages/content-library-page";
 import PromptStudio from "@/pages/prompt-studio";
 import AdminPage from "@/pages/admin";
 import AIChatbot from "@/components/ai-chatbot";
@@ -13,6 +15,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={FunnelDashboard} />
+      <Route path="/analytics" component={AnalyticsPage} />
+      <Route path="/content-library" component={ContentLibraryPage} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/prompt-studio" component={PromptStudio} />
       <Route component={NotFound} />

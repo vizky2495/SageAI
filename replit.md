@@ -2,9 +2,14 @@
 
 **Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV and Excel (.xlsx) files containing marketing performance data, uses Claude Opus AI to intelligently map columns to the standardized schema, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards. It also includes a **Prompt Studio** for managing and versioning AI prompt configurations used by the Content Intelligence Analyst agent, with collaborator tracking.
 
-The app has two main pages:
-1. **Funnel Dashboard** (`/`) — Upload CSVs or Excel files, visualize funnel metrics with charts and tables, filter by stage/product/channel. Features AI-powered column mapping via Claude Opus that prevents rows from being silently dropped due to mismatched column names. Shows real-time upload diagnostics (total rows, ingested count, skipped rows, stage breakdown). Includes a **Content Library** section with backend-aggregated content assets displayed in horizontal carousels per stage (TOFU/MOFU/BOFU), searchable by content ID, with infinite scroll and URL preview.
-2. **Prompt Studio** (`/prompt-studio`) — CRUD interface for prompt versions and collaborators, supporting version tagging, compiled prompt content, and risk-level tracking.
+The app has a multi-page architecture:
+1. **Dashboard Overview** (`/`) — Clean overview with KPI cards (TOFU/MOFU/BOFU), compact funnel area chart, quick-glance top channels/products, and navigation cards to Analytics & Content Library
+2. **Deep Dive Analytics** (`/analytics`) — Full filter bar (stage, type, channel, product, industry, campaign), CTA Breakdown bar charts per stage, Channel/Product/Industry mix cards with stage drilldowns, CTA Analysis table, Top Content tables
+3. **Content Library** (`/content-library`) — Browse all content assets by funnel stage, search by content ID, infinite scroll, URL preview
+4. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
+5. **Prompt Studio** (`/prompt-studio`) — CRUD interface for prompt versions and collaborators, supporting version tagging, compiled prompt content, and risk-level tracking
+
+**Shared data hook**: `client/src/hooks/use-funnel-data.ts` exports `useFunnelData()` hook (returns { rows, dataLoading, uploadDiagnostics, byStage }), all shared types (NormalizedRow, FunnelStage, StageKey, TopContentRow, TopByStage, UploadDiagnostics), and utility functions (sum, pct, formatCompact, formatPct, stageMeta). Used by both the Dashboard and Analytics pages.
 
 # User Preferences
 

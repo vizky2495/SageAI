@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 
@@ -10,6 +10,8 @@ type NavItem = {
 
 const nav: NavItem[] = [
   { label: "Dashboard", href: "/", testId: "link-nav-dashboard" },
+  { label: "Analytics", href: "/analytics", testId: "link-nav-analytics" },
+  { label: "Content Library", href: "/content-library", testId: "link-nav-content-library" },
   { label: "Prompt Studio", href: "/prompt-studio", testId: "link-nav-prompt-studio" },
 ];
 
@@ -32,30 +34,30 @@ export default function TopNav() {
           </Badge>
         </div>
 
-        <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm">
+        <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm overflow-x-auto">
           {nav.map((item) => {
             const active = location === item.href;
             return (
-              <motion.a
-                key={item.href}
-                href={item.href}
-                className={`relative rounded-xl px-3 py-2 text-sm font-medium transition ${
-                  active
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                transition={{ type: "spring", stiffness: 520, damping: 42 }}
-                data-testid={item.testId}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="navActive"
-                    className="absolute inset-0 -z-10 rounded-xl border bg-background"
-                    aria-hidden
-                  />
-                )}
-                {item.label}
-              </motion.a>
+              <Link key={item.href} href={item.href}>
+                <motion.span
+                  className={`relative block whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition cursor-pointer ${
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  transition={{ type: "spring", stiffness: 520, damping: 42 }}
+                  data-testid={item.testId}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="navActive"
+                      className="absolute inset-0 -z-10 rounded-xl border bg-background"
+                      aria-hidden
+                    />
+                  )}
+                  {item.label}
+                </motion.span>
+              </Link>
             );
           })}
         </nav>
