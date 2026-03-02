@@ -1,6 +1,6 @@
 import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
+import { ChevronLeft } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -9,7 +9,7 @@ type NavItem = {
 };
 
 const nav: NavItem[] = [
-  { label: "Dashboard", href: "/", testId: "link-nav-dashboard" },
+  { label: "Performance", href: "/performance", testId: "link-nav-performance" },
   { label: "Analytics", href: "/analytics", testId: "link-nav-analytics" },
   { label: "Content Library", href: "/content-library", testId: "link-nav-content-library" },
 ];
@@ -20,18 +20,12 @@ export default function TopNav() {
   return (
     <div className="sticky top-0 z-20 border-b bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/50">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-[650] tracking-tight" data-testid="text-nav-brand">
-            CIA
+        <Link href="/" data-testid="link-nav-home">
+          <div className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="h-4 w-4" />
+            <span className="text-sm font-[650] tracking-tight">CIA</span>
           </div>
-          <Badge
-            variant="secondary"
-            className="hidden rounded-xl border bg-card/60 text-xs md:inline-flex"
-            data-testid="badge-nav-env"
-          >
-            Prototype
-          </Badge>
-        </div>
+        </Link>
 
         <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm overflow-x-auto">
           {nav.map((item) => {

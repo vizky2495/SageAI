@@ -357,7 +357,7 @@ export default function FunnelDashboard() {
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Link href="/analytics" data-testid="link-analytics-page">
+            <Link href="/analytics" data-testid="link-analytics-page-from-performance">
               <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
@@ -374,7 +374,7 @@ export default function FunnelDashboard() {
               </Card>
             </Link>
 
-            <Link href="/content-library" data-testid="link-content-library-page">
+            <Link href="/content-library" data-testid="link-content-library-page-from-performance">
               <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
