@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import TopNav from "@/components/top-nav";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 interface Message {
   id: number;
@@ -20,8 +21,131 @@ interface Conversation {
   messages?: Message[];
 }
 
-function renderMarkdown(text: string) {
+interface BudgetItem {
+  name: string;
+  pct: number;
+}
+
+const VIOLET_SHADES = [
+  "hsl(270, 60%, 55%)",
+  "hsl(260, 55%, 50%)",
+  "hsl(280, 50%, 60%)",
+  "hsl(250, 60%, 45%)",
+  "hsl(275, 45%, 65%)",
+  "hsl(265, 50%, 55%)",
+  "hsl(285, 55%, 50%)",
+  "hsl(255, 45%, 60%)",
+];
+
+function parseBudgetData(text: string): BudgetItem[] | null {
+  const match = text.match(/<!-- BUDGET:(.*?) -->/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+      return parsed.items;
+    }
+  } catch {}
+  return null;
+}
+
+function parseReadinessScore(text: string): number | null {
+  const match = text.match(/<!-- SCORE:(\d+) -->/);
+  if (!match) return null;
+  const score = parseInt(match[1], 10);
+  return score >= 0 && score <= 100 ? score : null;
+}
+
+interface ChecklistItem {
+  label: string;
+  passed: boolean;
+  reason: string;
+}
+
+function parseChecklist(text: string): ChecklistItem[] {
+  const items: ChecklistItem[] = [];
   const lines = text.split("\n");
+  for (const line of lines) {
+    const checkMatch = line.match(/^[-\s]*(✅|❌)\s*(.+?)(?:\s*[—–-]\s*(.+))?$/);
+    if (checkMatch) {
+      items.push({
+        passed: checkMatch[1] === "✅",
+        label: checkMatch[2].trim(),
+        reason: checkMatch[3]?.trim() || "",
+      });
+    }
+  }
+  return items;
+}
+
+function stripHiddenMarkers(text: string): string {
+  return text.replace(/<!-- BUDGET:.*? -->/g, "").replace(/<!-- SCORE:\d+ -->/g, "");
+}
+
+function BudgetChart({ items }: { items: BudgetItem[] }) {
+  return (
+    <div className="my-3 rounded-xl border border-violet-500/20 bg-card/60 p-4" data-testid="chart-budget-allocation">
+      <div className="text-xs font-semibold mb-3 text-violet-300">Budget Allocation</div>
+      <ResponsiveContainer width="100%" height={items.length * 40 + 20}>
+        <BarChart data={items} layout="vertical" margin={{ left: 10, right: 30, top: 0, bottom: 0 }}>
+          <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} axisLine={false} tickLine={false} />
+          <YAxis type="category" dataKey="name" width={100} tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} axisLine={false} tickLine={false} />
+          <Tooltip formatter={(value: number) => [`${value}%`, "Allocation"]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+          <Bar dataKey="pct" radius={[0, 6, 6, 0]} barSize={20}>
+            {items.map((_, i) => (
+              <Cell key={i} fill={VIOLET_SHADES[i % VIOLET_SHADES.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function ReadinessScore({ score, checklist }: { score: number; checklist: ChecklistItem[] }) {
+  const circumference = 2 * Math.PI * 42;
+  const offset = circumference - (score / 100) * circumference;
+  const color = score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400";
+  const strokeColor = score >= 75 ? "stroke-emerald-400" : score >= 50 ? "stroke-amber-400" : "stroke-red-400";
+
+  return (
+    <div className="my-3 rounded-xl border border-violet-500/20 bg-card/60 p-4" data-testid="card-readiness-score">
+      <div className="text-xs font-semibold mb-3 text-violet-300">Campaign Readiness Score</div>
+      <div className="flex items-start gap-5">
+        <div className="relative shrink-0">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="6" opacity="0.3" />
+            <circle cx="50" cy="50" r="42" fill="none" className={strokeColor} strokeWidth="6" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 50 50)" style={{ transition: "stroke-dashoffset 1s ease-out" }} />
+          </svg>
+          <div className={`absolute inset-0 flex items-center justify-center ${color}`}>
+            <span className="text-2xl font-bold">{score}</span>
+          </div>
+        </div>
+        {checklist.length > 0 && (
+          <div className="flex-1 space-y-1.5 pt-1">
+            {checklist.map((item, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs">
+                {item.passed ? (
+                  <CircleCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <CircleX className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <span className="font-medium">{item.label}</span>
+                  {item.reason && <span className="text-muted-foreground ml-1">— {item.reason}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function renderMarkdown(text: string) {
+  const cleaned = stripHiddenMarkers(text);
+  const lines = cleaned.split("\n");
   const elements: React.ReactNode[] = [];
   let i = 0;
 
@@ -156,11 +280,158 @@ function CopyButton({ text, msgId }: { text: string; msgId: number }) {
   );
 }
 
-const SUGGESTIONS = [
-  "Create a campaign plan for our top product",
-  "Design a full-funnel strategy for lead generation",
-  "What channels should we use for awareness?",
-  "Build a B2B campaign plan with our current content",
+function ExportPDFButton({ text, msgId }: { text: string; msgId: number }) {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      const contentWidth = pageWidth - margin * 2;
+      let y = 20;
+
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(88, 28, 135);
+      doc.text("Content Intelligence Analyst", margin, y);
+      y += 8;
+      doc.setFontSize(12);
+      doc.setTextColor(107, 114, 128);
+      doc.text("Campaign Plan Report", margin, y);
+      y += 6;
+      doc.setFontSize(9);
+      doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, margin, y);
+      y += 8;
+
+      doc.setDrawColor(139, 92, 246);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 8;
+
+      const cleaned = stripHiddenMarkers(text);
+      const lines = cleaned.split("\n");
+
+      for (const line of lines) {
+        if (y > doc.internal.pageSize.getHeight() - 20) {
+          doc.addPage();
+          y = 20;
+        }
+
+        if (line.startsWith("### ")) {
+          doc.setFontSize(11);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(30, 30, 30);
+          y += 3;
+          const wrappedLines = doc.splitTextToSize(line.slice(4), contentWidth);
+          doc.text(wrappedLines, margin, y);
+          y += wrappedLines.length * 5 + 2;
+        } else if (line.startsWith("## ")) {
+          doc.setFontSize(13);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(88, 28, 135);
+          y += 4;
+          const wrappedLines = doc.splitTextToSize(line.slice(3), contentWidth);
+          doc.text(wrappedLines, margin, y);
+          y += wrappedLines.length * 6 + 3;
+        } else if (line.startsWith("# ")) {
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(88, 28, 135);
+          y += 5;
+          const wrappedLines = doc.splitTextToSize(line.slice(2), contentWidth);
+          doc.text(wrappedLines, margin, y);
+          y += wrappedLines.length * 6 + 3;
+        } else if (line.startsWith("- ") || line.startsWith("* ")) {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+          const bulletText = `• ${line.slice(2).replace(/\*\*/g, "")}`;
+          const wrappedLines = doc.splitTextToSize(bulletText, contentWidth - 5);
+          doc.text(wrappedLines, margin + 3, y);
+          y += wrappedLines.length * 4.5 + 1;
+        } else if (/^\d+\.\s/.test(line)) {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+          const cleanLine = line.replace(/\*\*/g, "");
+          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth - 5);
+          doc.text(wrappedLines, margin + 3, y);
+          y += wrappedLines.length * 4.5 + 1;
+        } else if (line.trim() === "") {
+          y += 3;
+        } else if (line.startsWith("|")) {
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+          const cleanLine = line.replace(/\*\*/g, "");
+          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth);
+          doc.text(wrappedLines, margin, y);
+          y += wrappedLines.length * 3.5 + 1;
+        } else {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+          const cleanLine = line.replace(/\*\*/g, "");
+          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth);
+          doc.text(wrappedLines, margin, y);
+          y += wrappedLines.length * 4.5 + 1;
+        }
+      }
+
+      doc.save(`campaign-plan-${Date.now()}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleExport}
+      disabled={exporting}
+      className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground/60 hover:text-muted-foreground disabled:opacity-40"
+      title={exporting ? "Exporting..." : "Download as PDF"}
+      data-testid={`btn-export-pdf-${msgId}`}
+    >
+      <FileDown className={`h-3 w-3 ${exporting ? "animate-pulse" : ""}`} />
+    </button>
+  );
+}
+
+const TEMPLATES = [
+  {
+    id: "product-launch",
+    title: "Product Launch",
+    description: "Assess content effectiveness for a new product campaign",
+    icon: Rocket,
+    prompt: "I'm launching a new campaign for [product name] in [industry]. I plan to use a [content type — e.g., PDF, Webinar, Video] targeting the [TOFU/MOFU/BOFU] stage. Help me assess how similar content has performed in our data and build a campaign plan.",
+  },
+  {
+    id: "lead-generation",
+    title: "Lead Generation",
+    description: "Compare your content against top lead-gen performers",
+    icon: Users,
+    prompt: "I need to generate leads for [product name] using [content type — e.g., PDF, Demo, Webinar]. Compare it against our best-performing lead gen content in the same funnel stage and recommend a data-backed plan.",
+  },
+  {
+    id: "brand-awareness",
+    title: "Brand Awareness",
+    description: "Evaluate TOFU content performance for awareness campaigns",
+    icon: Eye,
+    prompt: "I want to increase brand awareness for [product name] with [content type — e.g., Blog, Video, SMA] at the TOFU stage. How has similar content performed in our data? What channels work best?",
+  },
+  {
+    id: "event-promotion",
+    title: "Event / Webinar",
+    description: "Plan an event promotion using data-backed content insights",
+    icon: CalendarDays,
+    prompt: "I'm promoting an event/webinar for [product name]. Based on our data, what content format works best at each funnel stage for event promotion? Build me a promotion plan.",
+  },
 ];
 
 export default function CampaignPlannerPage() {
@@ -222,6 +493,25 @@ export default function CampaignPlannerPage() {
       setMsgs([]);
       setShowList(false);
       fetchConversations();
+    } catch (e) {
+      console.error("Failed to create conversation", e);
+    }
+  }
+
+  async function createConversationWithTemplate(prompt: string) {
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "New Campaign", agent: "planner" }),
+      });
+      const conv = await res.json();
+      setActiveConv(conv);
+      setMsgs([]);
+      setShowList(false);
+      setInput(prompt);
+      fetchConversations();
+      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (e) {
       console.error("Failed to create conversation", e);
     }
@@ -333,6 +623,20 @@ export default function CampaignPlannerPage() {
     }
   }
 
+  function renderMessageWithVisuals(content: string, msgId: number) {
+    const budgetData = parseBudgetData(content);
+    const score = parseReadinessScore(content);
+    const checklist = score !== null ? parseChecklist(content) : [];
+
+    return (
+      <>
+        {renderMarkdown(content)}
+        {budgetData && <BudgetChart items={budgetData} />}
+        {score !== null && <ReadinessScore score={score} checklist={checklist} />}
+      </>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <TopNav />
@@ -354,13 +658,13 @@ export default function CampaignPlannerPage() {
               </div>
               <div>
                 <h1 className="text-xl font-[650] tracking-tight" data-testid="text-planner-title">Campaign Planner</h1>
-                <p className="text-sm text-muted-foreground">AI-powered campaign strategy builder</p>
+                <p className="text-sm text-muted-foreground">Content-effectiveness assessment & campaign strategy</p>
               </div>
             </div>
 
             <div className="mb-5 rounded-2xl border border-violet-500/20 bg-card/60 p-5 backdrop-blur" data-testid="card-planner-summary">
               <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                The Campaign Planner uses your uploaded content data to build tailored marketing campaign strategies. It analyzes your content library across funnel stages, channels, and products to create actionable plans.
+                Evaluate how your content will perform by comparing it against similar content already in your database. The planner matches by content type (PDF vs PDF, Webinar vs Webinar), funnel stage, industry, and product to give you data-backed benchmarks before you launch.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex items-start gap-2.5">
@@ -369,7 +673,7 @@ export default function CampaignPlannerPage() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold">What it does</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">Generates full campaign strategies with audience targeting, channel mix, budget allocation, and measurement plans.</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Compares your content piece against similar assets in the database, then builds a data-backed campaign plan with budget allocation and readiness scoring.</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
@@ -378,7 +682,7 @@ export default function CampaignPlannerPage() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold">Who it's for</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">Marketing managers, campaign leads, and strategists who need data-backed campaign plans.</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Marketing managers and campaign leads who want to predict content effectiveness before launching.</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
@@ -387,7 +691,7 @@ export default function CampaignPlannerPage() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold">How it works</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">Reads your content data, identifies products and channels, then asks clarifying questions before building your plan.</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Asks about your content type, product, funnel stage, and goal. Then compares like-for-like content (PDF vs PDF) from your data and benchmarks performance.</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
@@ -396,7 +700,7 @@ export default function CampaignPlannerPage() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold">When to use it</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">After uploading your content data. Start a plan when you need a full-funnel strategy, product launch plan, or channel mix recommendation.</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Before launching any campaign. Upload your content data first, then start a plan to assess how your content will perform based on historical data.</div>
                   </div>
                 </div>
               </div>
@@ -414,7 +718,7 @@ export default function CampaignPlannerPage() {
 
             {conversations.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground" data-testid="text-no-campaigns">
-                No campaign plans yet. Start a new one to get your strategy built.
+                No campaign plans yet. Start a new one or pick a template below.
               </div>
             ) : (
               <div className="space-y-2">
@@ -475,26 +779,27 @@ export default function CampaignPlannerPage() {
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pb-4">
               {msgs.length === 0 && !streamingContent && (
-                <div className="text-center py-12">
+                <div className="text-center py-8">
                   <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/30 mb-4">
                     <Target className="h-7 w-7 text-violet-400" />
                   </div>
                   <div className="text-lg font-semibold mb-1">Campaign Planner</div>
                   <div className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-                    I'll build a campaign strategy based on your data — industry, products, channels, budget & more.
+                    Choose a template below or describe your campaign to get started. I'll compare your content against our database and build a data-backed plan.
                   </div>
-                  <div className="grid gap-2 max-w-md mx-auto">
-                    {SUGGESTIONS.map((q) => (
+                  <div className="grid gap-3 sm:grid-cols-2 max-w-lg mx-auto">
+                    {TEMPLATES.map((t) => (
                       <button
-                        key={q}
-                        onClick={() => {
-                          setInput(q);
-                          setTimeout(() => inputRef.current?.focus(), 50);
-                        }}
-                        className="text-left text-sm rounded-xl border bg-card/60 px-4 py-3 hover:bg-card/80 transition text-muted-foreground hover:text-foreground"
-                        data-testid={`planner-suggestion-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
+                        key={t.id}
+                        onClick={() => createConversationWithTemplate(t.prompt)}
+                        className="text-left rounded-xl border border-violet-500/20 bg-card/60 px-4 py-3 hover:bg-card/80 hover:border-violet-500/40 transition group"
+                        data-testid={`template-${t.id}`}
                       >
-                        {q}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <t.icon className="h-4 w-4 text-violet-400" />
+                          <span className="text-sm font-semibold">{t.title}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{t.description}</p>
                       </button>
                     ))}
                   </div>
@@ -515,7 +820,7 @@ export default function CampaignPlannerPage() {
                           : "bg-muted/50 border"
                       }`}
                     >
-                      {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                      {msg.role === "assistant" ? renderMessageWithVisuals(msg.content, msg.id) : msg.content}
                     </div>
                     {msg.role === "assistant" && (
                       <div className="flex items-center gap-2 mt-1 ml-1">
@@ -526,6 +831,7 @@ export default function CampaignPlannerPage() {
                           </div>
                         )}
                         <CopyButton text={msg.content} msgId={msg.id} />
+                        <ExportPDFButton text={msg.content} msgId={msg.id} />
                       </div>
                     )}
                   </div>
@@ -561,7 +867,7 @@ export default function CampaignPlannerPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Describe your campaign goals..."
+                  placeholder="Describe your content and campaign goals..."
                   rows={1}
                   className="flex-1 resize-none rounded-xl border bg-card/60 px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-violet-400/50 placeholder:text-muted-foreground/60"
                   data-testid="input-planner-message"

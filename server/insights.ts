@@ -53,13 +53,37 @@ export interface InsightsSummary {
   }>;
   top_content: Array<{
     contentId: string;
+    name: string;
     stage: string;
     product: string;
     channel: string;
     cta: string;
+    contentType: string;
+    objective: string;
     pageviews: number;
+    downloads: number;
     leads: number;
     sqos: number;
+    avgTime: number;
+  }>;
+  content_type_mix: Array<{
+    contentType: string;
+    count: number;
+    pageviews: number;
+    downloads: number;
+    leads: number;
+    sqos: number;
+    avgTime: number;
+  }>;
+  content_type_stage_matrix: Array<{
+    contentType: string;
+    stage: string;
+    count: number;
+    pageviews: number;
+    downloads: number;
+    leads: number;
+    sqos: number;
+    avgTime: number;
   }>;
 }
 
@@ -134,17 +158,52 @@ export async function buildInsightsSummary(): Promise<InsightsSummary | null> {
   const topContent = await db
     .select({
       contentId: assetsAgg.contentId,
+      name: assetsAgg.name,
       stage: assetsAgg.stage,
       product: assetsAgg.productFranchise,
       channel: assetsAgg.utmChannel,
       cta: assetsAgg.cta,
+      contentType: assetsAgg.typecampaignmember,
+      objective: assetsAgg.objective,
       pageviews: assetsAgg.pageviewsSum,
+      downloads: assetsAgg.downloadsSum,
       leads: assetsAgg.uniqueLeads,
       sqos: assetsAgg.sqoCount,
+      avgTime: assetsAgg.timeAvg,
     })
     .from(assetsAgg)
     .orderBy(sql`${assetsAgg.sqoCount} desc, ${assetsAgg.pageviewsSum} desc`)
-    .limit(25);
+    .limit(50);
+
+  const contentTypeMix = await db
+    .select({
+      contentType: assetsAgg.typecampaignmember,
+      count: sql<number>`count(*)`,
+      pageviews: sql<number>`coalesce(sum(${assetsAgg.pageviewsSum}), 0)`,
+      downloads: sql<number>`coalesce(sum(${assetsAgg.downloadsSum}), 0)`,
+      leads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
+      sqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
+      avgTime: sql<number>`coalesce(round(avg(${assetsAgg.timeAvg})::numeric, 1), 0)`,
+    })
+    .from(assetsAgg)
+    .groupBy(assetsAgg.typecampaignmember)
+    .orderBy(sql`count(*) desc`)
+    .limit(20);
+
+  const contentTypeStageMatrix = await db
+    .select({
+      contentType: assetsAgg.typecampaignmember,
+      stage: assetsAgg.stage,
+      count: sql<number>`count(*)`,
+      pageviews: sql<number>`coalesce(sum(${assetsAgg.pageviewsSum}), 0)`,
+      downloads: sql<number>`coalesce(sum(${assetsAgg.downloadsSum}), 0)`,
+      leads: sql<number>`coalesce(sum(${assetsAgg.uniqueLeads}), 0)`,
+      sqos: sql<number>`coalesce(sum(${assetsAgg.sqoCount}), 0)`,
+      avgTime: sql<number>`coalesce(round(avg(${assetsAgg.timeAvg})::numeric, 1), 0)`,
+    })
+    .from(assetsAgg)
+    .groupBy(assetsAgg.typecampaignmember, assetsAgg.stage)
+    .orderBy(sql`${assetsAgg.typecampaignmember}`, sql`${assetsAgg.stage}`);
 
   return {
     dataset_info: {
@@ -197,13 +256,37 @@ export async function buildInsightsSummary(): Promise<InsightsSummary | null> {
     })),
     top_content: topContent.map((t) => ({
       contentId: t.contentId ?? "N/A",
+      name: t.name || "N/A",
       stage: t.stage ?? "UNKNOWN",
       product: t.product || "N/A",
       channel: t.channel || "N/A",
       cta: t.cta || "N/A",
+      contentType: t.contentType || "N/A",
+      objective: t.objective || "N/A",
       pageviews: Number(t.pageviews ?? 0),
+      downloads: Number(t.downloads ?? 0),
       leads: Number(t.leads ?? 0),
       sqos: Number(t.sqos ?? 0),
+      avgTime: Number(t.avgTime ?? 0),
+    })),
+    content_type_mix: contentTypeMix.map((c) => ({
+      contentType: c.contentType || "(unknown)",
+      count: Number(c.count),
+      pageviews: Number(c.pageviews),
+      downloads: Number(c.downloads),
+      leads: Number(c.leads),
+      sqos: Number(c.sqos),
+      avgTime: Number(c.avgTime),
+    })),
+    content_type_stage_matrix: contentTypeStageMatrix.map((c) => ({
+      contentType: c.contentType || "(unknown)",
+      stage: c.stage ?? "UNKNOWN",
+      count: Number(c.count),
+      pageviews: Number(c.pageviews),
+      downloads: Number(c.downloads),
+      leads: Number(c.leads),
+      sqos: Number(c.sqos),
+      avgTime: Number(c.avgTime),
     })),
   };
 }
