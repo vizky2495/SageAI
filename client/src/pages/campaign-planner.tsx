@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check } from "lucide-react";
+import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import TopNav from "@/components/top-nav";
@@ -355,6 +355,50 @@ export default function CampaignPlannerPage() {
               <div>
                 <h1 className="text-xl font-[650] tracking-tight" data-testid="text-planner-title">Campaign Planner</h1>
                 <p className="text-sm text-muted-foreground">AI-powered campaign strategy builder</p>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-2xl border border-violet-500/20 bg-card/60 p-5 backdrop-blur" data-testid="card-planner-summary">
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                The Campaign Planner uses your uploaded content data to build tailored marketing campaign strategies. It analyzes your content library across funnel stages, channels, and products to create actionable plans.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+                    <Lightbulb className="h-3.5 w-3.5 text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold">What it does</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Generates full campaign strategies with audience targeting, channel mix, budget allocation, and measurement plans.</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+                    <Users className="h-3.5 w-3.5 text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold">Who it's for</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Marketing managers, campaign leads, and strategists who need data-backed campaign plans.</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+                    <BarChart3 className="h-3.5 w-3.5 text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold">How it works</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">Reads your content data, identifies products and channels, then asks clarifying questions before building your plan.</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10">
+                    <Layers className="h-3.5 w-3.5 text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold">When to use it</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">After uploading your content data. Start a plan when you need a full-funnel strategy, product launch plan, or channel mix recommendation.</div>
+                  </div>
+                </div>
               </div>
             </div>
 
