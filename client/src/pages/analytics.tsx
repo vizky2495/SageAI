@@ -1,4 +1,5 @@
 import TopNav from "@/components/top-nav";
+import PageChat from "@/components/page-chat";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -747,6 +748,21 @@ export default function AnalyticsPage() {
           </Tabs>
         </motion.div>
       </div>
+      <PageChat
+        agent="cia"
+        agentName="CIA Agent"
+        description="Ask me about your marketing data, funnel performance, channel analysis, or any KPI."
+        placeholder="Ask about your marketing data..."
+        accentColor="text-emerald-400"
+        accentBg="bg-emerald-400"
+        accentRing="ring-emerald-400/50"
+        fallbackSuggestions={[
+          "What is the content breakdown across funnel stages?",
+          "Show me the channel distribution",
+          "Which product has the most content?",
+          "What are the top content assets by time on page?",
+        ]}
+      />
     </div>
   );
 }

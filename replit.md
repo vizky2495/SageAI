@@ -94,7 +94,8 @@ attached_assets/  → Reference documents (agent prompts/specs)
 
 - **PostgreSQL** — Primary database, connected via `DATABASE_URL` environment variable. Uses `pg` (node-postgres) connection pool
 - **Admin authentication** — Upload/ingest routes protected by `requireAdmin` middleware; token-based auth via `POST /api/admin/login` with `ADMIN_PASSWORD` secret; tokens stored in `sessionStorage` as `"admin_token"`
-- **Claude AI (Anthropic)** — CIA Agent and Campaign Planner use `claude-sonnet-4-5` via Replit AI integrations (`@anthropic-ai/sdk`). CIA agent uses grounded context from `buildInsightsSummary()` (server/insights.ts) with deterministic pre-checks for missing metrics, fuzzy field matching, and strict data-only system prompt. Conversation history limited to last 4 exchanges to save tokens. Retry logic on failed LLM streams.
+- **Claude AI (Anthropic)** — CIA Agent, Campaign Planner, and Content Librarian use `claude-sonnet-4-5` via Replit AI integrations (`@anthropic-ai/sdk`). CIA agent uses grounded context from `buildInsightsSummary()` (server/insights.ts) with deterministic pre-checks for missing metrics, fuzzy field matching, and strict data-only system prompt. Conversation history limited to last 4 exchanges to save tokens. Retry logic on failed LLM streams.
+- **Per-page chat agents**: Each page has its own embedded chat agent via `PageChat` component (no global floating chatbot). Content Performance & Analytics use CIA agent, Content Library uses Librarian agent, Campaign Planner has full-page chat.
 - **Chat API**: `GET /api/chat/suggestions` returns dynamic suggested questions and dataset label based on actual data; `GET /api/insights/summary` returns structured JSON truth layer
 - **Replit-specific plugins** — `@replit/vite-plugin-runtime-error-modal`, `@replit/vite-plugin-cartographer`, `@replit/vite-plugin-dev-banner` for development on Replit
 - **Google Fonts** — DM Sans, Geist, Geist Mono loaded via CDN

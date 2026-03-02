@@ -10,7 +10,6 @@ import ContentLibraryPage from "@/pages/content-library-page";
 import CampaignPlannerPage from "@/pages/campaign-planner";
 
 import AdminPage from "@/pages/admin";
-import AIChatbot from "@/components/ai-chatbot";
 import { queryClient } from "./lib/queryClient";
 
 function Router() {
@@ -34,7 +33,6 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
-        <AIChatbot />
       </TooltipProvider>
     </QueryClientProvider>
   );

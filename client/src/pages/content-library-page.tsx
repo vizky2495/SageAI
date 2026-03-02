@@ -1,4 +1,5 @@
 import TopNav from "@/components/top-nav";
+import PageChat from "@/components/page-chat";
 import ContentLibrary from "@/components/content-library";
 import { motion } from "framer-motion";
 import { Library } from "lucide-react";
@@ -44,6 +45,21 @@ export default function ContentLibraryPage() {
           <ContentLibrary />
         </motion.div>
       </div>
+      <PageChat
+        agent="librarian"
+        agentName="Content Librarian"
+        description="I can help you find, explore, and understand content assets in your library."
+        placeholder="Search for content assets..."
+        accentColor="text-amber-400"
+        accentBg="bg-amber-400"
+        accentRing="ring-amber-400/50"
+        fallbackSuggestions={[
+          "What content do we have for TOFU stage?",
+          "Show me all Intacct content assets",
+          "Which products have the most content coverage?",
+          "What content gaps exist across funnel stages?",
+        ]}
+      />
     </div>
   );
 }
