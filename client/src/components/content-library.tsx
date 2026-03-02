@@ -599,13 +599,6 @@ export default function ContentLibrary() {
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
             <Library className="h-4 w-4" />
           </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium" data-testid="text-library-title">
-                Content Library
-              </div>
-            </div>
-          </div>
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
