@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Library, BarChart3, Target, ArrowRight } from "lucide-react";
+import OnboardingTour, { TourResetButton } from "@/components/onboarding-tour";
 
 const cards = [
   {
@@ -53,6 +54,7 @@ const cardVariants = {
 export default function HubPage() {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16">
+      <OnboardingTour />
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_50%_20%,hsl(145_100%_42%/0.08),transparent_60%),radial-gradient(800px_circle_at_20%_80%,hsl(200_80%_50%/0.06),transparent_55%),radial-gradient(800px_circle_at_80%_70%,hsl(270_60%_50%/0.06),transparent_55%)]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/60" />
@@ -117,6 +119,15 @@ export default function HubPage() {
             </motion.div>
           );
         })}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8, duration: 0.5 }}
+        className="mt-8"
+      >
+        <TourResetButton />
       </motion.div>
     </div>
   );
