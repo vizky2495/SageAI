@@ -1,13 +1,12 @@
 # Overview
 
-**Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV and Excel (.xlsx) files containing marketing performance data, uses Claude Opus AI to intelligently map columns to the standardized schema, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards. It also includes a **Prompt Studio** for managing and versioning AI prompt configurations used by the Content Intelligence Analyst agent, with collaborator tracking.
+**Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV and Excel (.xlsx) files containing marketing performance data, uses Claude Opus AI to intelligently map columns to the standardized schema, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards.
 
 The app has a multi-page architecture:
 1. **Dashboard Overview** (`/`) — Clean overview with KPI cards (TOFU/MOFU/BOFU), compact funnel area chart, quick-glance top channels/products, and navigation cards to Analytics & Content Library
 2. **Deep Dive Analytics** (`/analytics`) — Full filter bar (stage, type, channel, product, industry, campaign), CTA Breakdown bar charts per stage, Channel/Product/Industry mix cards with stage drilldowns, CTA Analysis table, Top Content tables
 3. **Content Library** (`/content-library`) — Browse all content assets by funnel stage, search by content ID, infinite scroll, URL preview
 4. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
-5. **Prompt Studio** (`/prompt-studio`) — CRUD interface for prompt versions and collaborators, supporting version tagging, compiled prompt content, and risk-level tracking
 
 **Shared data hook**: `client/src/hooks/use-funnel-data.ts` exports `useFunnelData()` hook (returns { rows, dataLoading, uploadDiagnostics, byStage }), all shared types (NormalizedRow, FunnelStage, StageKey, TopContentRow, TopByStage, UploadDiagnostics), and utility functions (sum, pct, formatCompact, formatPct, stageMeta). Used by both the Dashboard and Analytics pages.
 
@@ -33,10 +32,6 @@ Preferred communication style: Simple, everyday language.
 - **Runtime**: Node.js with Express 5
 - **Language**: TypeScript, run via `tsx` in development
 - **API Pattern**: RESTful JSON API under `/api/` prefix
-  - `/api/versions` — CRUD for prompt versions (GET, POST, PATCH, DELETE)
-  - `/api/collaborators` — CRUD for collaborators (GET, POST, PATCH, DELETE)
-  - `/api/compile` — POST: deterministic compilation of collaborator layers into a single prompt
-  - `/api/diff/:versionId/:compareId` — GET: line-level diff between two versions
   - `/api/assets/upload-excel` — POST: parse Excel (.xlsx) files sent as base64, returns headers + rows
   - `/api/assets/analyze` — POST: sends headers + sample rows to Claude Opus for intelligent column mapping
   - `/api/assets/ingest-mapped` — POST: uses AI-generated column mapping to ingest rows without dropping mismatched columns
@@ -52,14 +47,11 @@ Preferred communication style: Simple, everyday language.
 - **ORM**: Drizzle ORM with `node-postgres` driver
 - **Schema Location**: `shared/schema.ts` — shared between client and server
 - **Tables**:
-  - `prompt_versions` — id (UUID), tag, author, summary, status (draft/released/latest), promptsCount, compiledSize, compiledContent, createdAt
-  - `collaborators` — id (UUID), name, initials, file, focus, risk (low/medium/high), layerContent, lastEditedAt
   - `assets_agg` — id (UUID), contentId, stage (TOFU/MOFU/BOFU/UNKNOWN), name, url, typecampaignmember, productFranchise, utmChannel, utmCampaign, utmMedium, utmTerm, utmContent, formName, cta, objective, productCategory, campaignId, campaignName, dateStamp, pageviewsSum, timeAvg, downloadsSum, uniqueLeads, sqoCount, createdAt
   - `conversations` — id (serial), title, agent (cia/planner), createdAt
   - `messages` — id (serial), conversationId, role (user/assistant), content, createdAt
-- **Custom Enums**: `version_status` (draft, released, latest), `risk_level` (low, medium, high)
+- **Custom Enums**: `funnel_stage` (TOFU, MOFU, BOFU, UNKNOWN)
 - **Migrations**: Drizzle Kit with `drizzle-kit push` command (`npm run db:push`). Migration output goes to `./migrations`
-- **Seeding**: `server/seed.ts` provides initial data for prompt versions and collaborators
 
 ## Storage Layer
 
@@ -82,7 +74,7 @@ client/           → React frontend
     components/   → Shared components (top-nav, ui/)
     hooks/        → Custom React hooks
     lib/          → Utilities (queryClient, utils)
-    pages/        → Page components (funnel-dashboard, prompt-studio, admin, not-found)
+    pages/        → Page components (funnel-dashboard, analytics, content-library-page, admin, not-found)
 server/           → Express backend
   index.ts        → Entry point, middleware setup
   routes.ts       → API route registration

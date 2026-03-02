@@ -6,7 +6,7 @@ import NotFound from "@/pages/not-found";
 import FunnelDashboard from "@/pages/funnel-dashboard";
 import AnalyticsPage from "@/pages/analytics";
 import ContentLibraryPage from "@/pages/content-library-page";
-import PromptStudio from "@/pages/prompt-studio";
+
 import AdminPage from "@/pages/admin";
 import AIChatbot from "@/components/ai-chatbot";
 import { queryClient } from "./lib/queryClient";
@@ -18,7 +18,7 @@ function Router() {
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/content-library" component={ContentLibraryPage} />
       <Route path="/admin" component={AdminPage} />
-      <Route path="/prompt-studio" component={PromptStudio} />
+
       <Route component={NotFound} />
     </Switch>
   );
