@@ -604,9 +604,6 @@ export default function ContentLibrary() {
               <div className="text-sm font-medium" data-testid="text-library-title">
                 Content Library
               </div>
-              <Badge variant="secondary" className="rounded-xl border bg-card/60">
-                Browse by stage
-              </Badge>
             </div>
           </div>
           <div className="relative w-full max-w-sm">
