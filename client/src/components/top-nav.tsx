@@ -12,7 +12,6 @@ const nav: NavItem[] = [
   { label: "Dashboard", href: "/", testId: "link-nav-dashboard" },
   { label: "Analytics", href: "/analytics", testId: "link-nav-analytics" },
   { label: "Content Library", href: "/content-library", testId: "link-nav-content-library" },
-  { label: "Prompt Studio", href: "/prompt-studio", testId: "link-nav-prompt-studio" },
 ];
 
 export default function TopNav() {
