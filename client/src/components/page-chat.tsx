@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check } from "lucide-react";
+import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -370,212 +370,236 @@ export default function PageChat({
     <>
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-20 right-6 z-50 w-[420px] h-[600px] rounded-2xl border bg-card shadow-2xl flex flex-col overflow-hidden"
-            data-testid={`chat-panel-${agent}`}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-card/90 backdrop-blur shrink-0">
-              <div className="flex items-center gap-2">
-                {!showList && activeConv && (
-                  <button
-                    onClick={() => setShowList(true)}
-                    className="p-1 rounded-lg hover:bg-muted/50 transition-colors"
-                    data-testid={`btn-back-${agent}`}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                )}
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] md:hidden"
+              onClick={() => setIsOpen(false)}
+              data-testid={`chat-overlay-${agent}`}
+            />
+
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              className="fixed top-0 right-0 z-50 h-full w-full sm:w-[420px] border-l border-border/40 bg-card shadow-2xl flex flex-col"
+              data-testid={`chat-panel-${agent}`}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-card/90 backdrop-blur shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full animate-pulse ${accentBg}`} />
-                  <span className="text-sm font-semibold">
-                    {showList ? agentName : (activeConv?.title || "New Chat")}
-                  </span>
+                  {!showList && activeConv && (
+                    <button
+                      onClick={() => setShowList(true)}
+                      className="p-1 rounded-lg hover:bg-muted/50 transition-colors"
+                      data-testid={`btn-back-${agent}`}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full animate-pulse ${accentBg}`} />
+                    <span className="text-sm font-semibold">
+                      {showList ? agentName : (activeConv?.title || "New Chat")}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={createConversation}
-                  className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-                  title="New chat"
-                  data-testid={`btn-new-chat-${agent}`}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-                  data-testid={`btn-close-chat-${agent}`}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {showList ? (
-              <div className="flex-1 overflow-y-auto p-3">
-                <div className="mb-3">
-                  <Button
+                <div className="flex items-center gap-1">
+                  <button
                     onClick={createConversation}
-                    className="w-full rounded-xl"
-                    variant="outline"
-                    data-testid={`btn-new-conv-${agent}`}
+                    className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                    title="New chat"
+                    data-testid={`btn-new-chat-${agent}`}
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    New conversation
-                  </Button>
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                    data-testid={`btn-close-chat-${agent}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                {conversations.length === 0 ? (
-                  <div className="text-center text-sm text-muted-foreground py-8">
-                    No conversations yet. Start a new chat to talk to {agentName}.
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {conversations.map((conv) => (
-                      <div
-                        key={conv.id}
-                        onClick={() => openConversation(conv)}
-                        className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 cursor-pointer hover:bg-card/80 transition group"
-                        data-testid={`conv-item-${agent}-${conv.id}`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{conv.title}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(conv.createdAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => deleteConversation(conv.id, e)}
-                          className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all"
-                          data-testid={`btn-delete-conv-${agent}-${conv.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            ) : (
-              <>
-                <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
-                  {msgs.length === 0 && !streamingContent && (
-                    <div className="text-center py-8">
-                      <div className="text-lg font-semibold mb-1">{agentName}</div>
-                      <div className="text-sm text-muted-foreground mb-4">
-                        {description}
-                      </div>
-                      <div className="grid gap-2">
-                        {suggestions.map((q) => (
-                          <button
-                            key={q}
-                            onClick={() => {
-                              setInput(q);
-                              setTimeout(() => inputRef.current?.focus(), 50);
-                            }}
-                            className="text-left text-xs rounded-xl border bg-card/60 px-3 py-2 hover:bg-card/80 transition text-muted-foreground hover:text-foreground"
-                            data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
-                          >
-                            {q}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
-                  {msgs.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      data-testid={`msg-${agent}-${msg.role}-${msg.id}`}
-                    >
-                      <div className="max-w-[85%]">
-                        <div
-                          className={`rounded-2xl px-3.5 py-2.5 text-sm ${
-                            msg.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted/50 border"
-                          }`}
-                        >
-                          {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
-                        </div>
-                        {msg.role === "assistant" && (
-                          <div className="flex items-center gap-2 mt-1 ml-1">
-                            {msg.grounded && (
-                              <div className="flex items-center gap-1" data-testid={`badge-grounded-${agent}-${msg.id}`}>
-                                <ShieldCheck className={`h-3 w-3 ${accentColor}`} />
-                                <span className={`text-[10px] ${accentColor} opacity-80 font-medium`}>Grounded</span>
-                              </div>
-                            )}
-                            <CopyButton text={msg.content} msgId={msg.id} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {streamingContent && (
-                    <div className="flex justify-start" data-testid={`msg-streaming-${agent}`}>
-                      <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border">
-                        {renderMarkdown(streamingContent)}
-                        <span className={`inline-block w-1.5 h-4 ${accentBg} opacity-60 animate-pulse ml-0.5 rounded-sm`} />
-                      </div>
-                    </div>
-                  )}
-
-                  {isStreaming && !streamingContent && (
-                    <div className="flex justify-start" data-testid={`msg-thinking-${agent}`}>
-                      <div className="rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "0ms" }} />
-                          <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "150ms" }} />
-                          <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "300ms" }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-3 border-t shrink-0">
-                  <div className="flex items-end gap-2">
-                    <textarea
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={placeholder}
-                      className={`flex-1 resize-none rounded-xl border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:ring-1 ${accentRing} min-h-[40px] max-h-[100px]`}
-                      rows={1}
-                      disabled={isStreaming}
-                      data-testid={`input-chat-${agent}`}
-                    />
+              {showList ? (
+                <div className="flex-1 overflow-y-auto p-3">
+                  <div className="mb-3">
                     <Button
-                      size="icon"
-                      className="rounded-xl h-10 w-10 shrink-0"
-                      onClick={sendMessage}
-                      disabled={!input.trim() || isStreaming}
-                      data-testid={`btn-send-${agent}`}
+                      onClick={createConversation}
+                      className="w-full rounded-xl"
+                      variant="outline"
+                      data-testid={`btn-new-conv-${agent}`}
                     >
-                      <Send className="h-4 w-4" />
+                      <Plus className="h-4 w-4 mr-2" />
+                      New conversation
                     </Button>
                   </div>
+                  {conversations.length === 0 ? (
+                    <div className="text-center text-sm text-muted-foreground py-8">
+                      No conversations yet. Start a new chat to talk to {agentName}.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {conversations.map((conv) => (
+                        <div
+                          key={conv.id}
+                          onClick={() => openConversation(conv)}
+                          className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2.5 cursor-pointer hover:bg-card/80 transition group"
+                          data-testid={`conv-item-${agent}-${conv.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium truncate">{conv.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(conv.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => deleteConversation(conv.id, e)}
+                            className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all"
+                            data-testid={`btn-delete-conv-${agent}-${conv.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </>
-            )}
-          </motion.div>
+              ) : (
+                <>
+                  <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {msgs.length === 0 && !streamingContent && (
+                      <div className="text-center py-8">
+                        <div className="text-lg font-semibold mb-1">{agentName}</div>
+                        <div className="text-sm text-muted-foreground mb-4">
+                          {description}
+                        </div>
+                        <div className="grid gap-2">
+                          {suggestions.map((q) => (
+                            <button
+                              key={q}
+                              onClick={() => {
+                                setInput(q);
+                                setTimeout(() => inputRef.current?.focus(), 50);
+                              }}
+                              className="text-left text-xs rounded-xl border bg-card/60 px-3 py-2 hover:bg-card/80 transition text-muted-foreground hover:text-foreground"
+                              data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
+                            >
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {msgs.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                        data-testid={`msg-${agent}-${msg.role}-${msg.id}`}
+                      >
+                        <div className="max-w-[85%]">
+                          <div
+                            className={`rounded-2xl px-3.5 py-2.5 text-sm ${
+                              msg.role === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted/50 border"
+                            }`}
+                          >
+                            {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                          </div>
+                          {msg.role === "assistant" && (
+                            <div className="flex items-center gap-2 mt-1 ml-1">
+                              {msg.grounded && (
+                                <div className="flex items-center gap-1" data-testid={`badge-grounded-${agent}-${msg.id}`}>
+                                  <ShieldCheck className={`h-3 w-3 ${accentColor}`} />
+                                  <span className={`text-[10px] ${accentColor} opacity-80 font-medium`}>Grounded</span>
+                                </div>
+                              )}
+                              <CopyButton text={msg.content} msgId={msg.id} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {streamingContent && (
+                      <div className="flex justify-start" data-testid={`msg-streaming-${agent}`}>
+                        <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border">
+                          {renderMarkdown(streamingContent)}
+                          <span className={`inline-block w-1.5 h-4 ${accentBg} opacity-60 animate-pulse ml-0.5 rounded-sm`} />
+                        </div>
+                      </div>
+                    )}
+
+                    {isStreaming && !streamingContent && (
+                      <div className="flex justify-start" data-testid={`msg-thinking-${agent}`}>
+                        <div className="rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "0ms" }} />
+                            <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "150ms" }} />
+                            <div className={`h-1.5 w-1.5 rounded-full ${accentBg} opacity-60 animate-bounce`} style={{ animationDelay: "300ms" }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 border-t shrink-0">
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        ref={inputRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={placeholder}
+                        className={`flex-1 resize-none rounded-xl border bg-muted/30 px-3 py-2.5 text-sm outline-none focus:ring-1 ${accentRing} min-h-[40px] max-h-[100px]`}
+                        rows={1}
+                        disabled={isStreaming}
+                        data-testid={`input-chat-${agent}`}
+                      />
+                      <Button
+                        size="icon"
+                        className="rounded-xl h-10 w-10 shrink-0"
+                        onClick={sendMessage}
+                        disabled={!input.trim() || isStreaming}
+                        data-testid={`btn-send-${agent}`}
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform ${isOpen ? "bg-muted text-foreground" : `${accentBg} ${accentColor}`} ring-1 ${accentRing}`}
-        data-testid={`btn-toggle-chat-${agent}`}
-      >
-        {isOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
-      </button>
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            onClick={() => setIsOpen(true)}
+            className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-border/50 bg-card/90 backdrop-blur shadow-lg px-4 py-2.5 hover:shadow-xl hover:border-border/80 transition-all group`}
+            data-testid={`btn-toggle-chat-${agent}`}
+          >
+            <div className={`h-7 w-7 rounded-full flex items-center justify-center ring-1 ${accentRing}`} style={{ background: "hsl(var(--muted)/0.5)" }}>
+              <Sparkles className={`h-3.5 w-3.5 ${accentColor}`} />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+              Ask {agentName}
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </>
   );
 }

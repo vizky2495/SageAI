@@ -11,7 +11,7 @@ type NavItem = {
 const nav: NavItem[] = [
   { label: "Performance", href: "/performance", testId: "link-nav-performance" },
   { label: "Analytics", href: "/analytics", testId: "link-nav-analytics" },
-  { label: "Content Library", href: "/content-library", testId: "link-nav-content-library" },
+  { label: "My Reports", href: "/reports", testId: "link-nav-reports" },
 ];
 
 export default function TopNav() {
