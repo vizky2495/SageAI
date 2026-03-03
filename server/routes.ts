@@ -52,7 +52,7 @@ export async function registerRoutes(
         }
       } else {
         if (!firstName?.trim() || !lastName?.trim()) {
-          return res.status(400).json({ message: "First name and last name are required for new users." });
+          return res.status(400).json({ message: "Looks like you're new here! Please enter your first and last name to get started.", needsName: true });
         }
         user = await storage.createUser({ displayName: emailLower, firstName: firstName.trim(), lastName: lastName.trim(), isAdmin: isAdminRole });
       }

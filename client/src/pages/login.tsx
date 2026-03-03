@@ -19,7 +19,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [role, setRole] = useState<"user" | "admin">("user");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isReturningUser, setIsReturningUser] = useState(false);
+  const [showNameFields, setShowNameFields] = useState(false);
 
   useEffect(() => {
     try {
@@ -28,7 +28,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         const parsed = JSON.parse(saved);
         if (parsed?.displayName) {
           setEmail(parsed.displayName);
-          setIsReturningUser(true);
         }
       }
     } catch {}
@@ -50,7 +49,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       setError("Only @sage.com email addresses are allowed.");
       return;
     }
-    if (!isReturningUser && (!firstName.trim() || !lastName.trim())) {
+    if (showNameFields && (!firstName.trim() || !lastName.trim())) {
       setError("Please enter your first and last name.");
       return;
     }
@@ -71,7 +70,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message || "Login failed.");
+        if (data.needsName) {
+          setShowNameFields(true);
+          setError(data.message || "Please enter your name to complete registration.");
+        } else {
+          setError(data.message || "Login failed.");
+        }
         setLoading(false);
         return;
       }
@@ -120,9 +124,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 shadow-2xl"
           data-testid="form-login"
         >
-          <h2 className="text-lg font-semibold mb-5 text-center">
-            {isReturningUser ? "Welcome Back" : "Sign In"}
-          </h2>
+          <h2 className="text-lg font-semibold mb-5 text-center">Sign In</h2>
 
           <div className="flex items-center gap-1.5 mb-5 p-1 rounded-xl bg-muted/30 border border-border/30">
             <button
@@ -154,8 +156,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <div className="space-y-3">
-            {!isReturningUser && (
-              <div className="grid grid-cols-2 gap-3">
+            {showNameFields && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="grid grid-cols-2 gap-3"
+              >
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">First Name</label>
                   <div className="relative">
@@ -182,7 +189,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                     data-testid="input-last-name"
                   />
                 </div>
-              </div>
+              </motion.div>
             )}
 
             <div>
@@ -192,16 +199,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (isReturningUser && e.target.value !== email) {
-                      setIsReturningUser(false);
-                    }
-                  }}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@sage.com"
                   className="w-full h-10 pl-9 pr-3 rounded-lg bg-muted/30 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                   data-testid="input-email"
-                  autoFocus={isReturningUser}
+                  autoFocus={!showNameFields}
                 />
               </div>
               <p className="text-[10px] text-muted-foreground/50 mt-1">Only @sage.com addresses</p>
