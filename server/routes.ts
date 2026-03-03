@@ -106,6 +106,87 @@ export async function registerRoutes(
   const MAX_PDF_SIZE_MB = 20;
   const MAX_PDF_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
+  function ruleBasedClassify(text: string, pageCount: number, filename: string): {
+    contentType: string; stage: string; product: string; industry: string; topic: string; confidence: number;
+  } {
+    const lower = text.toLowerCase();
+    const fn = filename.toLowerCase();
+
+    let contentType = "Document";
+    if (fn.includes("whitepaper") || fn.includes("white-paper") || pageCount >= 8) contentType = "Whitepaper";
+    else if (fn.includes("ebook") || fn.includes("e-book") || pageCount >= 15) contentType = "eBook";
+    else if (fn.includes("case") || lower.includes("case study") || lower.includes("customer story")) contentType = "Case Study";
+    else if (fn.includes("datasheet") || fn.includes("data-sheet") || lower.includes("data sheet")) contentType = "Datasheet";
+    else if (fn.includes("guide") || lower.includes("step-by-step") || lower.includes("how to")) contentType = "Guide";
+    else if (fn.includes("infographic")) contentType = "Infographic";
+    else if (fn.includes("brochure")) contentType = "Brochure";
+    else if (fn.includes("checklist")) contentType = "Checklist";
+    else if (fn.includes("webinar") || lower.includes("webinar")) contentType = "Webinar";
+    else if (pageCount <= 2) contentType = "Flyer";
+
+    let stage = "TOFU";
+    if (lower.includes("demo") || lower.includes("pricing") || lower.includes("roi") || lower.includes("implementation") || lower.includes("case study") || lower.includes("proposal")) stage = "BOFU";
+    else if (lower.includes("comparison") || lower.includes("evaluation") || lower.includes("buyer") || lower.includes("solution") || lower.includes("feature") || lower.includes("integration")) stage = "MOFU";
+
+    const products: Record<string, string[]> = {
+      "Sage Intacct": ["intacct", "sage intacct"],
+      "Sage X3": ["sage x3", "enterprise management"],
+      "Sage 200": ["sage 200"],
+      "Sage 300": ["sage 300"],
+      "Sage 50": ["sage 50"],
+      "Sage HR": ["sage hr", "sage people", "human resource"],
+      "Sage Payroll": ["payroll"],
+      "Sage CRM": ["sage crm"],
+    };
+    let product = "General";
+    for (const [name, kws] of Object.entries(products)) {
+      if (kws.some(k => lower.includes(k))) { product = name; break; }
+    }
+
+    const industries: Record<string, string[]> = {
+      "Financial Services": ["financial services", "banking", "fintech", "insurance"],
+      "Healthcare": ["healthcare", "hospital", "medical", "hipaa"],
+      "Manufacturing": ["manufacturing", "supply chain", "inventory"],
+      "Nonprofit": ["nonprofit", "non-profit", "charity", "foundation"],
+      "Construction": ["construction", "contractor", "project costing"],
+      "Professional Services": ["professional services", "consulting", "legal"],
+      "Technology": ["saas", "software", "cloud", "technology"],
+      "Retail": ["retail", "e-commerce", "ecommerce", "pos"],
+      "Real Estate": ["real estate", "property management"],
+      "Education": ["education", "university", "school"],
+    };
+    let industry = "General";
+    for (const [name, kws] of Object.entries(industries)) {
+      if (kws.some(k => lower.includes(k))) { industry = name; break; }
+    }
+
+    let topic = "Business Management";
+    const topicMap: Record<string, string[]> = {
+      "Cloud ERP": ["cloud erp", "erp solution", "enterprise resource"],
+      "Financial Management": ["accounting", "financial management", "general ledger", "accounts payable", "accounts receivable"],
+      "Digital Transformation": ["digital transformation", "automation", "modernize"],
+      "Compliance": ["compliance", "audit", "regulation", "gaap", "ifrs"],
+      "Reporting & Analytics": ["reporting", "analytics", "dashboard", "business intelligence"],
+    };
+    for (const [name, kws] of Object.entries(topicMap)) {
+      if (kws.some(k => lower.includes(k))) { topic = name; break; }
+    }
+
+    return { contentType, stage, product, industry, topic, confidence: 0.5 };
+  }
+
+  function parseJsonRobust(raw: string): any {
+    let cleaned = raw.trim();
+    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) cleaned = fenceMatch[1].trim();
+    const braceStart = cleaned.indexOf("{");
+    const braceEnd = cleaned.lastIndexOf("}");
+    if (braceStart !== -1 && braceEnd > braceStart) {
+      cleaned = cleaned.slice(braceStart, braceEnd + 1);
+    }
+    return JSON.parse(cleaned);
+  }
+
   app.post("/api/assets/extract-pdf", requireAuth, async (req: Request, res: Response) => {
     try {
       const { fileBase64, filename } = req.body as { fileBase64?: string; filename?: string };
@@ -128,11 +209,71 @@ export async function registerRoutes(
       }
       const text = (parsed.text || "").trim();
       const wordCount = text ? text.split(/\s+/).length : 0;
+      const pageCount = parsed.numpages || 0;
+
+      const textSnippet = text.slice(0, 2000);
+      let classification: any = null;
+      let isFallback = false;
+
+      try {
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+        const msg = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 200,
+          system: `You are a B2B content classifier for Sage, an accounting and business management software company. Given extracted PDF text and metadata, classify the content. Return ONLY valid JSON with these fields:
+{"contentType":"<Whitepaper|eBook|Case Study|Datasheet|Guide|Infographic|Brochure|Checklist|Webinar|Flyer|Report|Document>","stage":"<TOFU|MOFU|BOFU>","product":"<Sage product name or General>","industry":"<target industry or General>","topic":"<primary topic>","confidence":<0.0-1.0>}
+No explanation, no markdown, no extra text. Only JSON.`,
+          messages: [
+            { role: "user", content: `Filename: ${filename}\nPages: ${pageCount}\nWord count: ${wordCount}\n\nText excerpt:\n${textSnippet}` },
+          ],
+        });
+        const raw = (msg.content[0] as any).text || "";
+        classification = parseJsonRobust(raw);
+        if (!classification.contentType || !classification.stage) throw new Error("Missing fields");
+      } catch (aiErr) {
+        console.error("AI classification failed, using rule-based fallback:", aiErr);
+        classification = ruleBasedClassify(text, pageCount, filename);
+        isFallback = true;
+      }
+
+      let benchmarks: any[] = [];
+      try {
+        const allAssets = await storage.getAllAssets();
+        const matches = allAssets.filter(a =>
+          a.stage === classification.stage &&
+          a.typecampaignmember &&
+          a.typecampaignmember.toLowerCase().includes(classification.contentType.toLowerCase().split(" ")[0])
+        );
+        const sameProduct = classification.product !== "General"
+          ? matches.filter(a => a.productFranchise && a.productFranchise.toLowerCase().includes(classification.product.toLowerCase().split(" ").pop()!))
+          : matches;
+        const pool = sameProduct.length >= 3 ? sameProduct : matches;
+        const sorted = pool.sort((a, b) => ((b.pageviewsSum || 0) + (b.uniqueLeads || 0) * 10) - ((a.pageviewsSum || 0) + (a.uniqueLeads || 0) * 10));
+        benchmarks = sorted.slice(0, 5).map(a => ({
+          contentId: a.contentId,
+          name: a.name,
+          stage: a.stage,
+          type: a.typecampaignmember,
+          product: a.productFranchise,
+          channel: a.utmChannel,
+          pageviews: a.pageviewsSum || 0,
+          downloads: a.downloadsSum || 0,
+          leads: a.uniqueLeads || 0,
+          sqos: a.sqoCount || 0,
+          avgTime: a.timeAvg || 0,
+        }));
+      } catch (benchErr) {
+        console.error("Benchmark lookup failed:", benchErr);
+      }
+
       res.json({
         filename,
-        pageCount: parsed.numpages || 0,
+        pageCount,
         wordCount,
         text,
+        classification,
+        isFallback,
+        benchmarks,
       });
     } catch (error: any) {
       console.error("PDF extraction error:", error);

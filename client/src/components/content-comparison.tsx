@@ -13,16 +13,44 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  CheckCircle2,
-  Minus,
-  Plus,
+  AlertTriangle,
+  Tag,
+  TrendingUp,
+  BarChart3,
+  Layers,
 } from "lucide-react";
+
+interface Classification {
+  contentType: string;
+  stage: string;
+  product: string;
+  industry: string;
+  topic: string;
+  confidence: number;
+}
+
+interface Benchmark {
+  contentId: string;
+  name: string;
+  stage: string;
+  type: string;
+  product: string;
+  channel: string;
+  pageviews: number;
+  downloads: number;
+  leads: number;
+  sqos: number;
+  avgTime: number;
+}
 
 interface PdfResult {
   filename: string;
   pageCount: number;
   wordCount: number;
   text: string;
+  classification: Classification;
+  isFallback: boolean;
+  benchmarks: Benchmark[];
 }
 
 interface SlotState {
@@ -46,27 +74,99 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function StatBox({ label, valueA, valueB }: { label: string; valueA: number; valueB: number }) {
-  const diff = valueA - valueB;
-  const pct = valueB > 0 ? ((diff / valueB) * 100).toFixed(0) : diff > 0 ? "+100" : "0";
+const stageBadgeColors: Record<string, string> = {
+  TOFU: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+  MOFU: "bg-sky-500/15 text-sky-400 border-sky-500/25",
+  BOFU: "bg-violet-500/15 text-violet-400 border-violet-500/25",
+};
+
+function ClassificationCard({ result, label }: { result: PdfResult; label: string }) {
+  const c = result.classification;
+  const stageColor = stageBadgeColors[c.stage] || "bg-muted text-muted-foreground border-border";
+
   return (
-    <div className="flex flex-col items-center gap-1 rounded-xl bg-muted/30 border border-border/30 p-3 min-w-[100px]">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-3">
-        <span className="text-lg font-bold tabular-nums" data-testid={`stat-a-${label.toLowerCase().replace(/\s/g, "-")}`}>
-          {valueA.toLocaleString()}
-        </span>
-        <span className="text-muted-foreground/40">vs</span>
-        <span className="text-lg font-bold tabular-nums" data-testid={`stat-b-${label.toLowerCase().replace(/\s/g, "-")}`}>
-          {valueB.toLocaleString()}
-        </span>
+    <div className="flex flex-col gap-3" data-testid={`classification-${label.toLowerCase()}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm font-medium truncate">{result.filename}</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Badge variant="outline" className="text-[10px]">{result.pageCount}p</Badge>
+          <Badge variant="outline" className="text-[10px]">{result.wordCount.toLocaleString()}w</Badge>
+        </div>
       </div>
-      {diff !== 0 && (
-        <div className={`flex items-center gap-0.5 text-xs font-medium ${diff > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-          {diff > 0 ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-          <span>{Math.abs(diff).toLocaleString()} ({diff > 0 ? "+" : ""}{pct}%)</span>
+
+      {result.isFallback && (
+        <div className="flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>AI classification unavailable — using rule-based fallback</span>
         </div>
       )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Content Type</span>
+          <span className="text-sm font-semibold" data-testid={`text-type-${label.toLowerCase()}`}>{c.contentType}</span>
+        </div>
+        <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Funnel Stage</span>
+          <Badge className={`${stageColor} border text-[10px]`} data-testid={`badge-stage-${label.toLowerCase()}`}>{c.stage}</Badge>
+        </div>
+        <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Product</span>
+          <span className="text-xs font-medium" data-testid={`text-product-${label.toLowerCase()}`}>{c.product}</span>
+        </div>
+        <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Industry</span>
+          <span className="text-xs font-medium" data-testid={`text-industry-${label.toLowerCase()}`}>{c.industry}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Tag className="h-3.5 w-3.5 text-muted-foreground/50" />
+        <span className="text-xs text-muted-foreground">{c.topic}</span>
+        <span className="ml-auto text-[10px] text-muted-foreground/60">
+          {Math.round(c.confidence * 100)}% confidence
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BenchmarkTable({ benchmarks, label }: { benchmarks: Benchmark[]; label: string }) {
+  if (benchmarks.length === 0) return null;
+  return (
+    <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden" data-testid={`benchmarks-${label.toLowerCase()}`}>
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted/20 border-b border-border/30">
+        <TrendingUp className="h-3.5 w-3.5 text-primary" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Similar Content Benchmarks</span>
+        <Badge variant="outline" className="text-[9px] ml-auto">{benchmarks.length} matches</Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border/20">
+              <th className="text-left px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content</th>
+              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Views</th>
+              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Leads</th>
+              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">SQOs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {benchmarks.map((b, i) => (
+              <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-muted/10 transition-colors">
+                <td className="px-3 py-1.5 max-w-[200px] truncate" title={b.name || b.contentId}>
+                  {b.name || b.contentId}
+                </td>
+                <td className="text-right px-2 py-1.5 tabular-nums">{b.pageviews.toLocaleString()}</td>
+                <td className="text-right px-2 py-1.5 tabular-nums">{b.leads.toLocaleString()}</td>
+                <td className="text-right px-2 py-1.5 tabular-nums">{b.sqos.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -105,37 +205,29 @@ function UploadSlot({
   );
 
   if (slot.result) {
-    const previewText = slot.result.text.slice(0, 500);
-    const hasMore = slot.result.text.length > 500;
+    const previewText = slot.result.text.slice(0, 300);
+    const hasMore = slot.result.text.length > 300;
     return (
       <div className="flex flex-col gap-3 flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <FileText className={`h-4 w-4 shrink-0 ${accentColor}`} />
-            <span className="text-sm font-medium truncate" data-testid={`text-filename-${label.toLowerCase()}`}>
-              {slot.result.filename}
-            </span>
-          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
           <button
             onClick={onClear}
             className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted/50 transition-colors shrink-0"
-            data-testid={`btn-clear-${label.toLowerCase()}`}
+            data-testid={`btn-clear-${label.toLowerCase().replace(/\s/g, "-")}`}
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="flex gap-2">
-          <Badge variant="secondary" className="border bg-card/70" data-testid={`badge-pages-${label.toLowerCase()}`}>
-            {slot.result.pageCount} {slot.result.pageCount === 1 ? "page" : "pages"}
-          </Badge>
-          <Badge variant="secondary" className="border bg-card/70" data-testid={`badge-words-${label.toLowerCase()}`}>
-            {slot.result.wordCount.toLocaleString()} words
-          </Badge>
-        </div>
+        <ClassificationCard result={slot.result} label={label} />
+        <BenchmarkTable benchmarks={slot.result.benchmarks} label={label} />
 
-        <div className="rounded-xl bg-muted/20 border border-border/30 p-3">
-          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words" data-testid={`text-preview-${label.toLowerCase()}`}>
+        <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Extracted Text</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words" data-testid={`text-preview-${label.toLowerCase().replace(/\s/g, "-")}`}>
             {textExpanded ? slot.result.text : previewText}
             {!textExpanded && hasMore && "..."}
           </p>
@@ -143,7 +235,7 @@ function UploadSlot({
             <button
               onClick={() => setTextExpanded(!textExpanded)}
               className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
-              data-testid={`btn-expand-${label.toLowerCase()}`}
+              data-testid={`btn-expand-${label.toLowerCase().replace(/\s/g, "-")}`}
             >
               {textExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               {textExpanded ? "Show less" : "Show full text"}
@@ -162,12 +254,12 @@ function UploadSlot({
         className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border/40 bg-muted/10 p-8 cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-all ${
           slot.loading ? "pointer-events-none opacity-60" : ""
         }`}
-        data-testid={`dropzone-${label.toLowerCase()}`}
+        data-testid={`dropzone-${label.toLowerCase().replace(/\s/g, "-")}`}
       >
         {slot.loading ? (
           <>
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
-            <span className="text-xs text-muted-foreground">Extracting text...</span>
+            <span className="text-xs text-muted-foreground">Classifying content...</span>
           </>
         ) : (
           <>
@@ -185,7 +277,7 @@ function UploadSlot({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-1.5 mt-2 text-xs text-destructive"
-          data-testid={`text-error-${label.toLowerCase()}`}
+          data-testid={`text-error-${label.toLowerCase().replace(/\s/g, "-")}`}
         >
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {slot.error}
@@ -196,15 +288,18 @@ function UploadSlot({
 }
 
 function ComparisonSummary({ a, b }: { a: PdfResult; b: PdfResult }) {
+  const ca = a.classification;
+  const cb = b.classification;
+  const sameStage = ca.stage === cb.stage;
+  const sameType = ca.contentType.toLowerCase() === cb.contentType.toLowerCase();
+  const comparable = sameStage && sameType;
+
   const wordsA = new Set(a.text.toLowerCase().split(/\s+/).filter(w => w.length > 3));
   const wordsB = new Set(b.text.toLowerCase().split(/\s+/).filter(w => w.length > 3));
   const shared = [...wordsA].filter(w => wordsB.has(w));
   const overlapPct = wordsA.size > 0 || wordsB.size > 0
     ? ((shared.length * 2) / (wordsA.size + wordsB.size) * 100).toFixed(1)
     : "0";
-
-  const sentencesA = a.text.split(/[.!?]+/).filter(s => s.trim().length > 10).length;
-  const sentencesB = b.text.split(/[.!?]+/).filter(s => s.trim().length > 10).length;
 
   return (
     <motion.div
@@ -214,56 +309,103 @@ function ComparisonSummary({ a, b }: { a: PdfResult; b: PdfResult }) {
     >
       <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="comparison-summary">
         <div className="flex items-center gap-2 mb-4">
-          <ArrowLeftRight className="h-4 w-4 text-primary" />
+          <BarChart3 className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Comparison Results</h3>
+          {comparable ? (
+            <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] ml-auto">
+              Comparable ({ca.stage} {ca.contentType})
+            </Badge>
+          ) : (
+            <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/25 text-[10px] ml-auto">
+              Different {!sameStage ? "stages" : "types"}
+            </Badge>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-3 mb-4">
-          <StatBox label="Pages" valueA={a.pageCount} valueB={b.pageCount} />
-          <StatBox label="Words" valueA={a.wordCount} valueB={b.wordCount} />
-          <StatBox label="Sentences" valueA={sentencesA} valueB={sentencesB} />
-        </div>
-
-        <div className="rounded-xl bg-muted/20 border border-border/30 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vocabulary Overlap</span>
-            <span className="text-sm font-bold" data-testid="text-overlap-pct">{overlapPct}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${overlapPct}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
-            />
-          </div>
-          <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
-            <span>{wordsA.size.toLocaleString()} unique words in A</span>
-            <span>{shared.length.toLocaleString()} shared</span>
-            <span>{wordsB.size.toLocaleString()} unique words in B</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="rounded-xl bg-muted/20 border border-border/30 p-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Only in A</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed" data-testid="text-unique-a">
-              {[...wordsA].filter(w => !wordsB.has(w)).slice(0, 20).join(", ") || "None"}
-              {[...wordsA].filter(w => !wordsB.has(w)).length > 20 && ` (+${[...wordsA].filter(w => !wordsB.has(w)).length - 20} more)`}
-            </p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left text-[9px] font-semibold uppercase text-muted-foreground pb-1.5">Attribute</th>
+                  <th className="text-left text-[9px] font-semibold uppercase text-muted-foreground pb-1.5">Doc A</th>
+                  <th className="text-left text-[9px] font-semibold uppercase text-muted-foreground pb-1.5">Doc B</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/20">
+                <tr>
+                  <td className="py-1 text-muted-foreground">Type</td>
+                  <td className="py-1 font-medium">{ca.contentType}</td>
+                  <td className="py-1 font-medium">{cb.contentType}</td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-muted-foreground">Stage</td>
+                  <td className="py-1"><Badge className={`${stageBadgeColors[ca.stage] || ""} border text-[9px]`}>{ca.stage}</Badge></td>
+                  <td className="py-1"><Badge className={`${stageBadgeColors[cb.stage] || ""} border text-[9px]`}>{cb.stage}</Badge></td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-muted-foreground">Product</td>
+                  <td className="py-1 font-medium">{ca.product}</td>
+                  <td className="py-1 font-medium">{cb.product}</td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-muted-foreground">Industry</td>
+                  <td className="py-1 font-medium">{ca.industry}</td>
+                  <td className="py-1 font-medium">{cb.industry}</td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-muted-foreground">Pages</td>
+                  <td className="py-1 font-medium tabular-nums">{a.pageCount}</td>
+                  <td className="py-1 font-medium tabular-nums">{b.pageCount}</td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-muted-foreground">Words</td>
+                  <td className="py-1 font-medium tabular-nums">{a.wordCount.toLocaleString()}</td>
+                  <td className="py-1 font-medium tabular-nums">{b.wordCount.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div className="rounded-xl bg-muted/20 border border-border/30 p-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-sky-400" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Only in B</span>
+
+          <div className="rounded-xl bg-muted/20 border border-border/30 p-3 flex flex-col gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Vocabulary Overlap</span>
+                <span className="text-sm font-bold" data-testid="text-overlap-pct">{overlapPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${overlapPct}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
+                />
+              </div>
+              <div className="flex justify-between mt-1 text-[9px] text-muted-foreground">
+                <span>{wordsA.size.toLocaleString()} in A</span>
+                <span>{shared.length.toLocaleString()} shared</span>
+                <span>{wordsB.size.toLocaleString()} in B</span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed" data-testid="text-unique-b">
-              {[...wordsB].filter(w => !wordsA.has(w)).slice(0, 20).join(", ") || "None"}
-              {[...wordsB].filter(w => !wordsA.has(w)).length > 20 && ` (+${[...wordsB].filter(w => !wordsA.has(w)).length - 20} more)`}
-            </p>
+
+            {!comparable && (
+              <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2.5">
+                <Layers className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                  These documents have different {!sameStage && !sameType ? "stages and content types" : !sameStage ? "funnel stages" : "content types"}.
+                  For the most meaningful comparison, upload content with the same stage and type.
+                </p>
+              </div>
+            )}
+
+            {comparable && (
+              <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
+                <Layers className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-emerald-300/80 leading-relaxed">
+                  Both are {ca.stage} {ca.contentType}s — a like-for-like comparison. Check benchmarks to see how similar content performs.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -321,7 +463,7 @@ export default function ContentComparison() {
           </div>
           <div className="text-left">
             <h3 className="text-sm font-semibold">Content Comparison</h3>
-            <p className="text-[11px] text-muted-foreground">Upload two PDFs to compare content side by side</p>
+            <p className="text-[11px] text-muted-foreground">Upload two PDFs to classify, compare, and benchmark against existing content</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
