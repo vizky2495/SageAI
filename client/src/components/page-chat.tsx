@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Sparkles } from "lucide-react";
+import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -592,7 +592,7 @@ export default function PageChat({
             data-testid={`btn-toggle-chat-${agent}`}
           >
             <div className={`h-7 w-7 rounded-full flex items-center justify-center ring-1 ${accentRing}`} style={{ background: "hsl(var(--muted)/0.5)" }}>
-              <Sparkles className={`h-3.5 w-3.5 ${accentColor}`} />
+              <MessageSquare className={`h-3.5 w-3.5 ${accentColor}`} />
             </div>
             <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
               Ask {agentName}
