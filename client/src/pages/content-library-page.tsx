@@ -1,6 +1,7 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import ContentLibrary from "@/components/content-library";
+import ContentComparison from "@/components/content-comparison";
 import { motion } from "framer-motion";
 import { Library } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,9 @@ export default function ContentLibraryPage() {
             </div>
           </header>
 
+          <div className="mb-4">
+            <ContentComparison />
+          </div>
           <ContentLibrary />
         </motion.div>
       </div>

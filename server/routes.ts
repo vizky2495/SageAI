@@ -103,6 +103,43 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  const MAX_PDF_SIZE_MB = 20;
+  const MAX_PDF_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+
+  app.post("/api/assets/extract-pdf", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { fileBase64, filename } = req.body as { fileBase64?: string; filename?: string };
+      if (!fileBase64 || !filename) {
+        return res.status(400).json({ error: "File and filename are required." });
+      }
+      if (!filename.toLowerCase().endsWith(".pdf")) {
+        return res.status(400).json({ error: "Only PDF files are supported." });
+      }
+      const pdfParse = (await import("pdf-parse")).default;
+      const buffer = Buffer.from(fileBase64, "base64");
+      if (buffer.length > MAX_PDF_BYTES) {
+        return res.status(413).json({ error: `PDF exceeds the ${MAX_PDF_SIZE_MB}MB size limit.` });
+      }
+      let parsed: any;
+      try {
+        parsed = await pdfParse(buffer);
+      } catch (parseErr: any) {
+        return res.status(422).json({ error: "Failed to extract text from PDF. The file may be corrupted or image-only." });
+      }
+      const text = (parsed.text || "").trim();
+      const wordCount = text ? text.split(/\s+/).length : 0;
+      res.json({
+        filename,
+        pageCount: parsed.numpages || 0,
+        wordCount,
+        text,
+      });
+    } catch (error: any) {
+      console.error("PDF extraction error:", error);
+      res.status(500).json({ error: "PDF extraction failed.", detail: error?.message });
+    }
+  });
+
   app.post("/api/assets/ingest", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body as { rows: any[] };
