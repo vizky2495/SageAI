@@ -4,8 +4,8 @@ import { eq, desc, and } from "drizzle-orm";
 
 export interface IChatStorage {
   getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;
-  getAllConversations(agent?: string): Promise<(typeof conversations.$inferSelect)[]>;
-  createConversation(title: string, agent?: string): Promise<typeof conversations.$inferSelect>;
+  getAllConversations(agent?: string, userId?: string): Promise<(typeof conversations.$inferSelect)[]>;
+  createConversation(title: string, agent?: string, userId?: string): Promise<typeof conversations.$inferSelect>;
   updateConversationTitle(id: number, title: string): Promise<void>;
   deleteConversation(id: number): Promise<void>;
   getMessagesByConversation(conversationId: number): Promise<(typeof messages.$inferSelect)[]>;
@@ -18,15 +18,19 @@ export const chatStorage: IChatStorage = {
     return conversation;
   },
 
-  async getAllConversations(agent?: string) {
-    if (agent) {
-      return db.select().from(conversations).where(eq(conversations.agent, agent)).orderBy(desc(conversations.createdAt));
+  async getAllConversations(agent?: string, userId?: string) {
+    const conditions = [];
+    if (agent) conditions.push(eq(conversations.agent, agent));
+    if (userId) conditions.push(eq(conversations.userId, userId));
+
+    if (conditions.length > 0) {
+      return db.select().from(conversations).where(and(...conditions)).orderBy(desc(conversations.createdAt));
     }
     return db.select().from(conversations).orderBy(desc(conversations.createdAt));
   },
 
-  async createConversation(title: string, agent: string = "cia") {
-    const [conversation] = await db.insert(conversations).values({ title, agent }).returning();
+  async createConversation(title: string, agent: string = "cia", userId?: string) {
+    const [conversation] = await db.insert(conversations).values({ title, agent, userId: userId || null }).returning();
     return conversation;
   },
 

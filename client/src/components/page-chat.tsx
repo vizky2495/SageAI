@@ -1,7 +1,17 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Paperclip, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+
+function getUserId(): string {
+  const key = "cia_user_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
 
 interface Message {
   id: number;
@@ -191,6 +201,7 @@ export default function PageChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userId = useMemo(() => getUserId(), []);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -227,7 +238,7 @@ export default function PageChat({
 
   async function fetchConversations() {
     try {
-      const res = await fetch(`/api/conversations?agent=${agent}`);
+      const res = await fetch(`/api/conversations?agent=${agent}&userId=${userId}`);
       const data = await res.json();
       setConversations(data);
     } catch (e) {
@@ -252,7 +263,7 @@ export default function PageChat({
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Chat", agent }),
+        body: JSON.stringify({ title: "New Chat", agent, userId }),
       });
       const conv = await res.json();
       setActiveConv(conv);

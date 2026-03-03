@@ -348,7 +348,8 @@ export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations", async (req: Request, res: Response) => {
     try {
       const agent = (req.query.agent as string) || undefined;
-      const convos = await chatStorage.getAllConversations(agent);
+      const userId = (req.query.userId as string) || undefined;
+      const convos = await chatStorage.getAllConversations(agent, userId);
 
       for (const conv of convos) {
         if (conv.title === "New Chat") {
@@ -372,9 +373,13 @@ export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = (req.query.userId as string) || undefined;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
+      }
+      if (conversation.userId && userId && conversation.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
       }
       const messages = await chatStorage.getMessagesByConversation(id);
       res.json({ ...conversation, messages });
@@ -386,8 +391,8 @@ export function registerChatRoutes(app: Express): void {
 
   app.post("/api/conversations", async (req: Request, res: Response) => {
     try {
-      const { title, agent } = req.body;
-      const conversation = await chatStorage.createConversation(title || "New Chat", agent || "cia");
+      const { title, agent, userId } = req.body;
+      const conversation = await chatStorage.createConversation(title || "New Chat", agent || "cia", userId || undefined);
       res.status(201).json(conversation);
     } catch (error) {
       console.error("Error creating conversation:", error);
@@ -398,6 +403,14 @@ export function registerChatRoutes(app: Express): void {
   app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = (req.query.userId as string) || undefined;
+      const conversation = await chatStorage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      if (conversation.userId && userId && conversation.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       await chatStorage.deleteConversation(id);
       res.status(204).send();
     } catch (error) {

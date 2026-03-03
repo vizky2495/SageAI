@@ -1,5 +1,15 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX } from "lucide-react";
+
+function getUserId(): string {
+  const key = "cia_user_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import TopNav from "@/components/top-nav";
@@ -444,6 +454,7 @@ export default function CampaignPlannerPage() {
   const [showList, setShowList] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const userId = useMemo(() => getUserId(), []);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -461,7 +472,7 @@ export default function CampaignPlannerPage() {
 
   async function fetchConversations() {
     try {
-      const res = await fetch("/api/conversations?agent=planner");
+      const res = await fetch(`/api/conversations?agent=planner&userId=${userId}`);
       const data = await res.json();
       setConversations(data);
     } catch (e) {
@@ -486,7 +497,7 @@ export default function CampaignPlannerPage() {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Campaign", agent: "planner" }),
+        body: JSON.stringify({ title: "New Campaign", agent: "planner", userId }),
       });
       const conv = await res.json();
       setActiveConv(conv);
@@ -503,7 +514,7 @@ export default function CampaignPlannerPage() {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Campaign", agent: "planner" }),
+        body: JSON.stringify({ title: "New Campaign", agent: "planner", userId }),
       });
       const conv = await res.json();
       setActiveConv(conv);

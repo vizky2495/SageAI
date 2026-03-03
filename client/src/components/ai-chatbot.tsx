@@ -1,5 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, ShieldCheck, Copy, Check } from "lucide-react";
+
+function getUserId(): string {
+  const key = "cia_user_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -219,6 +229,7 @@ export default function AIChatbot() {
   const [datasetLabel, setDatasetLabel] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const userId = useMemo(() => getUserId(), []);
 
   const agentConfig = AGENTS.find(a => a.id === activeAgent)!;
 
@@ -260,7 +271,7 @@ export default function AIChatbot() {
 
   async function fetchConversations() {
     try {
-      const res = await fetch(`/api/conversations?agent=${activeAgent}`);
+      const res = await fetch(`/api/conversations?agent=${activeAgent}&userId=${userId}`);
       const data = await res.json();
       setConversations(data);
     } catch (e) {
@@ -285,7 +296,7 @@ export default function AIChatbot() {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Chat", agent: activeAgent }),
+        body: JSON.stringify({ title: "New Chat", agent: activeAgent, userId }),
       });
       const conv = await res.json();
       setActiveConv(conv);
