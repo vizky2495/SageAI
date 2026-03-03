@@ -1,16 +1,7 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX } from "lucide-react";
-
-function getUserId(): string {
-  const key = "cia_user_id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import TopNav from "@/components/top-nav";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -454,7 +445,8 @@ export default function CampaignPlannerPage() {
   const [showList, setShowList] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const userId = useMemo(() => getUserId(), []);
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {

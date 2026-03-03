@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Library, BarChart3, Target, ArrowRight } from "lucide-react";
+import { Library, BarChart3, Target, ArrowRight, LogOut } from "lucide-react";
 import OnboardingTour, { TourResetButton } from "@/components/onboarding-tour";
 import FeedbackButton from "@/components/feedback-button";
+import { useAuth } from "@/lib/auth";
 
 interface CardDef {
   title: string;
@@ -187,10 +188,34 @@ function HubCard({ card, index }: { card: CardDef; index: number }) {
 }
 
 export default function HubPage() {
+  const { user, logout } = useAuth();
+
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16">
       <OnboardingTour />
       <FeedbackButton />
+
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card/70 backdrop-blur px-3 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground" data-testid="text-user-name">
+            {user?.displayName}
+          </span>
+          {user?.isAdmin && (
+            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30" data-testid="badge-admin">
+              Admin
+            </span>
+          )}
+        </div>
+        <button
+          onClick={logout}
+          className="h-8 w-8 rounded-full border border-border/50 bg-card/70 backdrop-blur flex items-center justify-center hover:bg-destructive/20 hover:border-destructive/40 transition-colors"
+          title="Sign out"
+          data-testid="btn-logout"
+        >
+          <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </div>
+
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_50%_20%,hsl(145_100%_42%/0.08),transparent_60%),radial-gradient(800px_circle_at_20%_80%,hsl(200_80%_50%/0.06),transparent_55%),radial-gradient(800px_circle_at_80%_70%,hsl(270_60%_50%/0.06),transparent_55%)]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/60" />

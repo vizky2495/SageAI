@@ -5,12 +5,14 @@ import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 
 type FeedbackType = "suggestion" | "bug";
 
 export default function FeedbackButton() {
   const [location, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<FeedbackType>("suggestion");
   const [title, setTitle] = useState("");
@@ -95,7 +97,7 @@ export default function FeedbackButton() {
                 <div className="p-4 border-b border-border/40">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold">Send Feedback</h3>
-                    {sessionStorage.getItem("admin_token") && (
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => navigate("/feedback")}

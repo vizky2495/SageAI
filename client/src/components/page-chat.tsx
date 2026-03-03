@@ -1,17 +1,8 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Paperclip, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-
-function getUserId(): string {
-  const key = "cia_user_id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
+import { useAuth } from "@/lib/auth";
 
 interface Message {
   id: number;
@@ -201,7 +192,8 @@ export default function PageChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const userId = useMemo(() => getUserId(), []);
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {

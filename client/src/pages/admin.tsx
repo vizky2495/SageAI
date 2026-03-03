@@ -1,6 +1,6 @@
 import TopNav from "@/components/top-nav";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Brain,
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth";
 
 type FunnelStage = "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
 
@@ -279,10 +280,18 @@ function adminHeaders(): Record<string, string> {
 }
 
 export default function AdminPage() {
+  const { isAdmin, token: authToken } = useAuth();
   const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin && authToken && !authenticated) {
+      setAdminToken(authToken);
+      setAuthenticated(true);
+    }
+  }, [isAdmin, authToken, authenticated]);
 
   const [aiStep, setAiStep] = useState<AiStep>("idle");
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);

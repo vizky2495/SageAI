@@ -1,17 +1,8 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, ShieldCheck, Copy, Check } from "lucide-react";
-
-function getUserId(): string {
-  const key = "cia_user_id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/lib/auth";
 
 type AgentType = "cia" | "planner";
 
@@ -229,7 +220,8 @@ export default function AIChatbot() {
   const [datasetLabel, setDatasetLabel] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const userId = useMemo(() => getUserId(), []);
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
 
   const agentConfig = AGENTS.find(a => a.id === activeAgent)!;
 

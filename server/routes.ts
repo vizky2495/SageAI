@@ -11,6 +11,7 @@ import crypto from "crypto";
 import { buildInsightsSummary } from "./insights";
 
 const adminTokens = new Set<string>();
+const authSessions = new Map<string, { userId: string; isAdmin: boolean }>();
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
@@ -28,6 +29,57 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { displayName, password, role } = req.body as { displayName?: string; password?: string; role?: string };
+      if (!displayName?.trim() || !password) {
+        return res.status(400).json({ message: "Display name and password are required." });
+      }
+      const isAdminRole = role === "admin";
+      const expectedPassword = isAdminRole ? process.env.ADMIN_PASSWORD : process.env.USER_PASSWORD;
+      if (!expectedPassword) {
+        return res.status(500).json({ message: `${isAdminRole ? "Admin" : "User"} password not configured.` });
+      }
+      if (password !== expectedPassword) {
+        return res.status(401).json({ message: "Invalid password." });
+      }
+      let user = await storage.getUserByDisplayName(displayName.trim());
+      if (user) {
+        if (isAdminRole && !user.isAdmin) {
+          user = await storage.updateUserAdmin(user.id, true) || user;
+        }
+      } else {
+        user = await storage.createUser({ displayName: displayName.trim(), isAdmin: isAdminRole });
+      }
+      const token = crypto.randomUUID();
+      authSessions.set(token, { userId: user.id, isAdmin: user.isAdmin });
+      if (user.isAdmin) {
+        adminTokens.add(token);
+      }
+      res.json({ token, user: { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin } });
+    } catch (error) {
+      console.error("Auth login error:", error);
+      res.status(500).json({ message: "Login failed." });
+    }
+  });
+
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const token = auth.slice(7);
+    const session = authSessions.get(token);
+    if (!session) {
+      return res.status(401).json({ message: "Invalid or expired session" });
+    }
+    const user = await storage.getUserById(session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    res.json({ id: user.id, displayName: user.displayName, isAdmin: user.isAdmin });
+  });
 
   app.post("/api/admin/login", (req: Request, res: Response) => {
     const { password } = req.body as { password?: string };

@@ -5,6 +5,9 @@ import {
   type Feedback,
   type InsertFeedback,
   feedback,
+  type User,
+  type InsertUser,
+  users,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
@@ -22,6 +25,10 @@ export interface IStorage {
   createFeedback(item: InsertFeedback): Promise<Feedback>;
   getFeedback(opts: { type?: string; status?: string }): Promise<Feedback[]>;
   updateFeedbackStatus(id: number, status: string): Promise<Feedback | null>;
+  getUserByDisplayName(displayName: string): Promise<User | null>;
+  createUser(data: InsertUser): Promise<User>;
+  getUserById(id: string): Promise<User | null>;
+  updateUserAdmin(id: string, isAdmin: boolean): Promise<User | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -94,6 +101,26 @@ export class DatabaseStorage implements IStorage {
 
   async updateFeedbackStatus(id: number, status: string): Promise<Feedback | null> {
     const [row] = await db.update(feedback).set({ status: status as any }).where(eq(feedback.id, id)).returning();
+    return row ?? null;
+  }
+
+  async getUserByDisplayName(displayName: string): Promise<User | null> {
+    const [row] = await db.select().from(users).where(eq(users.displayName, displayName));
+    return row ?? null;
+  }
+
+  async createUser(data: InsertUser): Promise<User> {
+    const [row] = await db.insert(users).values(data).returning();
+    return row;
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const [row] = await db.select().from(users).where(eq(users.id, id));
+    return row ?? null;
+  }
+
+  async updateUserAdmin(id: string, isAdmin: boolean): Promise<User | null> {
+    const [row] = await db.update(users).set({ isAdmin }).where(eq(users.id, id)).returning();
     return row ?? null;
   }
 }

@@ -10,9 +10,10 @@ import ContentLibraryPage from "@/pages/content-library-page";
 import CampaignPlannerPage from "@/pages/campaign-planner";
 import FeedbackPage from "@/pages/feedback";
 import ReportsDashboard from "@/pages/reports-dashboard";
-
+import LoginPage from "@/pages/login";
 import AdminPage from "@/pages/admin";
 import { queryClient } from "./lib/queryClient";
+import { AuthProvider, useAuth } from "./lib/auth";
 
 function Router() {
   return (
@@ -25,18 +26,37 @@ function Router() {
       <Route path="/reports" component={ReportsDashboard} />
       <Route path="/feedback" component={FeedbackPage} />
       <Route path="/admin" component={AdminPage} />
-
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+function AuthGate() {
+  const { isLoggedIn, loading, login } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={login} />;
+  }
+
+  return <Router />;
 }
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Router />
+        <AuthProvider>
+          <Toaster />
+          <AuthGate />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
