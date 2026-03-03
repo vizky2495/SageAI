@@ -14,6 +14,8 @@ The app has a multi-page architecture:
 
 **Shared data hook**: `client/src/hooks/use-funnel-data.ts` exports `useFunnelData()` hook (returns { rows, dataLoading, uploadDiagnostics, byStage }), all shared types (NormalizedRow, FunnelStage, StageKey, TopContentRow, TopByStage, UploadDiagnostics), and utility functions (sum, pct, formatCompact, formatPct, stageMeta). Used by both the Dashboard and Analytics pages.
 
+**Sample data**: `server/seed.ts` populates realistic performance metrics (pageviews, time on page, downloads, leads, SQOs) on uploaded content assets using deterministic hashing. Metrics are shaped by funnel stage (TOFU=high pageviews/low conversion, BOFU=low pageviews/high conversion), channel (Organic/Search boosts), and CTA type (Demo/Trial boost leads). Runs only if metrics are all zero.
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
