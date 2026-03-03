@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowRight, ArrowLeft, Library, BarChart3, Target, Sparkles, MessageCircle } from "lucide-react";
+import { X, ArrowRight, ArrowLeft, Library, BarChart3, Target, Sparkles, MessageCircle, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const TOUR_SEEN_KEY = "cia_tour_seen";
@@ -15,7 +15,7 @@ interface TourStep {
   iconBg: string;
   detail: string;
   highlightSelector?: string;
-  miniScene: "welcome" | "library" | "performance" | "planner" | "chat";
+  miniScene: "welcome" | "library" | "performance" | "planner" | "chat" | "feedback";
 }
 
 const STEPS: TourStep[] = [
@@ -76,6 +76,18 @@ const STEPS: TourStep[] = [
     iconBg: "bg-amber-500/10 ring-amber-500/30",
     detail: "Every page has its own AI assistant. The Librarian finds content, the CIA agent answers data questions, and the Campaign Planner is itself a full AI agent. Just look for the chat panel.",
     miniScene: "chat",
+  },
+  {
+    title: "Share Feedback",
+    description: "Step 5: Help us improve",
+    icon: MessageSquarePlus,
+    accentColor: "from-rose-500 to-pink-400",
+    accentGlow: "shadow-rose-500/30",
+    iconColor: "text-rose-400",
+    iconBg: "bg-rose-500/10 ring-rose-500/30",
+    detail: "Got an idea or found a bug? Use the feedback button on this hub page to submit suggestions or report issues. Your input helps shape CIA into a better tool.",
+    highlightSelector: '[data-testid="btn-floating-feedback"]',
+    miniScene: "feedback",
   },
 ];
 
@@ -347,6 +359,52 @@ function ChatScene() {
   );
 }
 
+function FeedbackScene() {
+  const items = [
+    { type: "Suggestion", icon: "💡", color: "bg-violet-500/20 text-violet-400 ring-violet-500/30" },
+    { type: "Bug Report", icon: "🐛", color: "bg-rose-500/20 text-rose-400 ring-rose-500/30" },
+  ];
+  return (
+    <div className="relative h-28 w-full overflow-hidden rounded-xl bg-gradient-to-br from-rose-950/30 via-background to-pink-950/20 border border-border/30 p-3 flex flex-col gap-2">
+      <motion.div
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="text-[9px] font-semibold text-rose-400/80"
+      >
+        Send Feedback
+      </motion.div>
+      <div className="flex flex-col gap-1.5">
+        {items.map((item, i) => (
+          <motion.div
+            key={item.type}
+            initial={{ opacity: 0, x: -15 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 + i * 0.15, duration: 0.3 }}
+            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${item.color}`}
+          >
+            <span className="text-xs">{item.icon}</span>
+            <span className="text-[10px] font-medium">{item.type}</span>
+          </motion.div>
+        ))}
+      </div>
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: "70%" }}
+        transition={{ delay: 0.8, duration: 0.6 }}
+        className="h-1.5 rounded-full bg-rose-500/20 mt-auto"
+      >
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: "100%" }}
+          transition={{ delay: 1, duration: 0.5 }}
+          className="h-full rounded-full bg-gradient-to-r from-rose-500/50 to-pink-500/40"
+        />
+      </motion.div>
+    </div>
+  );
+}
+
 function TypewriterText({ text, delay }: { text: string; delay: number }) {
   const [displayed, setDisplayed] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -377,6 +435,7 @@ const SCENE_MAP: Record<TourStep["miniScene"], React.FC> = {
   performance: PerformanceScene,
   planner: PlannerScene,
   chat: ChatScene,
+  feedback: FeedbackScene,
 };
 
 interface HighlightRect {

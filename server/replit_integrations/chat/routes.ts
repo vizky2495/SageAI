@@ -544,6 +544,23 @@ export function registerChatRoutes(app: Express): void {
     try {
       const conversationId = parseInt(req.params.id);
       const { content } = req.body;
+      let { images } = req.body;
+
+      if (images && Array.isArray(images)) {
+        const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+        const MAX_IMAGES = 5;
+        images = images.slice(0, MAX_IMAGES).filter((img: string) => {
+          if (typeof img !== "string") return false;
+          const match = img.match(/^data:image\/(png|jpeg|gif|webp);base64,/);
+          if (!match) return false;
+          const base64Part = img.split(",")[1];
+          const sizeInBytes = (base64Part.length * 3) / 4;
+          return sizeInBytes <= MAX_IMAGE_SIZE;
+        });
+        if (images.length === 0) images = undefined;
+      } else {
+        images = undefined;
+      }
 
       await chatStorage.createMessage(conversationId, "user", content);
 
@@ -609,10 +626,27 @@ export function registerChatRoutes(app: Express): void {
         ? allHistory.slice(-maxMessages)
         : allHistory;
 
-      const chatMessages = recentHistory.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
+      const chatMessages: Array<{ role: "user" | "assistant"; content: string | Array<any> }> = recentHistory.map((m, idx) => {
+        if (idx === recentHistory.length - 1 && m.role === "user" && images && images.length > 0) {
+          const contentBlocks: any[] = [];
+          for (const img of images) {
+            const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+            if (match) {
+              contentBlocks.push({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: match[1],
+                  data: match[2],
+                },
+              });
+            }
+          }
+          contentBlocks.push({ type: "text", text: m.content });
+          return { role: m.role as "user" | "assistant", content: contentBlocks };
+        }
+        return { role: m.role as "user" | "assistant", content: m.content };
+      });
 
       let systemPrompt: string;
       if (agentType === "cia") {

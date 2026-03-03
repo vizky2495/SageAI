@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check } from "lucide-react";
+import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Paperclip, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -9,6 +9,7 @@ interface Message {
   content: string;
   createdAt: string;
   grounded?: boolean;
+  images?: string[];
 }
 
 interface Conversation {
@@ -185,8 +186,11 @@ export default function PageChat({
   const [streamingContent, setStreamingContent] = useState("");
   const [showList, setShowList] = useState(true);
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -275,18 +279,40 @@ export default function PageChat({
     }
   }
 
-  async function sendMessage() {
-    if (!input.trim() || isStreaming || !activeConv) return;
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      if (file.size > 5 * 1024 * 1024) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setPendingImages((prev) => [...prev, result]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
+  function removePendingImage(index: number) {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function sendMessage() {
+    if ((!input.trim() && pendingImages.length === 0) || isStreaming || !activeConv) return;
+
+    const attachedImages = [...pendingImages];
     const userMsg: Message = {
       id: Date.now(),
       role: "user",
       content: input.trim(),
       createdAt: new Date().toISOString(),
+      images: attachedImages.length > 0 ? attachedImages : undefined,
     };
 
     setMsgs((prev) => [...prev, userMsg]);
     setInput("");
+    setPendingImages([]);
     setIsStreaming(true);
     setStreamingContent("");
 
@@ -299,7 +325,10 @@ export default function PageChat({
       const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userMsg.content }),
+        body: JSON.stringify({
+          content: userMsg.content || "(shared an image)",
+          images: attachedImages.length > 0 ? attachedImages : undefined,
+        }),
       });
 
       const reader = res.body?.getReader();
@@ -512,6 +541,23 @@ export default function PageChat({
                             }`}
                           >
                             {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                            {msg.images && msg.images.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {msg.images.map((img, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => setLightboxImage(img)}
+                                    className="relative group/img rounded-lg overflow-hidden border border-white/20"
+                                    data-testid={`msg-image-${msg.id}-${idx}`}
+                                  >
+                                    <img src={img} alt="Attachment" className="h-16 w-16 object-cover" />
+                                    <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
+                                      <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           {msg.role === "assistant" && (
                             <div className="flex items-center gap-2 mt-1 ml-1">
@@ -551,7 +597,41 @@ export default function PageChat({
                   </div>
 
                   <div className="p-3 border-t shrink-0">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileSelect}
+                      data-testid={`input-file-${agent}`}
+                    />
+                    {pendingImages.length > 0 && (
+                      <div className="flex gap-1.5 mb-2 flex-wrap" data-testid={`preview-images-${agent}`}>
+                        {pendingImages.map((img, idx) => (
+                          <div key={idx} className="relative group/preview">
+                            <img src={img} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border/40" />
+                            <button
+                              onClick={() => removePendingImage(idx)}
+                              className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/preview:opacity-100 transition-opacity"
+                              data-testid={`btn-remove-image-${agent}-${idx}`}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-end gap-2">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isStreaming}
+                        className="p-2.5 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors shrink-0 disabled:opacity-50"
+                        title="Attach image"
+                        data-testid={`btn-attach-${agent}`}
+                      >
+                        <Paperclip className="h-4 w-4 text-muted-foreground" />
+                      </button>
                       <textarea
                         ref={inputRef}
                         value={input}
@@ -567,7 +647,7 @@ export default function PageChat({
                         size="icon"
                         className="rounded-xl h-10 w-10 shrink-0"
                         onClick={sendMessage}
-                        disabled={!input.trim() || isStreaming}
+                        disabled={(!input.trim() && pendingImages.length === 0) || isStreaming}
                         data-testid={`btn-send-${agent}`}
                       >
                         <Send className="h-4 w-4" />
@@ -598,6 +678,36 @@ export default function PageChat({
               Ask {agentName}
             </span>
           </motion.button>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {lightboxImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setLightboxImage(null)}
+            data-testid={`lightbox-${agent}`}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="relative max-w-[90vw] max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img src={lightboxImage} alt="Full size" className="max-w-full max-h-[85vh] rounded-xl object-contain" />
+              <button
+                onClick={() => setLightboxImage(null)}
+                className="absolute -top-3 -right-3 h-8 w-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                data-testid={`btn-close-lightbox-${agent}`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>

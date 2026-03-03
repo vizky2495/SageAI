@@ -45,8 +45,6 @@ export default function FeedbackButton() {
     });
   }, [type, title, description, location, submitMutation]);
 
-  if (location === "/feedback") return null;
-
   return (
     <>
       <motion.button
@@ -97,14 +95,16 @@ export default function FeedbackButton() {
                 <div className="p-4 border-b border-border/40">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold">Send Feedback</h3>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/feedback")}
-                      className="text-[10px] text-primary hover:underline"
-                      data-testid="link-view-all-feedback"
-                    >
-                      View all
-                    </button>
+                    {sessionStorage.getItem("admin_token") && (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/feedback")}
+                        className="text-[10px] text-primary hover:underline"
+                        data-testid="link-view-all-feedback"
+                      >
+                        View all
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button

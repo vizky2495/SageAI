@@ -12,7 +12,6 @@ import FeedbackPage from "@/pages/feedback";
 import ReportsDashboard from "@/pages/reports-dashboard";
 
 import AdminPage from "@/pages/admin";
-import FeedbackButton from "@/components/feedback-button";
 import { queryClient } from "./lib/queryClient";
 
 function Router() {
@@ -38,7 +37,6 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
-        <FeedbackButton />
       </TooltipProvider>
     </QueryClientProvider>
   );
