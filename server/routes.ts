@@ -25,13 +25,17 @@ export async function registerRoutes(
 
   app.post("/api/auth/login", loginLimiter, async (req: Request, res: Response) => {
     try {
-      const { displayName, password, role } = req.body as { displayName?: string; password?: string; role?: string };
+      const { displayName, password, role, firstName, lastName } = req.body as { displayName?: string; password?: string; role?: string; firstName?: string; lastName?: string };
       if (!displayName?.trim() || !password) {
         return res.status(400).json({ message: "Email and password are required." });
       }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(displayName.trim())) {
+      const emailLower = displayName.trim().toLowerCase();
+      if (!emailRegex.test(emailLower)) {
         return res.status(400).json({ message: "Please enter a valid email address." });
+      }
+      if (!emailLower.endsWith("@sage.com")) {
+        return res.status(400).json({ message: "Only @sage.com email addresses are allowed." });
       }
       const isAdminRole = role === "admin";
       const expectedPassword = isAdminRole ? process.env.ADMIN_PASSWORD : process.env.USER_PASSWORD;
@@ -41,16 +45,19 @@ export async function registerRoutes(
       if (password !== expectedPassword) {
         return res.status(401).json({ message: "Invalid password." });
       }
-      let user = await storage.getUserByDisplayName(displayName.trim());
+      let user = await storage.getUserByDisplayName(emailLower);
       if (user) {
         if (isAdminRole && !user.isAdmin) {
           user = await storage.updateUserAdmin(user.id, true) || user;
         }
       } else {
-        user = await storage.createUser({ displayName: displayName.trim(), isAdmin: isAdminRole });
+        if (!firstName?.trim() || !lastName?.trim()) {
+          return res.status(400).json({ message: "First name and last name are required for new users." });
+        }
+        user = await storage.createUser({ displayName: emailLower, firstName: firstName.trim(), lastName: lastName.trim(), isAdmin: isAdminRole });
       }
       const token = createSession(user.id, user.isAdmin);
-      res.json({ token, user: { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin } });
+      res.json({ token, user: { id: user.id, displayName: user.displayName, firstName: user.firstName, lastName: user.lastName, isAdmin: user.isAdmin } });
     } catch (error) {
       console.error("Auth login error:", error);
       res.status(500).json({ message: "Login failed." });
@@ -66,7 +73,7 @@ export async function registerRoutes(
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-    res.json({ id: user.id, displayName: user.displayName, isAdmin: user.isAdmin });
+    res.json({ id: user.id, displayName: user.displayName, firstName: user.firstName, lastName: user.lastName, isAdmin: user.isAdmin });
   });
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {

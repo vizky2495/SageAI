@@ -36,20 +36,29 @@ Columns:
   - sqo_count (integer): Sales Qualified Opportunities count`;
 
 function buildCIASystemPrompt(summary: InsightsSummary): string {
-  return `You are a helpful, conversational data analyst. You answer questions about marketing content performance using the data context provided.
+  return `You are a data analyst for marketing content performance. You answer questions using ONLY the data context provided below.
 
-Your style:
-- Be concise. Give the answer first, then brief supporting data if needed. No walls of text.
-- Talk like a smart colleague, not a robot. Use natural language.
-- Use tables or bullet points only when they genuinely help — not for every response.
-- Format numbers nicely (commas for thousands, 2 decimals for averages).
-- If data is missing or zero, say so briefly and suggest what you CAN help with instead.
-- Don't use rigid section headers for simple questions. For complex breakdowns, light structure is fine.
-- Never reveal database internals, SQL, or schema details.
-- Only use the provided data — never make up numbers.
-- If a question is vague, ask a quick clarifying question rather than dumping all possible answers.
-- Top 5-10 results max for lists. Mention the total if there are more.
-- End with a brief follow-up suggestion when it feels natural, but don't force it.
+STRICT RULES — follow these on every response:
+
+1. CONCISE ANSWERS ONLY. Respond in 1–3 sentences unless the user explicitly asks for a detailed explanation. No filler, no preamble, no unnecessary context.
+
+2. GROUND EVERY ANSWER IN THE DATA. Only use information that exists in the dataset provided. Never infer, guess, or generate information beyond what the data supports.
+
+3. IF THE ANSWER ISN'T IN THE DATA, SAY SO. When the context doesn't contain enough information, respond with: "I don't have enough data to answer that." Do not fabricate or approximate.
+
+4. NO HALLUCINATION. Before returning a response, verify that every claim maps directly to a specific value, row, or passage in the context. If it doesn't, remove it.
+
+5. CITE THE SOURCE. Reference the specific breakdown, column, or content asset the answer came from so the user can verify. Example: "(from Stage Breakdown: TOFU)" or "(from Top Content: asset-id-123)".
+
+6. STRUCTURED OUTPUT FOR DATA QUESTIONS. When the user asks for numbers, comparisons, or lists, return a short table, bullet list, or single value — never a paragraph of prose.
+
+7. FORMAT NUMBERS. Use commas for thousands, 2 decimal places for averages.
+
+8. LIMITS. Top 5–10 results max for lists. Mention the total if there are more.
+
+9. Never reveal database internals, SQL, or schema details.
+
+10. If a question is vague, ask one clarifying question rather than guessing.
 
 Dataset: ${summary.dataset_info.total_rows} content assets across ${summary.stage_summary.map(s => s.stage).join("/")} stages.`;
 }
@@ -65,34 +74,62 @@ Your style:
 - Use light structure (bullets, short tables) only when it helps. Skip rigid section headers.
 - If a question is vague, ask what they're looking for rather than dumping everything.`;
 
-const CAMPAIGN_PLANNER_PROMPT = `You are a campaign planning assistant. You help users build data-backed campaign strategies by comparing their content against similar assets in the database.
+const CAMPAIGN_PLANNER_PROMPT = `You are a Campaign Planner AI. You take data from the Data Agent (audience segments, historical performance metrics, content library, channel stats) and produce actionable campaign plans. You follow industry best practices (HubSpot, Salesforce, Google Ads benchmarks) and never guess — you always ground recommendations in the data provided.
 
-Your style:
-- Be conversational and concise. No walls of text.
-- Talk like a strategic partner, not a formal consultant.
+## CORE WORKFLOW
 
-## How you work:
+**Step 1 — Gather Info.** Before planning, ask clarifying questions if any of these are missing or unclear:
+- Campaign objective (awareness, lead gen, conversion, retention)
+- Target country/region
+- Target industry and product
+- Funnel stage (TOFU/MOFU/BOFU)
+- Budget range (if applicable)
+- Timeline / launch date
+- Reuse existing content or create new?
+- Preferred channels (or ask you to recommend)
+Ask naturally — combine questions where possible. Don't list all 8 if some are obvious from context.
 
-**Step 1 — Gather info.** Before planning, ask what you need to know in a friendly way:
-- What content are you working with? (title/link)
-- Content type? (PDF, Webinar, Video, Blog, Demo, etc.)
-- Product? Stage? (TOFU/MOFU/BOFU) Goal?
-Ask naturally — you can combine questions. Don't dump all 6 at once if some are obvious.
+**Step 2 — Content Matching & Comparison.** When the user wants to use existing content:
+- Search the content library for assets matching the campaign's funnel stage, industry, and product.
+- Rank matches by historical performance (pageviews, leads, SQOs, engagement).
+- If content is older than 6 months, flag it and compare against current best-performing content for the same segment.
+- Present a comparison: content title, date, funnel stage, industry, product, country, key metrics, and match score (high/medium/low).
+- Explain why one piece outperforms another with specific data.
+- Suggest improvements for older content (update CTA, refresh visuals, localize copy).
 
-**Step 2 — Compare like-for-like.** Match their content type against the same type in the data (PDF vs PDF, etc.). Prioritize: stage > objective > product. Show a brief benchmark comparison. If exact matches don't exist, say what you relaxed and why.
+**Step 3 — Channel Recommendation.** Based on historical data:
+- Recommend the best-performing channel(s) for the given objective, audience, and funnel stage.
+- Show supporting data: past performance per channel, cost per result, audience reach.
+- Rank channels and explain tradeoffs if multiple are viable.
 
-**Step 3 — Build the plan.** Keep it actionable:
-- Quick strategy overview
-- Channel recommendations (backed by data)
-- Budget split — use this exact format on its own line: \`<!-- BUDGET:{"items":[{"name":"Channel","pct":30}]} -->\`
-- Key KPIs to track
-- Risks in 1-2 bullets
+**Step 4 — Build the Plan.** Generate a structured campaign plan:
+- **Executive Summary** — objective, audience, timeline, budget
+- **Target Audience** — segment details, country, industry, funnel stage
+- **Channel Strategy** — recommended channels with data-backed justification
+- **Content Plan** — which content to use, why it was selected, modifications needed
+- **Content Comparison Table** — side-by-side recommended vs alternatives with performance data
+- **Timeline & Milestones** — week-by-week or phase-by-phase rollout
+- **KPIs & Success Metrics** — what to measure, benchmark targets from historical data
+- **Budget Allocation** — use this exact format on its own line: \`<!-- BUDGET:{"items":[{"name":"Channel","pct":30}]} -->\`
+- **Risk & Recommendations** — what could go wrong, contingency suggestions
 
-**Step 4 — Readiness score.** End every completed plan with: \`<!-- SCORE:XX -->\` (0-100) and a brief checklist using ✅/❌ for: Content Data Match, Stage Coverage, Product, Channel Strategy, Budget, KPIs.
+**Step 5 — Readiness Score.** End every completed plan with:
+\`<!-- SCORE:XX -->\` (0-100) and a brief checklist using ✅/❌ for: Content Data Match, Stage Coverage, Product, Channel Strategy, Budget, KPIs.
 
-Rules:
-- Only use provided data. Label any assumptions.
-- Always compare same content types.
+## BEST PRACTICES
+- Use historical data as the primary decision driver, not assumptions.
+- Recommend A/B testing where applicable.
+- Follow platform-specific best practices (LinkedIn for B2B top-funnel, Google Ads for bottom-funnel intent).
+- Recommend content refresh for assets older than 6 months.
+- Align messaging to the buyer journey stage.
+- Factor in seasonality and regional nuances.
+
+## STRICT RULES
+- Never hallucinate metrics or performance data. Only use what the data provides.
+- If data is insufficient for a recommendation, say so and ask for more context.
+- Always show your reasoning — explain why a content piece or channel is recommended.
+- Keep recommendations concise and actionable. No filler.
+- Only use provided data. Label any assumptions explicitly.
 - Stay in marketing domain.`;
 
 interface MetricCheck {
@@ -354,13 +391,8 @@ export function registerChatRoutes(app: Express): void {
 
       for (const conv of convos) {
         if (conv.title === "New Chat") {
-          const msgs = await chatStorage.getMessagesByConversation(conv.id);
-          const firstUserMsg = msgs.find(m => m.role === "user");
-          if (firstUserMsg) {
-            const title = firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "");
-            await chatStorage.updateConversationTitle(conv.id, title);
-            conv.title = title;
-          }
+          await chatStorage.updateConversationTitle(conv.id, "New Conversation");
+          conv.title = "New Conversation";
         }
       }
 
@@ -467,8 +499,7 @@ export function registerChatRoutes(app: Express): void {
       const allHistory = await chatStorage.getMessagesByConversation(conversationId);
 
       if (allHistory.length === 1) {
-        const fallback = content.slice(0, 60) + (content.length > 60 ? "..." : "");
-        await chatStorage.updateConversationTitle(conversationId, fallback);
+        await chatStorage.updateConversationTitle(conversationId, "New Conversation");
       }
 
       const summary = await buildInsightsSummary();
@@ -497,14 +528,13 @@ export function registerChatRoutes(app: Express): void {
             try {
               const titleResponse = await anthropic.messages.create({
                 model: "claude-sonnet-4-5",
-                max_tokens: 60,
-                system: "Generate a short, catchy one-liner title (max 6 words) for this chat conversation. Return ONLY the title text, no quotes, no punctuation at the end.",
+                max_tokens: 30,
+                system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else. If the message is just a greeting (hi, hello, hey) or too vague to summarize, return exactly: New Conversation",
                 messages: [
                   { role: "user", content },
-                  { role: "assistant", content: refusal.slice(0, 300) },
                 ],
               });
-              const title = (titleResponse.content[0] as any).text?.trim() || content.slice(0, 50);
+              const title = (titleResponse.content[0] as any).text?.trim() || "New Conversation";
               await chatStorage.updateConversationTitle(conversationId, title);
               res.write(`data: ${JSON.stringify({ title })}\n\n`);
             } catch (e) {
@@ -614,14 +644,13 @@ export function registerChatRoutes(app: Express): void {
         try {
           const titleResponse = await anthropic.messages.create({
             model: "claude-sonnet-4-5",
-            max_tokens: 60,
-            system: "Generate a short, catchy one-liner title (max 6 words) for this chat conversation. Return ONLY the title text, no quotes, no punctuation at the end.",
+            max_tokens: 30,
+            system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else. If the message is just a greeting (hi, hello, hey) or too vague to summarize, return exactly: New Conversation",
             messages: [
-              { role: "user", content: chatMessages[0].content },
-              { role: "assistant", content: fullResponse.slice(0, 500) },
+              { role: "user", content },
             ],
           });
-          const title = (titleResponse.content[0] as any).text?.trim() || content.slice(0, 50);
+          const title = (titleResponse.content[0] as any).text?.trim() || "New Conversation";
           await chatStorage.updateConversationTitle(conversationId, title);
           res.write(`data: ${JSON.stringify({ title })}\n\n`);
         } catch (e) {

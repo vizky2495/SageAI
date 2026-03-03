@@ -187,8 +187,23 @@ function HubCard({ card, index }: { card: CardDef; index: number }) {
   );
 }
 
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function HubPage() {
   const { user, logout } = useAuth();
+
+  const displayFullName = user?.firstName && user?.lastName
+    ? `${user.firstName} ${user.lastName}`
+    : user?.displayName || "";
+
+  const greeting = user?.firstName
+    ? `${getTimeGreeting()}, ${user.firstName}`
+    : getTimeGreeting();
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16">
@@ -198,7 +213,7 @@ export default function HubPage() {
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card/70 backdrop-blur px-3 py-1.5">
           <span className="text-xs font-medium text-muted-foreground" data-testid="text-user-name">
-            {user?.displayName}
+            {displayFullName}
           </span>
           {user?.isAdmin && (
             <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30" data-testid="badge-admin">
@@ -233,11 +248,7 @@ export default function HubPage() {
           <span className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">CIA Platform</span>
         </div>
         <h1 className="text-4xl font-[700] tracking-tight md:text-5xl" data-testid="text-hub-title">
-          Content Intelligence
-          <br />
-          <span className="bg-gradient-to-r from-primary via-emerald-300 to-sky-400 bg-clip-text text-transparent">
-            Analyst
-          </span>
+          {greeting}
         </h1>
         <p className="mx-auto mt-4 max-w-md text-sm text-muted-foreground leading-relaxed" data-testid="text-hub-subtitle">
           Your marketing funnel command center. Analyze content performance, explore your library, or plan your next campaign.

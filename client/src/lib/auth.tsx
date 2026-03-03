@@ -3,6 +3,8 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 interface AuthUser {
   id: string;
   displayName: string;
+  firstName: string;
+  lastName: string;
   isAdmin: boolean;
 }
 

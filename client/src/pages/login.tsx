@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Lock, Mail, Shield, Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface LoginPageProps {
-  onLogin: (token: string, user: { id: string; displayName: string; isAdmin: boolean }) => void;
+  onLogin: (token: string, user: { id: string; displayName: string; firstName: string; lastName: string; isAdmin: boolean }) => void;
 }
 
 function isValidEmail(email: string): boolean {
@@ -12,20 +12,46 @@ function isValidEmail(email: string): boolean {
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"user" | "admin">("user");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isReturningUser, setIsReturningUser] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cia_user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.displayName) {
+          setEmail(parsed.displayName);
+          setIsReturningUser(true);
+        }
+      }
+    } catch {}
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !password.trim()) {
       setError("Please fill in all fields.");
       return;
     }
-    if (!isValidEmail(email.trim())) {
+    if (!isValidEmail(trimmedEmail)) {
       setError("Please enter a valid email address.");
+      return;
+    }
+    if (!trimmedEmail.endsWith("@sage.com")) {
+      setError("Only @sage.com email addresses are allowed.");
+      return;
+    }
+    if (!isReturningUser && (!firstName.trim() || !lastName.trim())) {
+      setError("Please enter your first and last name.");
       return;
     }
     setError("");
@@ -35,7 +61,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: email.trim().toLowerCase(), password, role }),
+        body: JSON.stringify({
+          displayName: trimmedEmail,
+          password,
+          role,
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -88,7 +120,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 shadow-2xl"
           data-testid="form-login"
         >
-          <h2 className="text-lg font-semibold mb-5 text-center">Sign In</h2>
+          <h2 className="text-lg font-semibold mb-5 text-center">
+            {isReturningUser ? "Welcome Back" : "Sign In"}
+          </h2>
 
           <div className="flex items-center gap-1.5 mb-5 p-1 rounded-xl bg-muted/30 border border-border/30">
             <button
@@ -120,6 +154,37 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <div className="space-y-3">
+            {!isReturningUser && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">First Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      className="w-full h-10 pl-9 pr-3 rounded-lg bg-muted/30 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                      data-testid="input-first-name"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Last Name</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Doe"
+                    className="w-full h-10 px-3 rounded-lg bg-muted/30 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                    data-testid="input-last-name"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
               <div className="relative">
@@ -127,13 +192,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email ID"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (isReturningUser && e.target.value !== email) {
+                      setIsReturningUser(false);
+                    }
+                  }}
+                  placeholder="you@sage.com"
                   className="w-full h-10 pl-9 pr-3 rounded-lg bg-muted/30 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                   data-testid="input-email"
-                  autoFocus
+                  autoFocus={isReturningUser}
                 />
               </div>
+              <p className="text-[10px] text-muted-foreground/50 mt-1">Only @sage.com addresses</p>
             </div>
 
             <div>
