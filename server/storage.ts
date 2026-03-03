@@ -2,6 +2,9 @@ import {
   type AssetAgg,
   type InsertAssetAgg,
   assetsAgg,
+  type Feedback,
+  type InsertFeedback,
+  feedback,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
@@ -16,6 +19,9 @@ export interface IStorage {
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }>;
   getAllAssets(): Promise<AssetAgg[]>;
+  createFeedback(item: InsertFeedback): Promise<Feedback>;
+  getFeedback(opts: { type?: string; status?: string }): Promise<Feedback[]>;
+  updateFeedbackStatus(id: number, status: string): Promise<Feedback | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -71,6 +77,24 @@ export class DatabaseStorage implements IStorage {
   }
   async getAllAssets(): Promise<AssetAgg[]> {
     return db.select().from(assetsAgg).orderBy(desc(assetsAgg.pageviewsSum));
+  }
+
+  async createFeedback(item: InsertFeedback): Promise<Feedback> {
+    const [row] = await db.insert(feedback).values(item).returning();
+    return row;
+  }
+
+  async getFeedback(opts: { type?: string; status?: string }): Promise<Feedback[]> {
+    const conditions = [];
+    if (opts.type) conditions.push(eq(feedback.type, opts.type as any));
+    if (opts.status) conditions.push(eq(feedback.status, opts.status as any));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    return db.select().from(feedback).where(where).orderBy(desc(feedback.createdAt));
+  }
+
+  async updateFeedbackStatus(id: number, status: string): Promise<Feedback | null> {
+    const [row] = await db.update(feedback).set({ status: status as any }).where(eq(feedback.id, id)).returning();
+    return row ?? null;
   }
 }
 

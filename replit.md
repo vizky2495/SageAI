@@ -8,7 +8,8 @@ The app has a multi-page architecture:
 3. **Deep Dive Analytics** (`/analytics`) — Full filter bar (stage, type, channel, product, industry, campaign), CTA Breakdown bar charts per stage, Channel/Product/Industry mix cards with stage drilldowns, CTA Analysis table, Top Content tables
 4. **Content Library** (`/content-library`) — Browse all content assets by funnel stage, search by content ID, infinite scroll, URL preview
 5. **Campaign Planner** (`/campaign-planner`) — Full-page AI campaign strategy builder using the planner agent (Claude). Conversation list + chat UI.
-6. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
+6. **Feedback** (`/feedback`) — User feedback hub for suggestions and bug reports. Filterable by type and status. Stats overview. Floating quick-submit button available on all pages.
+7. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
 
 **Shared data hook**: `client/src/hooks/use-funnel-data.ts` exports `useFunnelData()` hook (returns { rows, dataLoading, uploadDiagnostics, byStage }), all shared types (NormalizedRow, FunnelStage, StageKey, TopContentRow, TopByStage, UploadDiagnostics), and utility functions (sum, pct, formatCompact, formatPct, stageMeta). Used by both the Dashboard and Analytics pages.
 

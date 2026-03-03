@@ -166,6 +166,48 @@ export async function registerRoutes(
     res.json(assets);
   });
 
+  app.post("/api/feedback", async (req: Request, res: Response) => {
+    try {
+      const { type, title, description, page } = req.body;
+      if (!type || !title || !description) {
+        return res.status(400).json({ message: "type, title, and description are required" });
+      }
+      if (!["suggestion", "bug"].includes(type)) {
+        return res.status(400).json({ message: "type must be 'suggestion' or 'bug'" });
+      }
+      const item = await storage.createFeedback({ type, title, description, page: page || null });
+      res.status(201).json(item);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to create feedback" });
+    }
+  });
+
+  app.get("/api/feedback", async (req: Request, res: Response) => {
+    try {
+      const type = req.query.type ? String(req.query.type) : undefined;
+      const status = req.query.status ? String(req.query.status) : undefined;
+      const items = await storage.getFeedback({ type, status });
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch feedback" });
+    }
+  });
+
+  app.patch("/api/feedback/:id/status", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = req.body as { status: string };
+      if (!["open", "in_progress", "resolved", "closed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const item = await storage.updateFeedbackStatus(id, status);
+      if (!item) return res.status(404).json({ message: "Feedback not found" });
+      res.json(item);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update feedback" });
+    }
+  });
+
   app.post("/api/assets/upload-excel", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { base64, filename } = req.body as { base64: string; filename: string };

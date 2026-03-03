@@ -102,3 +102,24 @@ export const messages = pgTable("messages", {
 
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+
+export const feedbackTypeEnum = pgEnum("feedback_type", ["suggestion", "bug"]);
+export const feedbackStatusEnum = pgEnum("feedback_status", ["open", "in_progress", "resolved", "closed"]);
+
+export const feedback = pgTable("feedback", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  type: feedbackTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  page: text("page"),
+  status: feedbackStatusEnum("status").notNull().default("open"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertFeedbackSchema = createInsertSchema(feedback).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+});
+export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
+export type Feedback = typeof feedback.$inferSelect;

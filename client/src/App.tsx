@@ -8,8 +8,10 @@ import FunnelDashboard from "@/pages/funnel-dashboard";
 import AnalyticsPage from "@/pages/analytics";
 import ContentLibraryPage from "@/pages/content-library-page";
 import CampaignPlannerPage from "@/pages/campaign-planner";
+import FeedbackPage from "@/pages/feedback";
 
 import AdminPage from "@/pages/admin";
+import FeedbackButton from "@/components/feedback-button";
 import { queryClient } from "./lib/queryClient";
 
 function Router() {
@@ -20,6 +22,7 @@ function Router() {
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/content-library" component={ContentLibraryPage} />
       <Route path="/campaign-planner" component={CampaignPlannerPage} />
+      <Route path="/feedback" component={FeedbackPage} />
       <Route path="/admin" component={AdminPage} />
 
       <Route component={NotFound} />
@@ -33,6 +36,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
+        <FeedbackButton />
       </TooltipProvider>
     </QueryClientProvider>
   );
