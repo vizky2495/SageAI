@@ -3,6 +3,7 @@ import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, BarChart3, Target, S
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
+import { authFetch } from "@/lib/queryClient";
 
 type AgentType = "cia" | "planner";
 
@@ -244,7 +245,7 @@ export default function AIChatbot() {
 
   async function fetchSuggestions() {
     try {
-      const res = await fetch("/api/chat/suggestions");
+      const res = await authFetch("/api/chat/suggestions");
       const data = await res.json();
       if (data.suggestions && data.suggestions.length > 0) {
         setDynamicSuggestions(data.suggestions);
@@ -263,7 +264,7 @@ export default function AIChatbot() {
 
   async function fetchConversations() {
     try {
-      const res = await fetch(`/api/conversations?agent=${activeAgent}&userId=${userId}`);
+      const res = await authFetch(`/api/conversations?agent=${activeAgent}`);
       const data = await res.json();
       setConversations(data);
     } catch (e) {
@@ -273,7 +274,7 @@ export default function AIChatbot() {
 
   async function openConversation(conv: Conversation) {
     try {
-      const res = await fetch(`/api/conversations/${conv.id}`);
+      const res = await authFetch(`/api/conversations/${conv.id}`);
       const data = await res.json();
       setActiveConv(data);
       setMsgs(data.messages || []);
@@ -285,10 +286,10 @@ export default function AIChatbot() {
 
   async function createConversation() {
     try {
-      const res = await fetch("/api/conversations", {
+      const res = await authFetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Chat", agent: activeAgent, userId }),
+        body: JSON.stringify({ title: "New Chat", agent: activeAgent }),
       });
       const conv = await res.json();
       setActiveConv(conv);
@@ -303,7 +304,7 @@ export default function AIChatbot() {
   async function deleteConversation(id: number, e: React.MouseEvent) {
     e.stopPropagation();
     try {
-      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+      await authFetch(`/api/conversations/${id}`, { method: "DELETE" });
       if (activeConv?.id === id) {
         setActiveConv(null);
         setMsgs([]);
@@ -344,7 +345,7 @@ export default function AIChatbot() {
     }
 
     try {
-      const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
+      const res = await authFetch(`/api/conversations/${activeConv.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: userMsg.content }),

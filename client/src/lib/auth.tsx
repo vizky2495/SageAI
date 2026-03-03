@@ -73,6 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const currentToken = localStorage.getItem("cia_token");
+    if (currentToken) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${currentToken}` },
+      }).catch(() => {});
+    }
     setToken(null);
     setUser(null);
     localStorage.removeItem("cia_token");

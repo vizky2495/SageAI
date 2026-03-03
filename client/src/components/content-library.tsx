@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { authFetch } from "@/lib/queryClient";
 import {
   ChevronLeft,
   ChevronRight,
@@ -465,7 +466,7 @@ function StageCarousel({
         offset: String(pageParam),
       });
       if (search) params.set("search", search);
-      const res = await fetch(`/api/assets?${params}`);
+      const res = await authFetch(`/api/assets?${params}`);
       if (!res.ok) throw new Error("Failed to fetch assets");
       return res.json() as Promise<{ data: AssetAgg[]; total: number }>;
     },

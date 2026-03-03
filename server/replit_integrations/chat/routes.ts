@@ -1,7 +1,8 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./storage";
 import { buildInsightsSummary, type InsightsSummary } from "../../insights";
+import { requireAuth } from "../../auth";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -345,10 +346,10 @@ function getDatasetLabel(summary: InsightsSummary): string {
 const MAX_CONTEXT_EXCHANGES = 4;
 
 export function registerChatRoutes(app: Express): void {
-  app.get("/api/conversations", async (req: Request, res: Response) => {
+  app.get("/api/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
       const agent = (req.query.agent as string) || undefined;
-      const userId = (req.query.userId as string) || undefined;
+      const userId = (req as any).userId as string;
       const convos = await chatStorage.getAllConversations(agent, userId);
 
       for (const conv of convos) {
@@ -370,15 +371,15 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.get("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = (req.query.userId as string) || undefined;
+      const userId = (req as any).userId as string;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      if (conversation.userId && userId && conversation.userId !== userId) {
+      if (conversation.userId && conversation.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
       const messages = await chatStorage.getMessagesByConversation(id);
@@ -389,10 +390,11 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  app.post("/api/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { title, agent, userId } = req.body;
-      const conversation = await chatStorage.createConversation(title || "New Chat", agent || "cia", userId || undefined);
+      const { title, agent } = req.body;
+      const userId = (req as any).userId as string;
+      const conversation = await chatStorage.createConversation(title || "New Chat", agent || "cia", userId);
       res.status(201).json(conversation);
     } catch (error) {
       console.error("Error creating conversation:", error);
@@ -400,15 +402,15 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.delete("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const userId = (req.query.userId as string) || undefined;
+      const userId = (req as any).userId as string;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      if (conversation.userId && userId && conversation.userId !== userId) {
+      if (conversation.userId && conversation.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
       await chatStorage.deleteConversation(id);
@@ -419,7 +421,7 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/chat/suggestions", async (_req: Request, res: Response) => {
+  app.get("/api/chat/suggestions", requireAuth, async (_req: Request, res: Response) => {
     try {
       const summary = await buildInsightsSummary();
       if (!summary) {
@@ -435,7 +437,7 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
+  app.post("/api/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
       const { content } = req.body;

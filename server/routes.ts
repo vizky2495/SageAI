@@ -7,30 +7,23 @@ import https from "https";
 import http from "http";
 import Anthropic from "@anthropic-ai/sdk";
 import * as XLSX from "xlsx";
-import crypto from "crypto";
 import { buildInsightsSummary } from "./insights";
-
-const adminTokens = new Set<string>();
-const authSessions = new Map<string, { userId: string; isAdmin: boolean }>();
-
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  const token = auth.slice(7);
-  if (!adminTokens.has(token)) {
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
-  next();
-}
+import {
+  requireAuth,
+  requireAdmin,
+  loginLimiter,
+  getSessionFromRequest,
+  createSession,
+  destroySession,
+  adminTokens,
+} from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", loginLimiter, async (req: Request, res: Response) => {
     try {
       const { displayName, password, role } = req.body as { displayName?: string; password?: string; role?: string };
       if (!displayName?.trim() || !password) {
@@ -56,11 +49,7 @@ export async function registerRoutes(
       } else {
         user = await storage.createUser({ displayName: displayName.trim(), isAdmin: isAdminRole });
       }
-      const token = crypto.randomUUID();
-      authSessions.set(token, { userId: user.id, isAdmin: user.isAdmin });
-      if (user.isAdmin) {
-        adminTokens.add(token);
-      }
+      const token = createSession(user.id, user.isAdmin);
       res.json({ token, user: { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin } });
     } catch (error) {
       console.error("Auth login error:", error);
@@ -69,14 +58,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/auth/me", async (req: Request, res: Response) => {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    const token = auth.slice(7);
-    const session = authSessions.get(token);
+    const session = getSessionFromRequest(req);
     if (!session) {
-      return res.status(401).json({ message: "Invalid or expired session" });
+      return res.status(401).json({ message: "Not authenticated" });
     }
     const user = await storage.getUserById(session.userId);
     if (!user) {
@@ -85,7 +69,15 @@ export async function registerRoutes(
     res.json({ id: user.id, displayName: user.displayName, isAdmin: user.isAdmin });
   });
 
-  app.post("/api/admin/login", (req: Request, res: Response) => {
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith("Bearer ")) {
+      destroySession(auth.slice(7));
+    }
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/login", loginLimiter, (req: Request, res: Response) => {
     const { password } = req.body as { password?: string };
     const adminPassword = process.env.ADMIN_PASSWORD;
     if (!adminPassword) {
@@ -94,8 +86,7 @@ export async function registerRoutes(
     if (!password || password !== adminPassword) {
       return res.status(401).json({ message: "Invalid password" });
     }
-    const token = crypto.randomUUID();
-    adminTokens.add(token);
+    const token = createSession("admin-legacy", true);
     res.json({ token });
   });
 
@@ -207,7 +198,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/assets", async (req, res) => {
+  app.get("/api/assets", requireAuth, async (req, res) => {
     const stage = String(req.query.stage || "TOFU");
     const search = req.query.search ? String(req.query.search) : undefined;
     const limit = Math.min(Number(req.query.limit) || 25, 100);
@@ -217,12 +208,12 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.get("/api/assets/all", async (_req, res) => {
+  app.get("/api/assets/all", requireAuth, async (_req, res) => {
     const assets = await storage.getAllAssets();
     res.json(assets);
   });
 
-  app.post("/api/feedback", async (req: Request, res: Response) => {
+  app.post("/api/feedback", requireAuth, async (req: Request, res: Response) => {
     try {
       const { type, title, description, page } = req.body;
       if (!type || !title || !description) {
@@ -238,7 +229,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/feedback", async (req: Request, res: Response) => {
+  app.get("/api/feedback", requireAuth, async (req: Request, res: Response) => {
     try {
       const type = req.query.type ? String(req.query.type) : undefined;
       const status = req.query.status ? String(req.query.status) : undefined;
@@ -598,7 +589,7 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
-  app.get("/api/proxy", async (req: Request, res: Response) => {
+  app.get("/api/proxy", requireAuth, async (req: Request, res: Response) => {
     const targetUrl = req.query.url as string;
     if (!targetUrl || !isValidUrl(targetUrl)) {
       return res.status(400).json({ message: "Missing or invalid url parameter" });
@@ -679,7 +670,7 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
-  app.get("/api/insights/summary", async (_req, res) => {
+  app.get("/api/insights/summary", requireAuth, async (_req, res) => {
     try {
       const summary = await buildInsightsSummary();
       if (!summary) {

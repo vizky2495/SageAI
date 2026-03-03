@@ -306,7 +306,7 @@ export default function AdminPage() {
   const loadCurrentData = useCallback(async () => {
     setLoadingAssets(true);
     try {
-      const res = await fetch("/api/assets/all");
+      const res = await fetch("/api/assets/all", { headers: adminHeaders() });
       if (res.ok) {
         const data = await res.json();
         setCurrentAssets(data);

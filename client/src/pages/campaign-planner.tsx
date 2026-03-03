@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { authFetch } from "@/lib/queryClient";
 import { motion, AnimatePresence } from "framer-motion";
 import TopNav from "@/components/top-nav";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -464,7 +465,7 @@ export default function CampaignPlannerPage() {
 
   async function fetchConversations() {
     try {
-      const res = await fetch(`/api/conversations?agent=planner&userId=${userId}`);
+      const res = await authFetch(`/api/conversations?agent=planner`);
       const data = await res.json();
       setConversations(data);
     } catch (e) {
@@ -474,7 +475,7 @@ export default function CampaignPlannerPage() {
 
   async function openConversation(conv: Conversation) {
     try {
-      const res = await fetch(`/api/conversations/${conv.id}`);
+      const res = await authFetch(`/api/conversations/${conv.id}`);
       const data = await res.json();
       setActiveConv(data);
       setMsgs(data.messages || []);
@@ -486,10 +487,10 @@ export default function CampaignPlannerPage() {
 
   async function createConversation() {
     try {
-      const res = await fetch("/api/conversations", {
+      const res = await authFetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Campaign", agent: "planner", userId }),
+        body: JSON.stringify({ title: "New Campaign", agent: "planner" }),
       });
       const conv = await res.json();
       setActiveConv(conv);
@@ -503,10 +504,10 @@ export default function CampaignPlannerPage() {
 
   async function createConversationWithTemplate(prompt: string) {
     try {
-      const res = await fetch("/api/conversations", {
+      const res = await authFetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Campaign", agent: "planner", userId }),
+        body: JSON.stringify({ title: "New Campaign", agent: "planner" }),
       });
       const conv = await res.json();
       setActiveConv(conv);
@@ -523,7 +524,7 @@ export default function CampaignPlannerPage() {
   async function deleteConversation(id: number, e: React.MouseEvent) {
     e.stopPropagation();
     try {
-      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+      await authFetch(`/api/conversations/${id}`, { method: "DELETE" });
       if (activeConv?.id === id) {
         setActiveConv(null);
         setMsgs([]);
@@ -556,7 +557,7 @@ export default function CampaignPlannerPage() {
     }
 
     try {
-      const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
+      const res = await authFetch(`/api/conversations/${activeConv.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: userMsg.content }),

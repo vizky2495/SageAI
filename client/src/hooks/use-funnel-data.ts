@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { authFetch } from "@/lib/queryClient";
 
 export type FunnelStage = "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
 export type StageKey = Exclude<FunnelStage, "UNKNOWN">;
@@ -86,7 +87,7 @@ export function useFunnelData() {
   useEffect(() => {
     let cancelled = false;
     setDataLoading(true);
-    fetch("/api/assets/all")
+    authFetch("/api/assets/all")
       .then((res) => res.ok ? res.json() : [])
       .then((dbAssets: any[]) => {
         if (cancelled) return;
