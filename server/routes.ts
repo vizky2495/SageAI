@@ -46,6 +46,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid password." });
       }
       let user = await storage.getUserByDisplayName(emailLower);
+      let isNewUser = false;
       if (user) {
         if (isAdminRole && !user.isAdmin) {
           user = await storage.updateUserAdmin(user.id, true) || user;
@@ -55,9 +56,10 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Looks like you're new here! Please enter your first and last name to get started.", needsName: true });
         }
         user = await storage.createUser({ displayName: emailLower, firstName: firstName.trim(), lastName: lastName.trim(), isAdmin: isAdminRole });
+        isNewUser = true;
       }
       const token = createSession(user.id, user.isAdmin);
-      res.json({ token, user: { id: user.id, displayName: user.displayName, firstName: user.firstName, lastName: user.lastName, isAdmin: user.isAdmin } });
+      res.json({ token, user: { id: user.id, displayName: user.displayName, firstName: user.firstName, lastName: user.lastName, isAdmin: user.isAdmin }, isNewUser });
     } catch (error) {
       console.error("Auth login error:", error);
       res.status(500).json({ message: "Login failed." });

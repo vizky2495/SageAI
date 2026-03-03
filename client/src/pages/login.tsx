@@ -79,6 +79,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         setLoading(false);
         return;
       }
+      if (data.isNewUser) {
+        localStorage.removeItem("cia_tour_seen");
+      } else {
+        localStorage.setItem("cia_tour_seen", "true");
+      }
       onLogin(data.token, data.user);
     } catch {
       setError("Something went wrong. Please try again.");
