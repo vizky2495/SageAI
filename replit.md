@@ -3,13 +3,14 @@
 **Content Intelligence Analyst (CIA)** is a marketing funnel analytics application. It ingests daily CSV and Excel (.xlsx) files containing marketing performance data, uses Claude Opus AI to intelligently map columns to the standardized schema, classifies content into funnel stages (TOFU, MOFU, BOFU), computes key metrics per stage, and renders interactive dashboards.
 
 The app has a multi-page architecture:
-1. **Hub** (`/`) — Landing page with three launcher cards: Content Library, Content Performance, Campaign Planner. No TopNav — the hub IS the navigation.
+1. **Hub** (`/`) — Landing page with four launcher cards: Content Library, Content Performance, Campaign Planner, Reports Dashboard. No TopNav — the hub IS the navigation.
 2. **Content Performance** (`/performance`) — Overview with KPI cards (TOFU/MOFU/BOFU), compact funnel area chart, quick-glance top channels/products, and navigation cards to Analytics & Content Library
 3. **Deep Dive Analytics** (`/analytics`) — Full filter bar (stage, type, channel, product, industry, campaign), CTA Breakdown bar charts per stage, Channel/Product/Industry mix cards with stage drilldowns, CTA Analysis table, Top Content tables
 4. **Content Library** (`/content-library`) — Browse all content assets by funnel stage, search by content ID, infinite scroll, URL preview
 5. **Campaign Planner** (`/campaign-planner`) — Full-page AI campaign strategy builder using the planner agent (Claude). Conversation list + chat UI.
 6. **Feedback** (`/feedback`) — User feedback hub for suggestions and bug reports. Filterable by type and status. Stats overview. Floating quick-submit button available on all pages.
-7. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
+7. **Reports Dashboard** (`/reports`) — Customizable drag-and-drop reporting dashboard. 8 widget types (KPI Overview, Stage Distribution, Channel Performance, Product Breakdown, Content Type Mix, Top Content, Leads by Stage, Funnel Flow). Layout persisted to localStorage. Add/remove/resize/reorder widgets.
+8. **Admin** (`/admin`) — Upload CSVs or Excel files with AI-powered column mapping via Claude Opus
 
 **Shared data hook**: `client/src/hooks/use-funnel-data.ts` exports `useFunnelData()` hook (returns { rows, dataLoading, uploadDiagnostics, byStage }), all shared types (NormalizedRow, FunnelStage, StageKey, TopContentRow, TopByStage, UploadDiagnostics), and utility functions (sum, pct, formatCompact, formatPct, stageMeta). Used by both the Dashboard and Analytics pages.
 

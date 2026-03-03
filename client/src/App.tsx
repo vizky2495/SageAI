@@ -9,6 +9,7 @@ import AnalyticsPage from "@/pages/analytics";
 import ContentLibraryPage from "@/pages/content-library-page";
 import CampaignPlannerPage from "@/pages/campaign-planner";
 import FeedbackPage from "@/pages/feedback";
+import ReportsDashboard from "@/pages/reports-dashboard";
 
 import AdminPage from "@/pages/admin";
 import FeedbackButton from "@/components/feedback-button";
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/content-library" component={ContentLibraryPage} />
       <Route path="/campaign-planner" component={CampaignPlannerPage} />
+      <Route path="/reports" component={ReportsDashboard} />
       <Route path="/feedback" component={FeedbackPage} />
       <Route path="/admin" component={AdminPage} />
 
