@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Lock, User, Shield, Loader2 } from "lucide-react";
+import { Lock, Mail, Shield, Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface LoginPageProps {
   onLogin: (token: string, user: { id: string; displayName: string; isAdmin: boolean }) => void;
 }
 
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"user" | "admin">("user");
   const [error, setError] = useState("");
@@ -16,8 +20,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!displayName.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim()) {
       setError("Please fill in all fields.");
+      return;
+    }
+    if (!isValidEmail(email.trim())) {
+      setError("Please enter a valid email address.");
       return;
     }
     setError("");
@@ -27,7 +35,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: displayName.trim(), password, role }),
+        body: JSON.stringify({ displayName: email.trim().toLowerCase(), password, role }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -113,16 +121,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Display Name</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
                 <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Enter your name"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email ID"
                   className="w-full h-10 pl-9 pr-3 rounded-lg bg-muted/30 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                  data-testid="input-display-name"
+                  data-testid="input-email"
                   autoFocus
                 />
               </div>

@@ -34,7 +34,11 @@ export async function registerRoutes(
     try {
       const { displayName, password, role } = req.body as { displayName?: string; password?: string; role?: string };
       if (!displayName?.trim() || !password) {
-        return res.status(400).json({ message: "Display name and password are required." });
+        return res.status(400).json({ message: "Email and password are required." });
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(displayName.trim())) {
+        return res.status(400).json({ message: "Please enter a valid email address." });
       }
       const isAdminRole = role === "admin";
       const expectedPassword = isAdminRole ? process.env.ADMIN_PASSWORD : process.env.USER_PASSWORD;
