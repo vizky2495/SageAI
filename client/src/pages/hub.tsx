@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Library, BarChart3, Target, ArrowRight, LayoutDashboard } from "lucide-react";
+import { Library, BarChart3, Target, ArrowRight } from "lucide-react";
 import OnboardingTour, { TourResetButton } from "@/components/onboarding-tour";
 
 interface CardDef {
@@ -49,17 +49,6 @@ const cards: CardDef[] = [
     iconColor: "text-violet-400",
     tags: ["AI Agent", "Budget", "Score", "Templates", "PDF"],
     testId: "card-hub-campaign-planner",
-  },
-  {
-    title: "Reports Dashboard",
-    description: "Customizable drag-and-drop reporting widgets. Build your own view of content performance.",
-    href: "/reports",
-    icon: LayoutDashboard,
-    accentHsl: "340 75% 55%",
-    iconBg: "bg-rose-500/10 ring-rose-500/30",
-    iconColor: "text-rose-400",
-    tags: ["Drag & Drop", "Widgets", "Custom", "Charts", "KPIs"],
-    testId: "card-hub-reports",
   },
 ];
 

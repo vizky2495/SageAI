@@ -589,14 +589,14 @@ export default function ReportsDashboard() {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-20 border-b bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/50">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link href="/" data-testid="link-reports-home">
+          <Link href="/performance" data-testid="link-reports-back">
             <div className="flex items-center gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
               <ChevronLeft className="h-4 w-4" />
-              <span className="text-sm font-[650] tracking-tight">CIA</span>
+              <span className="text-sm font-[650] tracking-tight">Performance</span>
             </div>
           </Link>
 
-          <h1 className="text-sm font-semibold">Reports Dashboard</h1>
+          <h1 className="text-sm font-semibold">My Reports</h1>
 
           <div className="flex items-center gap-1.5">
             <Button

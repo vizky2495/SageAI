@@ -10,6 +10,7 @@ import {
   Library,
   ArrowRight,
   TrendingUp,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   Area,
@@ -385,6 +386,23 @@ export default function FunnelDashboard() {
                     <div className="text-sm font-[650]">Content Library</div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
                       Browse all content assets by stage, search by content ID, preview URLs
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
+                </div>
+              </Card>
+            </Link>
+
+            <Link href="/reports" data-testid="link-my-reports-from-performance">
+              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
+                    <LayoutDashboard className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-[650]">My Reports</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      Build your own dashboard — drag, drop, and resize widgets to track what matters to you
                     </div>
                   </div>
                   <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
