@@ -617,11 +617,12 @@ function ExportPDFButton({ text, msgId }: { text: string; msgId: number }) {
     <button
       onClick={handleExport}
       disabled={exporting}
-      className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground/60 hover:text-muted-foreground disabled:opacity-40"
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#00D657]/10 hover:bg-[#00D657]/20 border border-[#00D657]/30 transition-colors text-[#00D657] disabled:opacity-40"
       title={exporting ? "Exporting..." : "Download as PDF"}
       data-testid={`btn-export-pdf-${msgId}`}
     >
-      <FileDown className={`h-3 w-3 ${exporting ? "animate-pulse" : ""}`} />
+      <FileDown className={`h-4 w-4 ${exporting ? "animate-pulse" : ""}`} />
+      <span className="text-xs font-medium">{exporting ? "Exporting..." : "PDF"}</span>
     </button>
   );
 }
