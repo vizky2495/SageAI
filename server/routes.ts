@@ -133,18 +133,23 @@ export async function registerRoutes(
   ) {
     let structureScore = 40;
     if (pageCount >= 3) structureScore += 10;
+    if (pageCount >= 8) structureScore += 10;
     if (wordCount >= 500) structureScore += 10;
+    if (wordCount >= 2000) structureScore += 10;
 
     let ctaScore = 30;
     const avgCtaCount = aggregateBenchmarks?.avgCtaCount || 0;
     if (avgCtaCount >= 2) ctaScore += 15;
+    if (avgCtaCount >= 3) ctaScore += 10;
 
     let topicScore = 35;
     if (classification.topic && classification.topic !== "Business Management") topicScore += 15;
     if (classification.product !== "General") topicScore += 10;
+    if (classification.industry !== "General") topicScore += 5;
 
     let formatScore = 40;
     if (["Whitepaper", "eBook", "Guide", "Case Study"].includes(classification.contentType)) formatScore += 15;
+    if (["Report", "Brochure"].includes(classification.contentType)) formatScore += 10;
 
     structureScore = Math.min(structureScore, 100);
     ctaScore = Math.min(ctaScore, 100);
@@ -154,31 +159,55 @@ export async function registerRoutes(
     const readinessScore = Math.round(structureScore * 0.3 + ctaScore * 0.2 + topicScore * 0.3 + formatScore * 0.2);
 
     const primaryMetric = classification.stage === "BOFU" ? "sqos" : classification.stage === "MOFU" ? "leads" : "pageviews";
-    const metricStats = aggregateBenchmarks?.[primaryMetric];
-    const low = metricStats ? Math.round(metricStats.median * 0.7) : 0;
-    const high = metricStats ? Math.round(metricStats.median * 1.3) : 0;
+
+    let low = 0;
+    let high = 0;
+    let confidence: "low" | "medium" | "high" = "low";
+
+    if (aggregateBenchmarks) {
+      const metricStats = aggregateBenchmarks[primaryMetric];
+      if (metricStats && metricStats.median > 0) {
+        const qualityMultiplier = readinessScore / 100;
+        low = Math.round(metricStats.median * 0.5 * qualityMultiplier);
+        high = Math.round(metricStats.median * 1.5 * qualityMultiplier);
+        if (low < metricStats.min) low = metricStats.min;
+
+        confidence = aggregateBenchmarks.sampleSize >= 20 ? "medium" : "low";
+        if (benchmarks.length >= 3 && benchmarks[0].relevanceScore >= 40) confidence = "medium";
+      }
+    }
 
     const recommendations: any[] = [];
     if (benchmarks.length > 0) {
       const topAsset = benchmarks[0];
+      const topMetricVal = primaryMetric === "sqos" ? topAsset.sqos : primaryMetric === "leads" ? topAsset.leads : topAsset.pageviews;
       recommendations.push({
         priority: 1,
-        text: `Study the structure and CTA placement of ${topAsset.contentId}, which leads performance in this category.`,
+        text: `Model after ${topAsset.contentId} (${topMetricVal} ${primaryMetric}, ${topAsset.relevanceScore}% match) — study its structure, CTA placement, and channel strategy.`,
         contentId: topAsset.contentId,
       });
     }
     if (benchmarks.length > 1) {
+      const b = benchmarks[1];
       recommendations.push({
         priority: 2,
-        text: `Consider the channel strategy used by ${benchmarks[1].contentId} for distribution insights.`,
-        contentId: benchmarks[1].contentId,
+        text: `Apply the distribution strategy from ${b.contentId} (channel: ${b.channel || "mixed"}, ${b.pageviews} pageviews) to maximize reach.`,
+        contentId: b.contentId,
       });
     }
     if (benchmarks.length > 2) {
+      const b = benchmarks[2];
       recommendations.push({
         priority: 3,
-        text: `Review ${benchmarks[2].contentId} for topic coverage and keyword overlap opportunities.`,
-        contentId: benchmarks[2].contentId,
+        text: `Review ${b.contentId} for topic coverage and keyword alignment — it achieved ${b.leads} leads via ${b.cta || "standard"} CTAs.`,
+        contentId: b.contentId,
+      });
+    }
+    if (aggregateBenchmarks && benchmarks.length >= 2) {
+      recommendations.push({
+        priority: 4,
+        text: `Target ${aggregateBenchmarks.pageviews.median}+ pageviews (stage median) and ${aggregateBenchmarks.leads.median}+ leads. Top performers in this stage reach ${aggregateBenchmarks.pageviews.max} pageviews.`,
+        contentId: benchmarks[0].contentId,
       });
     }
 
@@ -194,7 +223,7 @@ export async function registerRoutes(
       performanceForecast: {
         metric: primaryMetric,
         projectedRange: [low, high],
-        confidence: "low",
+        confidence,
       },
       recommendations,
       reusability: benchmarks.slice(0, 3).map((b: any) => ({
@@ -204,7 +233,7 @@ export async function registerRoutes(
         repurposingOpportunity: b.relevanceScore < 40 ? "high" : "medium",
       })),
       topAction: benchmarks.length > 0
-        ? `Benchmark against ${benchmarks[0].contentId} and optimize CTAs for ${classification.stage} conversion.`
+        ? `Benchmark against ${benchmarks[0].contentId} and optimize CTAs for ${classification.stage} conversion — similar content averages ${aggregateBenchmarks ? aggregateBenchmarks[primaryMetric]?.median || 0 : 0} ${primaryMetric}.`
         : `Focus on ${classification.stage} best practices for ${classification.contentType} content.`,
     };
   }
@@ -230,8 +259,17 @@ export async function registerRoutes(
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 500,
-      system: `You are a senior content strategist for Sage's content analytics platform. RULES: Every recommendation must cite a specific Content ID from the comparison set. No generic advice. Be concise. Performance forecasts use ranges not point estimates. Return ONLY valid JSON matching this schema:
-{"readinessScore":<0-100>,"readinessBreakdown":{"structure":<0-100>,"ctas":<0-100>,"topicDepth":<0-100>,"format":<0-100>},"performanceForecast":{"metric":"<pageviews|leads|sqos>","projectedRange":[<low>,<high>],"confidence":"<low|medium|high>"},"recommendations":[{"priority":<1-5>,"text":"<specific advice citing Content ID>","contentId":"<ID>"}],"reusability":[{"contentId":"<ID>","overlap":<0-100>,"cannibalizationRisk":"<low|medium|high>","repurposingOpportunity":"<low|medium|high>"}],"topAction":"<single sentence>"}`,
+      system: `You are a senior content strategist for Sage's content analytics platform. Analyze uploaded PDF content against real performance data from Sage's marketing dataset.
+
+RULES:
+- Every recommendation MUST cite a specific Content ID from the comparison set with its actual metrics.
+- Performance forecasts MUST be based on the benchmark data provided (medians, ranges from real dataset). Use the comparison set metrics to estimate where new content would land.
+- For TOFU: primary metric is pageviews. For MOFU: primary metric is leads. For BOFU: primary metric is SQOs.
+- projectedRange should reflect realistic estimates based on benchmark medians and the content's quality/relevance. Scale by readiness score.
+- No generic advice. Be data-specific. Cite actual numbers from the comparison set and benchmarks.
+
+Return ONLY valid JSON matching this schema:
+{"readinessScore":<0-100>,"readinessBreakdown":{"structure":<0-100>,"ctas":<0-100>,"topicDepth":<0-100>,"format":<0-100>},"performanceForecast":{"metric":"<pageviews|leads|sqos>","projectedRange":[<low>,<high>],"confidence":"<low|medium|high>"},"recommendations":[{"priority":<1-5>,"text":"<specific advice citing Content ID and its actual metrics>","contentId":"<ID>"}],"reusability":[{"contentId":"<ID>","overlap":<0-100>,"cannibalizationRisk":"<low|medium|high>","repurposingOpportunity":"<low|medium|high>"}],"topAction":"<single sentence with projected metric range>"}`,
       messages: [{
         role: "user",
         content: `Analyze this content:
@@ -408,26 +446,25 @@ No explanation, no markdown, no extra text. Only JSON.`,
       try {
         const allAssets = await storage.getAllAssets();
 
-        const sameStageAndType = allAssets.filter(a => {
-          if (a.stage !== classification.stage) return false;
-          if (!a.typecampaignmember) return false;
-          const aType = a.typecampaignmember.toLowerCase();
-          const cType = classification.contentType.toLowerCase();
-          return aType.includes(cType.split(" ")[0]) || cType.includes(aType.split(" ")[0]);
-        });
+        const sameStage = allAssets.filter(a => a.stage === classification.stage);
+        const sameStagePool = sameStage.length >= 5 ? sameStage : allAssets.filter(a => a.stage !== "UNKNOWN");
 
         const primaryMetricKey: Record<string, string> = { TOFU: "pageviewsSum", MOFU: "uniqueLeads", BOFU: "sqoCount" };
         const metricKey = primaryMetricKey[classification.stage] || "pageviewsSum";
 
-        const metricValues = sameStageAndType.map(a => (a as any)[metricKey] || 0).sort((x: number, y: number) => x - y);
+        const metricValues = sameStagePool.map(a => (a as any)[metricKey] || 0).sort((x: number, y: number) => x - y);
         const q75Index = Math.floor(metricValues.length * 0.75);
         const q75Threshold = metricValues.length > 0 ? metricValues[q75Index] : 0;
-        const topPerformers = sameStageAndType.filter(a => ((a as any)[metricKey] || 0) >= q75Threshold);
+        const topPerformers = sameStagePool.filter(a => ((a as any)[metricKey] || 0) >= q75Threshold);
 
-        const pool = topPerformers.length >= 3 ? topPerformers : sameStageAndType;
+        const pool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
 
         const classTopicWords: Set<string> = new Set(
           (classification.topic || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3)
+        );
+
+        const classProductWords: Set<string> = new Set(
+          (classification.product || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 2)
         );
 
         const pdfWords: Set<string> = new Set(
@@ -436,52 +473,62 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
         const scored = pool.map(a => {
           let productScore = 0;
-          if (classification.product !== "General" && a.productFranchise) {
-            const cp = classification.product.toLowerCase();
-            const ap = a.productFranchise.toLowerCase();
-            if (ap === cp) productScore = 1;
-            else if (ap.includes(cp.split(" ").pop()!) || cp.includes(ap.split(" ").pop()!)) productScore = 0.6;
+          if (classification.product !== "General") {
+            const assetProductFields = [a.productFranchise, a.productCategory].filter(Boolean).join(" ").toLowerCase();
+            if (assetProductFields) {
+              for (const pw of classProductWords) {
+                if (assetProductFields.includes(pw)) { productScore = 1; break; }
+              }
+              if (productScore === 0) {
+                const cp = classification.product.toLowerCase();
+                if (assetProductFields.includes(cp) || cp.includes(assetProductFields.split(" ")[0])) productScore = 0.6;
+              }
+            }
           }
 
           let topicScore = 0;
           if (classTopicWords.size > 0) {
             const assetWords: Set<string> = new Set(
-              [a.name, a.objective, a.cta, a.campaignName]
+              [a.name, a.objective, a.cta, a.campaignName, a.contentId, a.productCategory]
                 .filter(Boolean)
                 .join(" ")
                 .toLowerCase()
-                .split(/\s+/)
+                .split(/[\s_\-]+/)
                 .filter(w => w.length > 3)
             );
             const overlap = Array.from(classTopicWords).filter(w => assetWords.has(w)).length;
-            topicScore = classTopicWords.size > 0 ? overlap / classTopicWords.size : 0;
-            if (topicScore > 1) topicScore = 1;
+            topicScore = classTopicWords.size > 0 ? Math.min(overlap / classTopicWords.size, 1) : 0;
           }
 
           let industryScore = 0;
           if (classification.industry !== "General") {
             const ci = classification.industry.toLowerCase();
-            const fields = [a.productCategory, a.campaignName, a.name, a.objective].filter(Boolean).join(" ").toLowerCase();
-            if (fields.includes(ci.split(" ")[0])) industryScore = 1;
-          }
-
-          let pageSimilarity = 0;
-          if (pdfWords.size > 0 && a.name) {
-            const assetNameWords: Set<string> = new Set(
-              [a.name, a.objective, a.cta].filter(Boolean).join(" ").toLowerCase().split(/\s+/).filter(w => w.length > 3)
-            );
-            if (assetNameWords.size > 0) {
-              const matchCount = Array.from(assetNameWords).filter(w => pdfWords.has(w)).length;
-              pageSimilarity = Math.min(matchCount / assetNameWords.size, 1);
+            const ciWords = ci.split(/\s+/).filter((w: string) => w.length > 3);
+            const fields = [a.productCategory, a.campaignName, a.name, a.objective, a.contentId].filter(Boolean).join(" ").toLowerCase();
+            for (const w of ciWords) {
+              if (fields.includes(w)) { industryScore = 1; break; }
             }
           }
 
-          const relevance = productScore * 0.4 + topicScore * 0.3 + industryScore * 0.15 + pageSimilarity * 0.15;
+          let contentSimilarity = 0;
+          if (pdfWords.size > 0) {
+            const assetTextWords: Set<string> = new Set(
+              [a.name, a.objective, a.cta, a.contentId, a.productFranchise, a.productCategory, a.utmCampaign]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+                .split(/[\s_\-]+/)
+                .filter(w => w.length > 3)
+            );
+            if (assetTextWords.size > 0) {
+              const matchCount = Array.from(assetTextWords).filter(w => pdfWords.has(w)).length;
+              contentSimilarity = Math.min(matchCount / Math.max(assetTextWords.size, 1), 1);
+            }
+          }
 
-          return {
-            asset: a,
-            relevance,
-          };
+          const relevance = productScore * 0.4 + topicScore * 0.3 + industryScore * 0.15 + contentSimilarity * 0.15;
+
+          return { asset: a, relevance };
         });
 
         scored.sort((a, b) => b.relevance - a.relevance);
@@ -503,40 +550,38 @@ No explanation, no markdown, no extra text. Only JSON.`,
           relevanceScore: Math.round(s.relevance * 100),
         }));
 
-        const benchmarkPool = topPerformers.length >= 3 ? topPerformers : sameStageAndType;
-        if (benchmarkPool.length > 0) {
-          const stats = (arr: number[]) => {
-            if (arr.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
-            const sorted = [...arr].sort((a, b) => a - b);
-            const sum = sorted.reduce((a, b) => a + b, 0);
-            const mean = sum / sorted.length;
-            const mid = Math.floor(sorted.length / 2);
-            const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-            return { min: sorted[0], max: sorted[sorted.length - 1], mean: Math.round(mean * 10) / 10, median };
-          };
+        const stats = (arr: number[]) => {
+          if (arr.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
+          const sorted = [...arr].sort((a, b) => a - b);
+          const sum = sorted.reduce((a, b) => a + b, 0);
+          const mean = sum / sorted.length;
+          const mid = Math.floor(sorted.length / 2);
+          const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+          return { min: sorted[0], max: sorted[sorted.length - 1], mean: Math.round(mean * 10) / 10, median };
+        };
 
-          const pv = benchmarkPool.map(a => a.pageviewsSum || 0);
-          const dl = benchmarkPool.map(a => a.downloadsSum || 0);
-          const ld = benchmarkPool.map(a => a.uniqueLeads || 0);
-          const sq = benchmarkPool.map(a => a.sqoCount || 0);
-          const tm = benchmarkPool.map(a => a.timeAvg || 0);
+        const benchmarkPool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
+        const pv = benchmarkPool.map(a => a.pageviewsSum || 0);
+        const dl = benchmarkPool.map(a => a.downloadsSum || 0);
+        const ld = benchmarkPool.map(a => a.uniqueLeads || 0);
+        const sq = benchmarkPool.map(a => a.sqoCount || 0);
+        const tm = benchmarkPool.map(a => a.timeAvg || 0);
 
-          const ctaCounts = benchmarkPool.map(a => {
-            if (!a.cta) return 0;
-            return a.cta.split(/[,;|]/).filter((s: string) => s.trim()).length;
-          });
+        const ctaCounts = benchmarkPool.map(a => {
+          if (!a.cta) return 0;
+          return a.cta.split(/[,;|]/).filter((s: string) => s.trim()).length;
+        });
 
-          aggregateBenchmarks = {
-            sampleSize: benchmarkPool.length,
-            totalPoolSize: sameStageAndType.length,
-            pageviews: stats(pv),
-            downloads: stats(dl),
-            leads: stats(ld),
-            sqos: stats(sq),
-            timeOnPage: stats(tm),
-            avgCtaCount: ctaCounts.length > 0 ? Math.round(ctaCounts.reduce((a: number, b: number) => a + b, 0) / ctaCounts.length * 10) / 10 : 0,
-          };
-        }
+        aggregateBenchmarks = {
+          sampleSize: benchmarkPool.length,
+          totalPoolSize: sameStagePool.length,
+          pageviews: stats(pv),
+          downloads: stats(dl),
+          leads: stats(ld),
+          sqos: stats(sq),
+          timeOnPage: stats(tm),
+          avgCtaCount: ctaCounts.length > 0 ? Math.round(ctaCounts.reduce((a: number, b: number) => a + b, 0) / ctaCounts.length * 10) / 10 : 0,
+        };
       } catch (benchErr) {
         console.error("Benchmark lookup failed:", benchErr);
       }
