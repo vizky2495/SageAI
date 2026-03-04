@@ -877,12 +877,12 @@ function CompletedPlanSummary({ msgs, convTitle, onExportPdf, onEditPlan }: { ms
         </div>
       )}
       <div className="flex gap-2">
-        <Button onClick={onExportPdf} className="rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black text-xs font-medium h-8 px-3" data-testid="btn-summary-export-pdf">
-          <Download className="h-3.5 w-3.5 mr-1.5" />
+        <Button onClick={onExportPdf} className="rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black text-sm font-semibold h-10 px-5" data-testid="btn-summary-export-pdf">
+          <Download className="h-4 w-4 mr-2" />
           Download PDF
         </Button>
-        <Button onClick={onEditPlan} variant="outline" className="rounded-xl text-xs h-8 px-3" data-testid="btn-summary-edit-plan">
-          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+        <Button onClick={onEditPlan} variant="outline" className="rounded-xl text-sm h-10 px-4" data-testid="btn-summary-edit-plan">
+          <Pencil className="h-4 w-4 mr-2" />
           Continue
         </Button>
       </div>
