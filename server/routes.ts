@@ -1265,6 +1265,175 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
+  app.post("/api/content-library/upload", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetName, contentType, product, funnelStage, country, industry, dateCreated, description } = req.body as {
+        assetName?: string; contentType?: string; product?: string; funnelStage?: string;
+        country?: string; industry?: string; dateCreated?: string; description?: string;
+      };
+      if (!assetName?.trim() || !contentType?.trim() || !product?.trim() || !funnelStage?.trim()) {
+        return res.status(400).json({ message: "Asset name, content type, product, and funnel stage are required." });
+      }
+      const shortName = assetName.trim().replace(/[^a-zA-Z0-9]+/g, "").slice(0, 30);
+      const countryCode = (country || "").trim().replace(/[^a-zA-Z]+/g, "").slice(0, 5).toUpperCase() || "XX";
+      const industryCode = (industry || "").trim().replace(/[^a-zA-Z]+/g, "").slice(0, 10) || "General";
+      const contentId = `${product.trim().replace(/\s+/g, "")}_${countryCode}_${industryCode}_${contentType.trim()}_${funnelStage.trim()}_${shortName}`;
+
+      const asset = await storage.createUploadedAsset({
+        contentId,
+        assetName: assetName.trim(),
+        contentType: contentType.trim(),
+        product: product.trim(),
+        funnelStage: funnelStage.trim() as any,
+        country: (country || "").trim(),
+        industry: (industry || "").trim(),
+        dateCreated: dateCreated || new Date().toISOString().split("T")[0],
+        source: "uploaded",
+        description: (description || "").trim(),
+      });
+      res.json(asset);
+    } catch (err: any) {
+      console.error("Upload asset error:", err);
+      res.status(500).json({ message: "Failed to upload asset." });
+    }
+  });
+
+  app.get("/api/content-library", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { contentType, product, funnelStage, country, industry, search } = req.query as Record<string, string | undefined>;
+
+      const [datasetAssets, uploadedAssetsList] = await Promise.all([
+        storage.getAllAssets(),
+        storage.getUploadedAssets({ contentType, product, funnelStage, country, industry, search }),
+      ]);
+
+      const datasetItems = datasetAssets
+        .filter(a => {
+          if (contentType && a.typecampaignmember !== contentType) return false;
+          if (product && a.productFranchise !== product) return false;
+          if (funnelStage && a.stage !== funnelStage) return false;
+          if (search) {
+            const s = search.toLowerCase();
+            const haystack = [a.contentId, a.name, a.productFranchise, a.typecampaignmember].join(" ").toLowerCase();
+            if (!haystack.includes(s)) return false;
+          }
+          return true;
+        })
+        .map(a => ({
+          id: a.id,
+          contentId: a.contentId,
+          assetName: a.name || a.contentId,
+          contentType: a.typecampaignmember || "Unknown",
+          product: a.productFranchise || "",
+          funnelStage: a.stage,
+          country: "",
+          industry: "",
+          dateCreated: a.dateStamp || "",
+          source: "dataset" as const,
+          description: "",
+          pageviewsSum: a.pageviewsSum,
+          timeAvg: a.timeAvg,
+          downloadsSum: a.downloadsSum,
+          uniqueLeads: a.uniqueLeads,
+          sqoCount: a.sqoCount,
+          createdAt: a.createdAt,
+        }));
+
+      const uploadedItems = uploadedAssetsList.map(a => ({
+        id: a.id,
+        contentId: a.contentId,
+        assetName: a.assetName,
+        contentType: a.contentType,
+        product: a.product,
+        funnelStage: a.funnelStage,
+        country: a.country,
+        industry: a.industry,
+        dateCreated: a.dateCreated,
+        source: "uploaded" as const,
+        description: a.description,
+        pageviewsSum: a.pageviewsSum,
+        timeAvg: a.timeAvg,
+        downloadsSum: a.downloadsSum,
+        uniqueLeads: a.uniqueLeads,
+        sqoCount: a.sqoCount,
+        createdAt: a.createdAt,
+      }));
+
+      res.json([...uploadedItems, ...datasetItems]);
+    } catch (err: any) {
+      console.error("Content library error:", err);
+      res.status(500).json({ message: "Failed to fetch content library." });
+    }
+  });
+
+  app.patch("/api/content-library/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id);
+      const updates = req.body as Partial<{
+        assetName: string; contentType: string; product: string;
+        funnelStage: string; country: string; industry: string; description: string;
+      }>;
+      const asset = await storage.updateUploadedAsset(id, updates as any);
+      if (!asset) {
+        return res.status(404).json({ message: "Asset not found or is a dataset asset." });
+      }
+      res.json(asset);
+    } catch (err: any) {
+      console.error("Update asset error:", err);
+      res.status(500).json({ message: "Failed to update asset." });
+    }
+  });
+
+  app.get("/api/content-library/health", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const [datasetAssets, uploadedAssetsList] = await Promise.all([
+        storage.getAllAssets(),
+        storage.getUploadedAssets({}),
+      ]);
+
+      const now = Date.now();
+      const sixMonths = 180 * 24 * 60 * 60 * 1000;
+      const twelveMonths = 365 * 24 * 60 * 60 * 1000;
+
+      let active = 0, aging = 0, stale = 0, newAssets = 0;
+      const byStage: Record<string, number> = { TOFU: 0, MOFU: 0, BOFU: 0, UNKNOWN: 0 };
+
+      for (const a of datasetAssets) {
+        byStage[a.stage] = (byStage[a.stage] || 0) + 1;
+        const date = a.dateStamp ? new Date(a.dateStamp).getTime() : 0;
+        const age = now - date;
+        if (age < sixMonths) active++;
+        else if (age < twelveMonths) aging++;
+        else stale++;
+      }
+
+      for (const a of uploadedAssetsList) {
+        byStage[a.funnelStage] = (byStage[a.funnelStage] || 0) + 1;
+        const hasPerf = a.pageviewsSum > 0 || a.uniqueLeads > 0 || a.sqoCount > 0;
+        if (!hasPerf) {
+          newAssets++;
+        } else {
+          const date = a.dateCreated ? new Date(a.dateCreated).getTime() : 0;
+          const age = now - date;
+          if (age < sixMonths) active++;
+          else if (age < twelveMonths) aging++;
+          else stale++;
+        }
+      }
+
+      res.json({
+        total: datasetAssets.length + uploadedAssetsList.length,
+        datasetCount: datasetAssets.length,
+        uploadedCount: uploadedAssetsList.length,
+        byStage,
+        freshness: { active, aging, stale, new: newAssets },
+      });
+    } catch (err: any) {
+      console.error("Library health error:", err);
+      res.status(500).json({ message: "Failed to get library health." });
+    }
+  });
+
   app.get("/api/insights/summary", requireAuth, async (_req, res) => {
     try {
       const summary = await buildInsightsSummary();

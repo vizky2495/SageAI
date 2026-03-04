@@ -8,9 +8,12 @@ import {
   type User,
   type InsertUser,
   users,
+  type UploadedAsset,
+  type InsertUploadedAsset,
+  uploadedAssets,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, and, sql, count } from "drizzle-orm";
+import { eq, desc, ilike, and, or, sql, count } from "drizzle-orm";
 
 export interface IStorage {
   clearAssets(): Promise<void>;
@@ -29,6 +32,17 @@ export interface IStorage {
   createUser(data: InsertUser): Promise<User>;
   getUserById(id: string): Promise<User | null>;
   updateUserAdmin(id: string, isAdmin: boolean): Promise<User | null>;
+  createUploadedAsset(data: InsertUploadedAsset): Promise<UploadedAsset>;
+  getUploadedAssets(opts: {
+    contentType?: string;
+    product?: string;
+    funnelStage?: string;
+    country?: string;
+    industry?: string;
+    search?: string;
+  }): Promise<UploadedAsset[]>;
+  getUploadedAssetById(id: string): Promise<UploadedAsset | null>;
+  updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +135,48 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserAdmin(id: string, isAdmin: boolean): Promise<User | null> {
     const [row] = await db.update(users).set({ isAdmin }).where(eq(users.id, id)).returning();
+    return row ?? null;
+  }
+
+  async createUploadedAsset(data: InsertUploadedAsset): Promise<UploadedAsset> {
+    const [row] = await db.insert(uploadedAssets).values(data).returning();
+    return row;
+  }
+
+  async getUploadedAssets(opts: {
+    contentType?: string;
+    product?: string;
+    funnelStage?: string;
+    country?: string;
+    industry?: string;
+    search?: string;
+  }): Promise<UploadedAsset[]> {
+    const conditions = [];
+    if (opts.contentType) conditions.push(eq(uploadedAssets.contentType, opts.contentType));
+    if (opts.product) conditions.push(eq(uploadedAssets.product, opts.product));
+    if (opts.funnelStage) conditions.push(eq(uploadedAssets.funnelStage, opts.funnelStage as any));
+    if (opts.country) conditions.push(ilike(uploadedAssets.country, `%${opts.country}%`));
+    if (opts.industry) conditions.push(ilike(uploadedAssets.industry, `%${opts.industry}%`));
+    if (opts.search) {
+      conditions.push(
+        or(
+          ilike(uploadedAssets.assetName, `%${opts.search}%`),
+          ilike(uploadedAssets.contentId, `%${opts.search}%`),
+          ilike(uploadedAssets.product, `%${opts.search}%`),
+        )!
+      );
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    return db.select().from(uploadedAssets).where(where).orderBy(desc(uploadedAssets.createdAt));
+  }
+
+  async getUploadedAssetById(id: string): Promise<UploadedAsset | null> {
+    const [row] = await db.select().from(uploadedAssets).where(eq(uploadedAssets.id, id));
+    return row ?? null;
+  }
+
+  async updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null> {
+    const [row] = await db.update(uploadedAssets).set(data as any).where(eq(uploadedAssets.id, id)).returning();
     return row ?? null;
   }
 }

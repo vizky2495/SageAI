@@ -120,6 +120,34 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const uploadedAssets = pgTable("uploaded_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentId: text("content_id").notNull(),
+  assetName: text("asset_name").notNull(),
+  contentType: text("content_type").notNull(),
+  product: text("product").notNull(),
+  funnelStage: funnelStageEnum("funnel_stage").notNull(),
+  country: text("country").notNull().default(""),
+  industry: text("industry").notNull().default(""),
+  dateCreated: text("date_created").notNull(),
+  source: text("source").notNull().default("uploaded"),
+  description: text("description").notNull().default(""),
+  fileUrl: text("file_url"),
+  pageviewsSum: integer("pageviews_sum").notNull().default(0),
+  timeAvg: real("time_avg").notNull().default(0),
+  downloadsSum: integer("downloads_sum").notNull().default(0),
+  uniqueLeads: integer("unique_leads").notNull().default(0),
+  sqoCount: integer("sqo_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertUploadedAssetSchema = createInsertSchema(uploadedAssets).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertUploadedAsset = z.infer<typeof insertUploadedAssetSchema>;
+export type UploadedAsset = typeof uploadedAssets.$inferSelect;
+
 export const feedbackTypeEnum = pgEnum("feedback_type", ["suggestion", "bug"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["open", "in_progress", "resolved", "closed"]);
 
