@@ -785,7 +785,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
     const allAssets = await storage.getAllAssets();
     const matches = allAssets
       .filter(a => {
-        const searchable = [a.contentId, a.name, a.productFranchise, a.productCategory, a.stage]
+        const searchable = [a.contentId, a.name, a.productFranchise, a.productCategory, a.stage, a.typecampaignmember]
           .filter(Boolean).join(" ").toLowerCase();
         return searchable.includes(q);
       })

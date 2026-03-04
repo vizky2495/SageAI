@@ -357,6 +357,7 @@ function AssetPicker({
                     </Badge>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                    {asset.type && <span className="text-foreground/70 font-medium">{asset.type}</span>}
                     <span>{formatNum(asset.pageviews)} views</span>
                     <span>{formatNum(asset.leads)} leads</span>
                     <span>{formatNum(asset.sqos)} SQOs</span>
@@ -426,10 +427,12 @@ function SelectedAssetCard({
           </Badge>
         </div>
 
-        {asset.product && (
+        {(asset.type || asset.product) && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Tag className="h-3 w-3" />
-            <span>{asset.product}</span>
+            {asset.type && <span className="font-medium text-foreground/80">{asset.type}</span>}
+            {asset.type && asset.product && <span className="text-muted-foreground/50">·</span>}
+            {asset.product && <span>{asset.product}</span>}
             {asset.channel && <span className="text-muted-foreground/50">· {asset.channel}</span>}
           </div>
         )}
