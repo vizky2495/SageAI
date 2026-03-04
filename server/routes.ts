@@ -103,8 +103,9 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
-  const MAX_PDF_SIZE_MB = 20;
+  const MAX_PDF_SIZE_MB = 50;
   const MAX_PDF_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+  const MAX_PDF_PAGES = 20;
 
   const analysisCache = new Map<string, { result: any; timestamp: number }>();
   const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -388,30 +389,64 @@ Benchmarks: ${benchmarkSummary}`
 
       let text = "";
       let pageCount = 0;
+      let extractionMethod = "pdfjs";
+
       try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         const uint8 = new Uint8Array(buffer);
         const loadingTask = pdfjsLib.getDocument({ data: uint8, disableFontFace: true, useSystemFonts: true, disableWorker: true } as any);
         const doc = await loadingTask.promise;
         pageCount = doc.numPages;
+        const pagesToProcess = Math.min(pageCount, MAX_PDF_PAGES);
         const pageTexts: string[] = [];
-        for (let i = 1; i <= pageCount; i++) {
-          const page = await doc.getPage(i);
-          const content = await page.getTextContent();
-          const strings = content.items
-            .filter((item: any) => typeof item.str === "string")
-            .map((item: any) => item.str);
-          pageTexts.push(strings.join(" "));
+        for (let i = 1; i <= pagesToProcess; i++) {
+          try {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            const strings = content.items
+              .filter((item: any) => typeof item.str === "string")
+              .map((item: any) => item.str);
+            pageTexts.push(strings.join(" "));
+          } catch (pageErr) {
+            console.error(`PDF page ${i} extraction error:`, pageErr);
+          }
         }
         text = pageTexts.join("\n").trim();
         doc.destroy();
       } catch (parseErr: any) {
-        console.error("PDF extraction error:", parseErr);
-        return res.status(422).json({ error: "Failed to extract text from PDF. The file may be corrupted or image-only." });
+        console.error("PDF primary extraction error, trying raw buffer fallback:", parseErr);
+        extractionMethod = "raw";
+        try {
+          const rawStr = buffer.toString("utf-8");
+          const cleaned = rawStr
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, " ")
+            .replace(/\s{3,}/g, " ");
+          const textMatches = cleaned.match(/\(([^)]{2,})\)/g);
+          if (textMatches) {
+            text = textMatches
+              .map(m => m.slice(1, -1))
+              .filter(s => /[a-zA-Z]{2,}/.test(s))
+              .join(" ")
+              .trim();
+          }
+          if (!text) {
+            const readable = cleaned
+              .split(/[^a-zA-Z0-9.,;:!?'"()\-\s]+/)
+              .filter(s => s.trim().length > 10 && /[a-zA-Z]{3,}/.test(s))
+              .join(" ")
+              .trim();
+            text = readable.slice(0, 50000);
+          }
+        } catch (rawErr) {
+          console.error("Raw buffer fallback also failed:", rawErr);
+        }
       }
 
-      if (!text) {
-        return res.status(422).json({ error: "Could not extract any text from this PDF. It may be image-only or scanned." });
+      if (!text || text.length < 20) {
+        return res.status(422).json({
+          error: "This PDF is image-based and doesn't contain extractable text. Please upload a text-based PDF or enter the content details manually.",
+          isImageOnly: true,
+        });
       }
 
       const wordCount = text.split(/\s+/).length;

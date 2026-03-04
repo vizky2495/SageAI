@@ -150,11 +150,22 @@ interface SlotAState {
   error: string | null;
 }
 
+interface ManualContentB {
+  title: string;
+  contentType: string;
+  stage: string;
+  product: string;
+  description: string;
+}
+
 interface SlotBState {
   file: File | null;
   result: PdfResult | null;
   loading: boolean;
   error: string | null;
+  isImageOnly: boolean;
+  showManualEntry: boolean;
+  manualContent: ManualContentB;
 }
 
 const EMPTY_SLOT_A: SlotAState = {
@@ -167,7 +178,8 @@ const EMPTY_SLOT_A: SlotAState = {
   error: null,
 };
 
-const EMPTY_SLOT_B: SlotBState = { file: null, result: null, loading: false, error: null };
+const EMPTY_MANUAL_B: ManualContentB = { title: "", contentType: "", stage: "", product: "", description: "" };
+const EMPTY_SLOT_B: SlotBState = { file: null, result: null, loading: false, error: null, isImageOnly: false, showManualEntry: false, manualContent: EMPTY_MANUAL_B };
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -555,12 +567,79 @@ function UploadWithMetrics({
   );
 }
 
+const CONTENT_TYPES_B = ["Whitepaper", "eBook", "Case Study", "Datasheet", "Guide", "Infographic", "Brochure", "Checklist", "Report", "Flyer", "Document"];
+const STAGES_B = ["TOFU", "MOFU", "BOFU"];
+
+function ManualContentForm({
+  manual,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  manual: ManualContentB;
+  onChange: (m: ManualContentB) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  const labelClass = "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1";
+  const inputClass = "w-full h-8 px-2.5 rounded-md bg-muted/30 border border-border/40 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all";
+  const selectClass = inputClass;
+  const ready = manual.title.trim() && manual.contentType && manual.stage;
+
+  return (
+    <div className="rounded-xl bg-muted/10 border border-border/30 p-3 space-y-2.5">
+      <div className="flex items-center gap-2 mb-1">
+        <FileText className="h-4 w-4 text-sky-400" />
+        <span className="text-xs font-semibold">Enter content details manually</span>
+      </div>
+      <div>
+        <label className={labelClass}>Content Title *</label>
+        <input type="text" value={manual.title} onChange={e => onChange({ ...manual, title: e.target.value })} placeholder="e.g., Sage Intacct Migration Guide" className={inputClass} data-testid="input-manual-title" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={labelClass}>Content Type *</label>
+          <select value={manual.contentType} onChange={e => onChange({ ...manual, contentType: e.target.value })} className={selectClass} data-testid="select-manual-content-type">
+            <option value="">Select...</option>
+            {CONTENT_TYPES_B.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Funnel Stage *</label>
+          <select value={manual.stage} onChange={e => onChange({ ...manual, stage: e.target.value })} className={selectClass} data-testid="select-manual-stage">
+            <option value="">Select...</option>
+            {STAGES_B.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className={labelClass}>Product Focus</label>
+        <input type="text" value={manual.product} onChange={e => onChange({ ...manual, product: e.target.value })} placeholder="e.g., Sage Intacct" className={inputClass} data-testid="input-manual-product" />
+      </div>
+      <div>
+        <label className={labelClass}>Description</label>
+        <textarea value={manual.description} onChange={e => onChange({ ...manual, description: e.target.value })} placeholder="Brief summary of the content..." rows={3} className={`${inputClass} h-auto py-2`} data-testid="input-manual-description" />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button onClick={onSubmit} disabled={!ready} className="rounded-lg bg-[#00D657] hover:bg-[#00C04E] text-black text-xs font-medium h-8 px-3" data-testid="btn-manual-submit">
+          Use These Details
+        </Button>
+        <Button onClick={onCancel} variant="outline" className="rounded-lg text-xs h-8 px-3" data-testid="btn-manual-cancel">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function NewContentUpload({
   slotB,
+  setSlotB,
   extractPdf,
   onClear,
 }: {
   slotB: SlotBState;
+  setSlotB: (s: SlotBState) => void;
   extractPdf: (file: File) => void;
   onClear: () => void;
 }) {
@@ -584,6 +663,29 @@ function NewContentUpload({
     },
     [extractPdf]
   );
+
+  const handleManualSubmit = () => {
+    const m = slotB.manualContent;
+    const manualResult: PdfResult = {
+      filename: m.title || "Manual Entry",
+      pageCount: 0,
+      wordCount: m.description.split(/\s+/).filter(Boolean).length,
+      text: m.description,
+      classification: {
+        contentType: m.contentType,
+        stage: m.stage,
+        product: m.product || "General",
+        industry: "General",
+        topic: m.title,
+        confidence: 1.0,
+      },
+      isFallback: true,
+      benchmarks: [],
+      aggregateBenchmarks: null,
+      analysis: null,
+    };
+    setSlotB({ ...EMPTY_SLOT_B, result: manualResult });
+  };
 
   if (slotB.result) {
     const r = slotB.result;
@@ -614,10 +716,12 @@ function NewContentUpload({
               <FileText className="h-4 w-4 shrink-0 text-sky-400" />
               <span className="text-sm font-medium truncate">{r.filename}</span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Badge variant="outline" className="text-[10px]">{r.pageCount}p</Badge>
-              <Badge variant="outline" className="text-[10px]">{r.wordCount.toLocaleString()}w</Badge>
-            </div>
+            {r.pageCount > 0 && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Badge variant="outline" className="text-[10px]">{r.pageCount}p</Badge>
+                <Badge variant="outline" className="text-[10px]">{r.wordCount.toLocaleString()}w</Badge>
+              </div>
+            )}
           </div>
 
           {r.isFallback && (
@@ -654,43 +758,73 @@ function NewContentUpload({
             </span>
           </div>
 
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline self-start"
-            data-testid="btn-details-content-b"
-          >
-            {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {showDetails ? "Hide extracted text" : "Show extracted text"}
-          </button>
-
-          <AnimatePresence>
-            {showDetails && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
+          {r.text && r.text.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline self-start"
+                data-testid="btn-details-content-b"
               >
-                <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
-                  <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
-                    {textExpanded ? r.text : previewText}
-                    {!textExpanded && hasMore && "..."}
-                  </p>
-                  {hasMore && (
-                    <button
-                      onClick={() => setTextExpanded(!textExpanded)}
-                      className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
-                    >
-                      {textExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      {textExpanded ? "Show less" : "Show full text"}
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {showDetails ? "Hide extracted text" : "Show extracted text"}
+              </button>
+
+              <AnimatePresence>
+                {showDetails && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
+                        {textExpanded ? r.text : previewText}
+                        {!textExpanded && hasMore && "..."}
+                      </p>
+                      {hasMore && (
+                        <button
+                          onClick={() => setTextExpanded(!textExpanded)}
+                          className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
+                        >
+                          {textExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          {textExpanded ? "Show less" : "Show full text"}
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
         </div>
+      </div>
+    );
+  }
+
+  if (slotB.showManualEntry) {
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Content B</span>
+            <span className="text-[10px] text-muted-foreground">— Manual Entry</span>
+          </div>
+          <button
+            onClick={onClear}
+            className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted/50 transition-colors"
+            data-testid="btn-clear-manual-b"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </div>
+        <ManualContentForm
+          manual={slotB.manualContent}
+          onChange={(m) => setSlotB({ ...slotB, manualContent: m })}
+          onSubmit={handleManualSubmit}
+          onCancel={onClear}
+        />
       </div>
     );
   }
@@ -729,12 +863,32 @@ function NewContentUpload({
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-1.5 mt-2 text-xs text-destructive"
+          className="mt-2 space-y-2"
           data-testid="text-error-content-b"
         >
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          {slotB.error}
+          <div className="flex items-center gap-1.5 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {slotB.error}
+          </div>
+          <button
+            onClick={() => setSlotB({ ...slotB, showManualEntry: true, error: null })}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline"
+            data-testid="btn-enter-manually"
+          >
+            <FileText className="h-3 w-3" />
+            Enter details manually instead
+          </button>
         </motion.div>
+      )}
+      {!slotB.error && !slotB.loading && (
+        <button
+          onClick={() => setSlotB({ ...slotB, showManualEntry: true })}
+          className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline"
+          data-testid="btn-enter-manually-alt"
+        >
+          <FileText className="h-3 w-3" />
+          Enter details manually instead
+        </button>
       )}
     </div>
   );
@@ -1053,18 +1207,18 @@ export default function ContentComparison() {
   const [slotB, setSlotB] = useState<SlotBState>(EMPTY_SLOT_B);
   const [expanded, setExpanded] = useState(false);
 
-  const MAX_FILE_SIZE_MB = 20;
+  const MAX_FILE_SIZE_MB = 50;
 
   const extractPdfB = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setSlotB({ file, result: null, loading: false, error: "Only PDF files are supported." });
+      setSlotB({ ...EMPTY_SLOT_B, file, error: "Only PDF files are supported." });
       return;
     }
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      setSlotB({ file, result: null, loading: false, error: `File exceeds the ${MAX_FILE_SIZE_MB}MB size limit.` });
+      setSlotB({ ...EMPTY_SLOT_B, file, error: `File exceeds the ${MAX_FILE_SIZE_MB}MB size limit.` });
       return;
     }
-    setSlotB({ file, result: null, loading: true, error: null });
+    setSlotB({ ...EMPTY_SLOT_B, file, loading: true });
     try {
       const base64 = await fileToBase64(file);
       const res = await authFetch("/api/assets/extract-pdf", {
@@ -1074,12 +1228,12 @@ export default function ContentComparison() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setSlotB({ file, result: null, loading: false, error: data.error || "Extraction failed." });
+        setSlotB({ ...EMPTY_SLOT_B, file, error: data.error || "Extraction failed.", isImageOnly: !!data.isImageOnly });
         return;
       }
-      setSlotB({ file, result: data, loading: false, error: null });
+      setSlotB({ ...EMPTY_SLOT_B, file, result: data });
     } catch {
-      setSlotB({ file, result: null, loading: false, error: "Something went wrong." });
+      setSlotB({ ...EMPTY_SLOT_B, file, error: "Something went wrong. You can enter the details manually." });
     }
   }, []);
 
@@ -1180,6 +1334,7 @@ export default function ContentComparison() {
 
                 <NewContentUpload
                   slotB={slotB}
+                  setSlotB={setSlotB}
                   extractPdf={extractPdfB}
                   onClear={() => setSlotB(EMPTY_SLOT_B)}
                 />
