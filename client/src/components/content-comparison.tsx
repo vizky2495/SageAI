@@ -18,6 +18,11 @@ import {
   TrendingUp,
   BarChart3,
   Layers,
+  Target,
+  Lightbulb,
+  RefreshCw,
+  Zap,
+  ShieldCheck,
 } from "lucide-react";
 
 interface Classification {
@@ -63,6 +68,38 @@ interface AggregateBenchmarks {
   avgCtaCount: number;
 }
 
+interface Recommendation {
+  priority: number;
+  text: string;
+  contentId: string;
+}
+
+interface ReusabilityItem {
+  contentId: string;
+  overlap: number;
+  cannibalizationRisk: string;
+  repurposingOpportunity: string;
+}
+
+interface Analysis {
+  isFallbackAnalysis: boolean;
+  readinessScore: number;
+  readinessBreakdown: {
+    structure: number;
+    ctas: number;
+    topicDepth: number;
+    format: number;
+  };
+  performanceForecast: {
+    metric: string;
+    projectedRange: [number, number];
+    confidence: string;
+  };
+  recommendations: Recommendation[];
+  reusability: ReusabilityItem[];
+  topAction: string;
+}
+
 interface PdfResult {
   filename: string;
   pageCount: number;
@@ -72,6 +109,7 @@ interface PdfResult {
   isFallback: boolean;
   benchmarks: Benchmark[];
   aggregateBenchmarks: AggregateBenchmarks | null;
+  analysis: Analysis | null;
 }
 
 interface SlotState {
@@ -100,6 +138,184 @@ const stageBadgeColors: Record<string, string> = {
   MOFU: "bg-sky-500/15 text-sky-400 border-sky-500/25",
   BOFU: "bg-violet-500/15 text-violet-400 border-violet-500/25",
 };
+
+function ReadinessRing({ score, size = 64 }: { score: number; size?: number }) {
+  const radius = (size - 8) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+  const color = score >= 70 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-rose-400";
+  const strokeColor = score >= 70 ? "stroke-emerald-400" : score >= 40 ? "stroke-amber-400" : "stroke-rose-400";
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke="currentColor"
+          className="text-muted/20" strokeWidth={4}
+        />
+        <motion.circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" strokeWidth={4}
+          className={strokeColor}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1, ease: "easeOut" }}
+        />
+      </svg>
+      <span className={`absolute text-sm font-bold ${color}`} data-testid="text-readiness-score">
+        {score}
+      </span>
+    </div>
+  );
+}
+
+function BreakdownBar({ label, value }: { label: string; value: number }) {
+  const color = value >= 70 ? "bg-emerald-400" : value >= 40 ? "bg-amber-400" : "bg-rose-400";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-muted-foreground w-16 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${value}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className={`h-full rounded-full ${color}`}
+        />
+      </div>
+      <span className="text-[10px] font-semibold tabular-nums w-7 text-right">{value}</span>
+    </div>
+  );
+}
+
+function AnalysisCard({ analysis, label }: { analysis: Analysis; label: string }) {
+  const riskColors: Record<string, string> = {
+    low: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    medium: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    high: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+  };
+
+  return (
+    <div className="space-y-3" data-testid={`analysis-${label.toLowerCase().replace(/\s/g, "-")}`}>
+      {analysis.isFallbackAnalysis && (
+        <div className="flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>AI analysis unavailable — showing benchmark-based estimates</span>
+        </div>
+      )}
+
+      <div className="rounded-xl bg-muted/10 border border-border/30 p-4">
+        <div className="flex items-start gap-4">
+          <ReadinessRing score={analysis.readinessScore} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaign Readiness</span>
+            </div>
+            <div className="space-y-1.5">
+              <BreakdownBar label="Structure" value={analysis.readinessBreakdown.structure} />
+              <BreakdownBar label="CTAs" value={analysis.readinessBreakdown.ctas} />
+              <BreakdownBar label="Topic" value={analysis.readinessBreakdown.topicDepth} />
+              <BreakdownBar label="Format" value={analysis.readinessBreakdown.format} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-muted/10 border border-border/30 p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Target className="h-3.5 w-3.5 text-primary" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Performance Forecast</span>
+          <Badge variant="outline" className={`text-[9px] ml-auto ${
+            analysis.performanceForecast.confidence === "high" ? "text-emerald-400 border-emerald-500/30" :
+            analysis.performanceForecast.confidence === "medium" ? "text-amber-400 border-amber-500/30" :
+            "text-muted-foreground"
+          }`}>
+            {analysis.performanceForecast.confidence} confidence
+          </Badge>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-bold tabular-nums">
+            {analysis.performanceForecast.projectedRange[0].toLocaleString()} — {analysis.performanceForecast.projectedRange[1].toLocaleString()}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            projected {analysis.performanceForecast.metric}
+          </span>
+        </div>
+      </div>
+
+      {analysis.recommendations.length > 0 && (
+        <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b border-border/30">
+            <Lightbulb className="h-3.5 w-3.5 text-primary" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recommendations</span>
+          </div>
+          <div className="divide-y divide-border/20">
+            {analysis.recommendations.sort((a, b) => a.priority - b.priority).map((r, i) => (
+              <div key={i} className="px-4 py-2.5 flex items-start gap-2.5">
+                <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full h-5 w-5 flex items-center justify-center shrink-0 mt-0.5">
+                  {r.priority}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs leading-relaxed">{r.text}</p>
+                  <Badge variant="outline" className="text-[9px] mt-1 text-muted-foreground">{r.contentId}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analysis.reusability.length > 0 && (
+        <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b border-border/30">
+            <RefreshCw className="h-3.5 w-3.5 text-primary" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Reusability Assessment</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/20">
+                  <th className="text-left px-4 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content ID</th>
+                  <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Overlap</th>
+                  <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Cannibalization</th>
+                  <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Repurpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.reusability.map((r, i) => (
+                  <tr key={i} className="border-b border-border/10 last:border-0">
+                    <td className="px-4 py-1.5 font-medium max-w-[140px] truncate">{r.contentId}</td>
+                    <td className="text-center px-2 py-1.5 tabular-nums">{r.overlap}%</td>
+                    <td className="text-center px-2 py-1.5">
+                      <Badge variant="outline" className={`text-[9px] border ${riskColors[r.cannibalizationRisk] || ""}`}>
+                        {r.cannibalizationRisk}
+                      </Badge>
+                    </td>
+                    <td className="text-center px-2 py-1.5">
+                      <Badge variant="outline" className={`text-[9px] border ${riskColors[r.repurposingOpportunity] || ""}`}>
+                        {r.repurposingOpportunity}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2.5">
+        <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <p className="text-xs font-medium leading-relaxed" data-testid={`text-top-action-${label.toLowerCase().replace(/\s/g, "-")}`}>
+          {analysis.topAction}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function ClassificationCard({ result, label }: { result: PdfResult; label: string }) {
   const c = result.classification;
@@ -263,6 +479,7 @@ function UploadSlot({
   accentColor: string;
 }) {
   const [textExpanded, setTextExpanded] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -299,27 +516,50 @@ function UploadSlot({
         </div>
 
         <ClassificationCard result={slot.result} label={label} />
+
+        {slot.result.analysis && (
+          <AnalysisCard analysis={slot.result.analysis} label={label} />
+        )}
+
         <BenchmarkTable benchmarks={slot.result.benchmarks} aggregateBenchmarks={slot.result.aggregateBenchmarks} label={label} />
 
-        <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Extracted Text</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words" data-testid={`text-preview-${label.toLowerCase().replace(/\s/g, "-")}`}>
-            {textExpanded ? slot.result.text : previewText}
-            {!textExpanded && hasMore && "..."}
-          </p>
-          {hasMore && (
-            <button
-              onClick={() => setTextExpanded(!textExpanded)}
-              className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
-              data-testid={`btn-expand-${label.toLowerCase().replace(/\s/g, "-")}`}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline self-start"
+          data-testid={`btn-details-${label.toLowerCase().replace(/\s/g, "-")}`}
+        >
+          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {showDetails ? "Hide extracted text" : "Show extracted text"}
+        </button>
+
+        <AnimatePresence>
+          {showDetails && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
             >
-              {textExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {textExpanded ? "Show less" : "Show full text"}
-            </button>
+              <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
+                <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words" data-testid={`text-preview-${label.toLowerCase().replace(/\s/g, "-")}`}>
+                  {textExpanded ? slot.result.text : previewText}
+                  {!textExpanded && hasMore && "..."}
+                </p>
+                {hasMore && (
+                  <button
+                    onClick={() => setTextExpanded(!textExpanded)}
+                    className="flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
+                    data-testid={`btn-expand-${label.toLowerCase().replace(/\s/g, "-")}`}
+                  >
+                    {textExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {textExpanded ? "Show less" : "Show full text"}
+                  </button>
+                )}
+              </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       </div>
     );
   }
@@ -337,7 +577,7 @@ function UploadSlot({
         {slot.loading ? (
           <>
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
-            <span className="text-xs text-muted-foreground">Classifying content...</span>
+            <span className="text-xs text-muted-foreground">Analyzing content...</span>
           </>
         ) : (
           <>
@@ -443,6 +683,13 @@ function ComparisonSummary({ a, b }: { a: PdfResult; b: PdfResult }) {
                   <td className="py-1 font-medium tabular-nums">{a.wordCount.toLocaleString()}</td>
                   <td className="py-1 font-medium tabular-nums">{b.wordCount.toLocaleString()}</td>
                 </tr>
+                {a.analysis && b.analysis && (
+                <tr>
+                  <td className="py-1 text-muted-foreground">Readiness</td>
+                  <td className="py-1 font-bold tabular-nums">{a.analysis.readinessScore}</td>
+                  <td className="py-1 font-bold tabular-nums">{b.analysis.readinessScore}</td>
+                </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -543,7 +790,7 @@ export default function ContentComparison() {
           </div>
           <div className="text-left">
             <h3 className="text-sm font-semibold">Content Comparison</h3>
-            <p className="text-[11px] text-muted-foreground">Upload two PDFs to classify, compare, and benchmark against existing content</p>
+            <p className="text-[11px] text-muted-foreground">Upload two PDFs to classify, analyze, and benchmark against existing content</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -106,6 +106,153 @@ export async function registerRoutes(
   const MAX_PDF_SIZE_MB = 20;
   const MAX_PDF_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
+  const analysisCache = new Map<string, { result: any; timestamp: number }>();
+  const CACHE_TTL_MS = 30 * 60 * 1000;
+
+  function getCacheKey(filename: string, wordCount: number, pageCount: number, textHash: string): string {
+    return `${filename}:${wordCount}:${pageCount}:${textHash}`;
+  }
+
+  function simpleHash(text: string): string {
+    let hash = 0;
+    const sample = text.slice(0, 500) + text.slice(-500);
+    for (let i = 0; i < sample.length; i++) {
+      const char = sample.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0;
+    }
+    return hash.toString(36);
+  }
+
+  function generateFallbackAnalysis(
+    classification: any,
+    benchmarks: any[],
+    aggregateBenchmarks: any,
+    wordCount: number,
+    pageCount: number
+  ) {
+    let structureScore = 40;
+    if (pageCount >= 3) structureScore += 10;
+    if (wordCount >= 500) structureScore += 10;
+
+    let ctaScore = 30;
+    const avgCtaCount = aggregateBenchmarks?.avgCtaCount || 0;
+    if (avgCtaCount >= 2) ctaScore += 15;
+
+    let topicScore = 35;
+    if (classification.topic && classification.topic !== "Business Management") topicScore += 15;
+    if (classification.product !== "General") topicScore += 10;
+
+    let formatScore = 40;
+    if (["Whitepaper", "eBook", "Guide", "Case Study"].includes(classification.contentType)) formatScore += 15;
+
+    structureScore = Math.min(structureScore, 100);
+    ctaScore = Math.min(ctaScore, 100);
+    topicScore = Math.min(topicScore, 100);
+    formatScore = Math.min(formatScore, 100);
+
+    const readinessScore = Math.round(structureScore * 0.3 + ctaScore * 0.2 + topicScore * 0.3 + formatScore * 0.2);
+
+    const primaryMetric = classification.stage === "BOFU" ? "sqos" : classification.stage === "MOFU" ? "leads" : "pageviews";
+    const metricStats = aggregateBenchmarks?.[primaryMetric];
+    const low = metricStats ? Math.round(metricStats.median * 0.7) : 0;
+    const high = metricStats ? Math.round(metricStats.median * 1.3) : 0;
+
+    const recommendations: any[] = [];
+    if (benchmarks.length > 0) {
+      const topAsset = benchmarks[0];
+      recommendations.push({
+        priority: 1,
+        text: `Study the structure and CTA placement of ${topAsset.contentId}, which leads performance in this category.`,
+        contentId: topAsset.contentId,
+      });
+    }
+    if (benchmarks.length > 1) {
+      recommendations.push({
+        priority: 2,
+        text: `Consider the channel strategy used by ${benchmarks[1].contentId} for distribution insights.`,
+        contentId: benchmarks[1].contentId,
+      });
+    }
+    if (benchmarks.length > 2) {
+      recommendations.push({
+        priority: 3,
+        text: `Review ${benchmarks[2].contentId} for topic coverage and keyword overlap opportunities.`,
+        contentId: benchmarks[2].contentId,
+      });
+    }
+
+    return {
+      isFallbackAnalysis: true,
+      readinessScore,
+      readinessBreakdown: {
+        structure: structureScore,
+        ctas: ctaScore,
+        topicDepth: topicScore,
+        format: formatScore,
+      },
+      performanceForecast: {
+        metric: primaryMetric,
+        projectedRange: [low, high],
+        confidence: "low",
+      },
+      recommendations,
+      reusability: benchmarks.slice(0, 3).map((b: any) => ({
+        contentId: b.contentId,
+        overlap: Math.round(b.relevanceScore * 0.8),
+        cannibalizationRisk: b.relevanceScore >= 60 ? "medium" : "low",
+        repurposingOpportunity: b.relevanceScore < 40 ? "high" : "medium",
+      })),
+      topAction: benchmarks.length > 0
+        ? `Benchmark against ${benchmarks[0].contentId} and optimize CTAs for ${classification.stage} conversion.`
+        : `Focus on ${classification.stage} best practices for ${classification.contentType} content.`,
+    };
+  }
+
+  async function runAnalysis(
+    classification: any,
+    benchmarks: any[],
+    aggregateBenchmarks: any,
+    textSnippet: string,
+    filename: string,
+    wordCount: number,
+    pageCount: number
+  ) {
+    const compSetSummary = benchmarks.map((b: any) =>
+      `- ${b.contentId}: ${b.type || "unknown"}, ${b.stage}, views=${b.pageviews}, leads=${b.leads}, sqos=${b.sqos}, match=${b.relevanceScore}%`
+    ).join("\n");
+
+    const benchmarkSummary = aggregateBenchmarks
+      ? `Pool: ${aggregateBenchmarks.sampleSize} of ${aggregateBenchmarks.totalPoolSize} assets. Pageviews: ${aggregateBenchmarks.pageviews.min}-${aggregateBenchmarks.pageviews.max} (median ${aggregateBenchmarks.pageviews.median}). Leads: ${aggregateBenchmarks.leads.min}-${aggregateBenchmarks.leads.max} (median ${aggregateBenchmarks.leads.median}). SQOs: ${aggregateBenchmarks.sqos.min}-${aggregateBenchmarks.sqos.max} (median ${aggregateBenchmarks.sqos.median}). Avg CTAs: ${aggregateBenchmarks.avgCtaCount}.`
+      : "No benchmark data available.";
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 500,
+      system: `You are a senior content strategist for Sage's content analytics platform. RULES: Every recommendation must cite a specific Content ID from the comparison set. No generic advice. Be concise. Performance forecasts use ranges not point estimates. Return ONLY valid JSON matching this schema:
+{"readinessScore":<0-100>,"readinessBreakdown":{"structure":<0-100>,"ctas":<0-100>,"topicDepth":<0-100>,"format":<0-100>},"performanceForecast":{"metric":"<pageviews|leads|sqos>","projectedRange":[<low>,<high>],"confidence":"<low|medium|high>"},"recommendations":[{"priority":<1-5>,"text":"<specific advice citing Content ID>","contentId":"<ID>"}],"reusability":[{"contentId":"<ID>","overlap":<0-100>,"cannibalizationRisk":"<low|medium|high>","repurposingOpportunity":"<low|medium|high>"}],"topAction":"<single sentence>"}`,
+      messages: [{
+        role: "user",
+        content: `Analyze this content:
+Filename: ${filename} | Type: ${classification.contentType} | Stage: ${classification.stage} | Product: ${classification.product} | Industry: ${classification.industry} | Topic: ${classification.topic} | Pages: ${pageCount} | Words: ${wordCount}
+
+Text excerpt (first 1000 chars):
+${textSnippet.slice(0, 1000)}
+
+Comparison set:
+${compSetSummary || "No comparison assets found."}
+
+Benchmarks: ${benchmarkSummary}`
+      }],
+    });
+
+    const raw = (msg.content[0] as any).text || "";
+    const parsed = parseJsonRobust(raw);
+    if (!parsed.readinessScore || !parsed.recommendations) throw new Error("Incomplete analysis");
+    return { ...parsed, isFallbackAnalysis: false };
+  }
+
   function ruleBasedClassify(text: string, pageCount: number, filename: string): {
     contentType: string; stage: string; product: string; industry: string; topic: string; confidence: number;
   } {
@@ -374,6 +521,26 @@ No explanation, no markdown, no extra text. Only JSON.`,
         console.error("Benchmark lookup failed:", benchErr);
       }
 
+      let analysis: any = null;
+      const cacheKey = getCacheKey(filename, wordCount, pageCount, simpleHash(text));
+      const cached = analysisCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        analysis = cached.result;
+      } else {
+        if (matchedAssets.length === 0) {
+          analysis = generateFallbackAnalysis(classification, matchedAssets, aggregateBenchmarks, wordCount, pageCount);
+        } else {
+          try {
+            const textSnippet = text.slice(0, 2000);
+            analysis = await runAnalysis(classification, matchedAssets, aggregateBenchmarks, textSnippet, filename, wordCount, pageCount);
+          } catch (analysisErr) {
+            console.error("AI analysis failed, using fallback:", analysisErr);
+            analysis = generateFallbackAnalysis(classification, matchedAssets, aggregateBenchmarks, wordCount, pageCount);
+          }
+        }
+        analysisCache.set(cacheKey, { result: analysis, timestamp: Date.now() });
+      }
+
       res.json({
         filename,
         pageCount,
@@ -383,6 +550,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
         isFallback,
         benchmarks: matchedAssets,
         aggregateBenchmarks,
+        analysis,
       });
     } catch (error: any) {
       console.error("PDF extraction error:", error);
