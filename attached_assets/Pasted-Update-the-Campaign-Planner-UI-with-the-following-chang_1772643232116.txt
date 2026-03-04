@@ -1,0 +1,45 @@
+Update the Campaign Planner UI with the following changes to make it more useful for marketing managers planning content-driven campaigns:
+1. Fix the campaign history list:
+
+Replace "New Campaign" with auto-generated titles based on the campaign parameters (product, market, content type). Example: "Sage 50 — US Hospitality — MOFU PDF" or "Sage Intacct — UK Manufacturing — TOFU Webinar"
+Add a short status tag next to each entry: "Draft", "Complete", or "Exported" so users know which plans they've finished
+Show a 1-line summary below the title (e.g., "LinkedIn + Email | 8-week plan | 40 SQO target")
+
+2. Replace the "New campaign plan" button flow with a guided intake form:
+When the user clicks "+ New campaign plan", instead of jumping straight into chat, show a short intake form that collects the key inputs upfront. This ensures the agent has everything it needs and doesn't have to ask 5 follow-up questions. Fields:
+
+Campaign objective — dropdown: Awareness / Lead Generation / Conversion / Retention
+Product — dropdown or search from the product list in the data (e.g., Sage 50, Sage Intacct, Sage 200, etc.)
+Target market — dropdown: country or region
+Target industry — dropdown or free text
+Funnel stage — dropdown: TOFU / MOFU / BOFU
+Content type — dropdown: PDF / Webinar / Display / Email / Video / Other
+Content approach — radio buttons: "Use existing content from library" / "Create new content" / "Not sure — recommend based on data"
+Budget range — optional text field
+Timeline — optional date picker or dropdown: 4 weeks / 8 weeks / 12 weeks / Custom
+Additional context — optional free text area for anything else
+
+After submitting, pass all these parameters to the Campaign Planner agent as structured input so it can skip the Q&A phase and go directly into analysis and planning.
+3. Add a results dashboard view for completed plans:
+When a user opens a completed campaign plan, show a summary card at the top before the chat history:
+
+Campaign name, objective, product, market
+Recommended channels (as tags/chips)
+Top content recommendation (name + match score)
+Key KPI targets (SQOs, conversion rate, cost per SQO)
+"Download PDF" button (prominent, Sage green)
+"Edit Plan" button to reopen the conversation
+
+4. Update the description card:
+The current description is good but slightly generic. Update it to emphasize the content comparison and data-driven planning angle more clearly:
+
+What it does: "Analyzes your content against historically top-performing assets matched by content type, funnel stage, industry, product, and country. Builds a channel and content strategy with data-backed KPIs and budget allocation."
+Who it's for: "Marketing managers and campaign leads who want to know which content will perform best before they launch — and how to optimize it if it won't."
+How it works: "You provide the campaign brief (product, market, funnel stage, content type). The planner queries your performance data, finds the best-matching historical content, compares it against your planned asset, and builds a full campaign plan with channel mix, timeline, and success metrics."
+When to use it: "Before launching any campaign. Start here to validate your content choice, find the best channel mix, and set realistic targets based on what's actually worked before."
+
+5. Visual polish (align with Sage brand):
+
+The "+ New campaign plan" button should be Sage Brilliant Green (#00D657) with black text, not the current muted outline style
+Campaign history cards: add a subtle left border in Brilliant Green for completed plans, Amber for drafts
+Add a small icon next to each campaign entry indicating content type (PDF icon, webinar icon, etc.)

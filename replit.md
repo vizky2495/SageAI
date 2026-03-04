@@ -29,7 +29,7 @@ Preferred communication style: Simple, everyday language.
     - **Content Performance (`/performance`)**: KPI overview and high-level funnel insights.
     - **Deep Dive Analytics (`/analytics`)**: Detailed filtering and CTA/channel/product analysis.
     - **Content Library (`/content-library`)**: Content browsing, search, and an AI-powered Content Comparison tool. The comparison estimates new content performance against existing assets and provides strategic recommendations.
-    - **Campaign Planner (`/campaign-planner`)**: AI-driven campaign strategy builder with chat UI.
+    - **Campaign Planner (`/campaign-planner`)**: AI-driven campaign strategy builder. Features guided intake form (objective, product, market, industry, funnel stage, content type, approach, budget, timeline) that sends structured briefs to the planner agent. Campaign history list shows auto-generated titles from parameters, Draft/Complete status tags with colored left borders, summary lines with channel mix and readiness scores, and content type icons. Completed plans show a summary dashboard card with objective/product/market metadata, readiness score, channel chips, and prominent Download PDF and Continue buttons. Sage green primary actions.
     - **Feedback (`/feedback`)**: User feedback submission and admin review.
     - **My Reports (`/reports`)**: Customizable, multi-page reporting dashboard with various chart types and data export.
     - **Admin (`/admin`)**: Data upload and AI-powered column mapping.
