@@ -1413,7 +1413,6 @@ export default function CampaignPlannerPage() {
   const [showIntakeForm, setShowIntakeForm] = useState(false);
   const [showSummaryView, setShowSummaryView] = useState(false);
   const [products, setProducts] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<"campaigns" | "library">("campaigns");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
@@ -1700,18 +1699,7 @@ export default function CampaignPlannerPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/20 border border-border/30 mb-4" data-testid="tabs-planner">
-              <button onClick={() => { setActiveTab("campaigns"); setShowIntakeForm(false); }} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === "campaigns" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} data-testid="tab-campaigns">
-                Campaigns
-              </button>
-              <button onClick={() => { setActiveTab("library"); setShowIntakeForm(false); }} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === "library" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} data-testid="tab-library">
-                Content Library
-              </button>
-            </div>
-
-            {activeTab === "library" ? (
-              <ContentLibraryView products={products} />
-            ) : showIntakeForm ? (
+            {showIntakeForm ? (
               <IntakeForm products={products} onSubmit={createConversationFromIntake} onCancel={() => setShowIntakeForm(false)} />
             ) : (
               <>
