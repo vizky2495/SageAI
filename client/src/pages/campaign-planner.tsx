@@ -282,6 +282,78 @@ function CopyButton({ text, msgId }: { text: string; msgId: number }) {
   );
 }
 
+function sanitizePdfText(text: string): string {
+  return text
+    .replace(/[\u2700-\u27BF\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, "")
+    .replace(/[^\x00-\x7F\xA0-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2022\u2026]/g, "")
+    .replace(/\u2013/g, "-").replace(/\u2014/g, " - ")
+    .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2022/g, " ").replace(/\u2026/g, "...")
+    .trim();
+}
+
+function reformatForPdf(raw: string): string {
+  let text = stripHiddenMarkers(raw);
+  text = text.replace(/^#+\s*STEP\s+\d+\s*[:—-]?\s*/gim, "## ");
+  const chatbotPhrases = [
+    /\b(Let me explain|Here's the thing|I recommend|I can also|Would you like me to|Here's what I found|I don't have data for this but|Let me break this down|I'll help you|Great question)[^.]*[.!?]?\s*/gi,
+    /\bDATA GAP IDENTIFIED\b[^.]*\.\s*/gi,
+    /\bWould you like me to[^?]*\?\s*/gi,
+  ];
+  for (const pat of chatbotPhrases) {
+    text = text.replace(pat, "");
+  }
+  text = text.replace(/\*\*([^*]+)\*\*/g, "$1");
+  text = text.replace(/^---+$/gm, "");
+  text = text.replace(/^#{4,}\s*/gm, "### ");
+  text = text.replace(/\n{3,}/g, "\n\n");
+  return sanitizePdfText(text);
+}
+
+function parseMarkdownTables(text: string): { before: string; table: string[][]; after: string }[] {
+  const sections: { before: string; table: string[][]; after: string }[] = [];
+  const lines = text.split("\n");
+  let i = 0;
+  let buffer: string[] = [];
+
+  while (i < lines.length) {
+    if (lines[i].startsWith("|") && lines[i].endsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].startsWith("|") && lines[i].endsWith("|")) {
+        if (!/^\|[\s-:|]+\|$/.test(lines[i])) {
+          tableLines.push(lines[i]);
+        }
+        i++;
+      }
+      if (tableLines.length > 0) {
+        const table = tableLines.map(l => l.split("|").filter(Boolean).map(c => sanitizePdfText(c.trim())));
+        sections.push({ before: buffer.join("\n"), table, after: "" });
+        buffer = [];
+      }
+    } else {
+      buffer.push(lines[i]);
+      i++;
+    }
+  }
+  if (buffer.length > 0) {
+    sections.push({ before: buffer.join("\n"), table: [], after: "" });
+  }
+  return sections;
+}
+
+const SAGE = {
+  black: [0, 0, 0] as [number, number, number],
+  green: [0, 214, 87] as [number, number, number],
+  white: [255, 255, 255] as [number, number, number],
+  teal: [0, 77, 77] as [number, number, number],
+  darkRow: [26, 26, 26] as [number, number, number],
+  callout: [10, 61, 31] as [number, number, number],
+  dimGreen: [0, 166, 92] as [number, number, number],
+  gray: [51, 51, 51] as [number, number, number],
+  amber: [233, 139, 91] as [number, number, number],
+  cherry: [161, 56, 41] as [number, number, number],
+};
+
 function ExportPDFButton({ text, msgId }: { text: string; msgId: number }) {
   const [exporting, setExporting] = useState(false);
 
@@ -290,97 +362,246 @@ function ExportPDFButton({ text, msgId }: { text: string; msgId: number }) {
     try {
       const { default: jsPDF } = await import("jspdf");
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
       const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 15;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 18;
       const contentWidth = pageWidth - margin * 2;
-      let y = 20;
+      const footerY = pageHeight - 10;
 
-      doc.setFontSize(18);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(88, 28, 135);
-      doc.text("Content Intelligence Analyst", margin, y);
-      y += 8;
-      doc.setFontSize(12);
-      doc.setTextColor(107, 114, 128);
-      doc.text("Campaign Plan Report", margin, y);
-      y += 6;
-      doc.setFontSize(9);
-      doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, margin, y);
-      y += 8;
+      const addBlackPage = () => {
+        doc.setFillColor(...SAGE.black);
+        doc.rect(0, 0, pageWidth, pageHeight, "F");
+      };
 
-      doc.setDrawColor(139, 92, 246);
-      doc.setLineWidth(0.5);
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 8;
+      const addFooter = (pageNum: number) => {
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...SAGE.dimGreen);
+        doc.text("Sage", margin, footerY);
+        doc.setTextColor(...SAGE.green);
+        doc.text("CONFIDENTIAL: INTERNAL USE ONLY", pageWidth / 2, footerY, { align: "center" });
+        doc.setTextColor(...SAGE.dimGreen);
+        doc.text(`${pageNum}`, pageWidth - margin, footerY, { align: "right" });
+        doc.setFontSize(5.5);
+        doc.text("(c) 2026 The Sage Group plc, or its licensors. All rights reserved.", pageWidth / 2, footerY + 3, { align: "center" });
+      };
 
-      const cleaned = stripHiddenMarkers(text);
-      const lines = cleaned.split("\n");
-
-      for (const line of lines) {
-        if (y > doc.internal.pageSize.getHeight() - 20) {
+      const checkPage = (y: number, needed: number, pageNum: { val: number }): number => {
+        if (y + needed > footerY - 8) {
+          pageNum.val++;
           doc.addPage();
-          y = 20;
+          addBlackPage();
+          addFooter(pageNum.val);
+          return 18;
         }
+        return y;
+      };
 
-        if (line.startsWith("### ")) {
-          doc.setFontSize(11);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(30, 30, 30);
-          y += 3;
-          const wrappedLines = doc.splitTextToSize(line.slice(4), contentWidth);
-          doc.text(wrappedLines, margin, y);
-          y += wrappedLines.length * 5 + 2;
-        } else if (line.startsWith("## ")) {
-          doc.setFontSize(13);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(88, 28, 135);
-          y += 4;
-          const wrappedLines = doc.splitTextToSize(line.slice(3), contentWidth);
-          doc.text(wrappedLines, margin, y);
-          y += wrappedLines.length * 6 + 3;
-        } else if (line.startsWith("# ")) {
-          doc.setFontSize(14);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(88, 28, 135);
-          y += 5;
-          const wrappedLines = doc.splitTextToSize(line.slice(2), contentWidth);
-          doc.text(wrappedLines, margin, y);
-          y += wrappedLines.length * 6 + 3;
-        } else if (line.startsWith("- ") || line.startsWith("* ")) {
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(50, 50, 50);
-          const bulletText = `• ${line.slice(2).replace(/\*\*/g, "")}`;
-          const wrappedLines = doc.splitTextToSize(bulletText, contentWidth - 5);
-          doc.text(wrappedLines, margin + 3, y);
-          y += wrappedLines.length * 4.5 + 1;
-        } else if (/^\d+\.\s/.test(line)) {
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(50, 50, 50);
-          const cleanLine = line.replace(/\*\*/g, "");
-          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth - 5);
-          doc.text(wrappedLines, margin + 3, y);
-          y += wrappedLines.length * 4.5 + 1;
-        } else if (line.trim() === "") {
-          y += 3;
-        } else if (line.startsWith("|")) {
+      const drawTableHeader = (headers: string[], colWidth: number, colCount: number, cellPadX: number, rowHeight: number, yPos: number) => {
+        doc.setFillColor(...SAGE.green);
+        doc.rect(margin, yPos, contentWidth, rowHeight, "F");
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...SAGE.black);
+        headers.forEach((h, i) => {
+          const cellX = margin + i * colWidth + cellPadX;
+          const truncated = h.length > 25 ? h.slice(0, 24) + "..." : h;
+          doc.text(truncated, cellX, yPos + 5);
+        });
+      };
+
+      const drawTable = (headers: string[], rows: string[][], y: number, pageNum: { val: number }): number => {
+        const colCount = headers.length;
+        const colWidth = contentWidth / colCount;
+        const cellPadX = 2;
+        const rowHeight = 7;
+
+        y = checkPage(y, rowHeight * 2, pageNum);
+        drawTableHeader(headers, colWidth, colCount, cellPadX, rowHeight, y);
+        y += rowHeight;
+
+        for (let ri = 0; ri < rows.length; ri++) {
+          if (y + rowHeight > footerY - 8) {
+            pageNum.val++;
+            doc.addPage();
+            addBlackPage();
+            addFooter(pageNum.val);
+            y = 18;
+            drawTableHeader(headers, colWidth, colCount, cellPadX, rowHeight, y);
+            y += rowHeight;
+          }
+          const fillColor = ri % 2 === 0 ? SAGE.teal : SAGE.darkRow;
+          doc.setFillColor(...fillColor);
+          doc.rect(margin, y, contentWidth, rowHeight, "F");
           doc.setFontSize(8);
           doc.setFont("helvetica", "normal");
-          doc.setTextColor(50, 50, 50);
-          const cleanLine = line.replace(/\*\*/g, "");
-          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth);
-          doc.text(wrappedLines, margin, y);
-          y += wrappedLines.length * 3.5 + 1;
-        } else {
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(50, 50, 50);
-          const cleanLine = line.replace(/\*\*/g, "");
-          const wrappedLines = doc.splitTextToSize(cleanLine, contentWidth);
-          doc.text(wrappedLines, margin, y);
-          y += wrappedLines.length * 4.5 + 1;
+          doc.setTextColor(...SAGE.white);
+          const row = rows[ri];
+          for (let ci = 0; ci < colCount; ci++) {
+            const cellX = margin + ci * colWidth + cellPadX;
+            const val = (row[ci] || "").slice(0, 30);
+            doc.text(val, cellX, y + 5);
+          }
+          y += rowHeight;
+        }
+        return y + 4;
+      };
+
+      const drawCalloutBox = (content: string, y: number, pageNum: { val: number }): number => {
+        const lines = doc.splitTextToSize(content, contentWidth - 12);
+        const boxHeight = lines.length * 4.5 + 8;
+        y = checkPage(y, boxHeight, pageNum);
+        doc.setFillColor(...SAGE.callout);
+        doc.roundedRect(margin, y, contentWidth, boxHeight, 2, 2, "F");
+        doc.setFillColor(...SAGE.green);
+        doc.rect(margin, y, 1.5, boxHeight, "F");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...SAGE.white);
+        doc.text(lines, margin + 6, y + 6);
+        return y + boxHeight + 4;
+      };
+
+      let pageNum = { val: 1 };
+
+      addBlackPage();
+      doc.setFontSize(34);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...SAGE.white);
+      const titleLines = doc.splitTextToSize("Campaign Plan", contentWidth);
+      doc.text(titleLines, margin, 60);
+      let titleBottomY = 60 + titleLines.length * 14;
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...SAGE.white);
+      doc.text("Content Intelligence Analyst", margin, titleBottomY + 5);
+      titleBottomY += 16;
+
+      doc.setFontSize(11);
+      doc.setTextColor(...SAGE.green);
+      const dateStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      doc.text(dateStr, margin, titleBottomY);
+      doc.text("Prepared by Content Intelligence Analyst", margin, titleBottomY + 6);
+
+      doc.setFontSize(12);
+      doc.setTextColor(...SAGE.green);
+      doc.text("Sage", margin, footerY);
+      doc.setFontSize(5.5);
+      doc.text("(c) 2026 The Sage Group plc, or its licensors. All rights reserved.", pageWidth / 2, footerY + 3, { align: "center" });
+
+      const reformatted = reformatForPdf(text);
+      const sections = parseMarkdownTables(reformatted);
+      const hasContent = sections.some(s => s.before.trim() || s.table.length > 1);
+
+      if (!hasContent) {
+        doc.save(`campaign-plan-${Date.now()}.pdf`);
+        return;
+      }
+
+      pageNum.val++;
+      doc.addPage();
+      addBlackPage();
+      addFooter(pageNum.val);
+      let y = 20;
+
+      for (const section of sections) {
+        if (section.before.trim()) {
+          const lines = section.before.split("\n");
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+              y += 3;
+              continue;
+            }
+
+            if (trimmed.startsWith("### ")) {
+              doc.setFontSize(12);
+              doc.setFont("helvetica", "bold");
+              const wrapped = doc.splitTextToSize(sanitizePdfText(trimmed.slice(4)), contentWidth);
+              const needed = 3 + wrapped.length * 5 + 3;
+              y = checkPage(y, needed, pageNum);
+              y += 3;
+              doc.setTextColor(...SAGE.white);
+              doc.text(wrapped, margin, y);
+              y += wrapped.length * 5 + 3;
+            } else if (trimmed.startsWith("## ")) {
+              doc.setFontSize(16);
+              doc.setFont("helvetica", "bold");
+              const wrapped = doc.splitTextToSize(sanitizePdfText(trimmed.slice(3)), contentWidth);
+              const needed = 6 + wrapped.length * 7 + 6;
+              y = checkPage(y, needed, pageNum);
+              y += 6;
+              doc.setTextColor(...SAGE.white);
+              doc.text(wrapped, margin, y);
+              y += wrapped.length * 7 + 2;
+              doc.setDrawColor(...SAGE.green);
+              doc.setLineWidth(0.4);
+              doc.line(margin, y, margin + 60, y);
+              y += 4;
+            } else if (trimmed.startsWith("# ")) {
+              doc.setFontSize(20);
+              doc.setFont("helvetica", "bold");
+              const wrapped = doc.splitTextToSize(sanitizePdfText(trimmed.slice(2)), contentWidth);
+              const needed = 8 + wrapped.length * 8 + 8;
+              y = checkPage(y, needed, pageNum);
+              y += 8;
+              doc.setTextColor(...SAGE.white);
+              doc.text(wrapped, margin, y);
+              y += wrapped.length * 8 + 3;
+              doc.setDrawColor(...SAGE.green);
+              doc.setLineWidth(0.5);
+              doc.line(margin, y, margin + 80, y);
+              y += 5;
+            } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+              doc.setFontSize(9.5);
+              doc.setFont("helvetica", "normal");
+              const bulletText = sanitizePdfText(trimmed.slice(2));
+              const wrapped = doc.splitTextToSize(bulletText, contentWidth - 8);
+              const needed = wrapped.length * 4.2 + 1.5;
+              y = checkPage(y, needed, pageNum);
+              doc.setTextColor(...SAGE.white);
+              doc.setFillColor(...SAGE.green);
+              doc.circle(margin + 2, y - 1, 0.8, "F");
+              doc.text(wrapped, margin + 6, y);
+              y += needed;
+            } else if (/^\d+\.\s/.test(trimmed)) {
+              doc.setFontSize(9.5);
+              doc.setFont("helvetica", "normal");
+              const cleanLine = sanitizePdfText(trimmed);
+              const numMatch = cleanLine.match(/^(\d+)\.\s(.*)$/);
+              if (numMatch) {
+                const wrapped = doc.splitTextToSize(numMatch[2], contentWidth - 12);
+                const needed = wrapped.length * 4.2 + 1.5;
+                y = checkPage(y, needed, pageNum);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(...SAGE.green);
+                doc.text(`${numMatch[1]}.`, margin + 2, y);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(...SAGE.white);
+                doc.text(wrapped, margin + 8, y);
+                y += needed;
+              }
+            } else if (trimmed.toLowerCase().startsWith("note:") || trimmed.toLowerCase().startsWith("key insight:") || trimmed.toLowerCase().startsWith("important:")) {
+              y = drawCalloutBox(sanitizePdfText(trimmed), y, pageNum);
+            } else {
+              doc.setFontSize(9.5);
+              doc.setFont("helvetica", "normal");
+              const wrapped = doc.splitTextToSize(sanitizePdfText(trimmed), contentWidth);
+              const needed = wrapped.length * 4.2 + 1.5;
+              y = checkPage(y, needed, pageNum);
+              doc.setTextColor(...SAGE.white);
+              doc.text(wrapped, margin, y);
+              y += needed;
+            }
+          }
+        }
+
+        if (section.table.length > 1) {
+          const headers = section.table[0];
+          const rows = section.table.slice(1);
+          y = checkPage(y, 20, pageNum);
+          y = drawTable(headers, rows, y, pageNum);
         }
       }
 

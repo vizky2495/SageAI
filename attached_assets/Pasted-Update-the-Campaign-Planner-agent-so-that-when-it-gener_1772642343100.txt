@@ -1,0 +1,161 @@
+Update the Campaign Planner agent so that when it generates a downloadable PDF campaign plan, the output reads like a document created by a senior campaign strategist at a top-tier B2B marketing agency — not like a chatbot conversation export. Apply the Sage brand template to all PDF formatting. Below are the complete instructions.
+
+PART 1: AGENT BEHAVIOR — THINK LIKE AN EXPERT, NOT A CHATBOT
+Before generating the PDF, the agent must internally reprocess its own output through an "expert filter." The PDF content should follow these principles:
+Tone & Voice:
+
+Write like a senior campaign strategist presenting to a CMO. Confident, precise, no hedging.
+Remove all chatbot artifacts: no "I don't have data for this but I can still help," no "Would you like me to…", no "Here's what I found," no conversational filler.
+Never expose internal reasoning or data gaps in the PDF. If data is missing, the plan should state an assumption clearly and move on (e.g., "Based on industry benchmarks for US hospitality SMB…") rather than writing paragraphs about what's missing.
+Never use phrases like: "Let me explain," "Here's the thing," "I recommend," "I can also," "Would you like me to." The document should speak in third person or imperative voice: "The recommended approach is…", "This campaign targets…", "Allocate 40% of budget to…"
+
+Content Quality Standards:
+
+Every recommendation must have a "why" backed by a specific number. Not "LinkedIn works well" but "LinkedIn is recommended based on 5.3% lead-to-SQO conversion for MOFU display content in comparable campaigns."
+Data gaps should be handled with professional assumptions, not apologies. Instead of "DATA GAP IDENTIFIED — I don't have any PDF content," write "Note: No direct MOFU PDF benchmark exists in the dataset. The following targets are derived from the nearest comparable segments (MOFU Display: 5.3% conversion, Demo Request: 34.8% conversion)."
+Tables should be clean and scannable. No raw asset IDs like "CL_BMS_US_CON_CRERequestInfoForm" — translate these into human-readable names (e.g., "US Info Request Form — BMS" or just "Info Request Form").
+Remove redundant data. If the same insight is stated in a paragraph AND a table, keep only one.
+KPI targets should be specific ranges with clear thresholds for success, not vague goals.
+
+Structure — The PDF must follow this expert-level document flow:
+
+Cover Page — Campaign title, product, market, date, "Prepared by Content Intelligence Analyst"
+Executive Summary (1 page max) — 4-5 sentences covering: objective, target audience, primary channel, expected outcome, key risk. A busy executive should be able to read only this page and understand the entire plan.
+Situation Analysis (1-2 pages)
+
+Market context (what we know about the target segment)
+Historical performance snapshot (a single clean table showing the most relevant benchmarks — no more than 5-6 rows)
+Key insight callout box: one bolded insight that drives the entire strategy (e.g., "Demo requests convert 6-7x better than static PDFs in the US market")
+
+
+Target Audience (half page)
+
+Clean summary: geography, industry, funnel stage, company size, persona
+No filler. Just the targeting spec.
+
+
+Content Strategy (1-2 pages)
+
+If reusing existing content: show a comparison table of the top 3-4 candidates ranked by relevance score. Columns: Content Name (human-readable), Format, Funnel Stage, Product, Region, Lead-to-SQO%, Recommendation (Use / Refresh / Replace)
+If creating new content: content brief with title, format, page count, structure outline, and CTA
+"What to change" section: specific, actionable edits (not vague advice like "update the CTA" but "Replace generic CTA with industry-specific demo request: 'See how Sage 50 handles tip tracking and seasonal cash flow — request a hospitality-focused demo'")
+
+
+Channel Strategy (1 page)
+
+Ranked channel table with: Channel, Why (1 sentence), Expected Conversion Range, Budget Allocation %
+One short paragraph below the table explaining the channel mix logic
+No lengthy justifications per channel — the table should speak for itself
+
+
+Campaign Timeline (1 page)
+
+Phase-based layout (Build → Launch → Optimize → Report)
+Each phase: dates, key actions, responsible teams, deliverables
+Clean visual timeline or structured table — not a wall of bullet points
+
+
+KPIs & Success Metrics (1 page)
+
+Single table: Metric | Target | Benchmark Source | Success Threshold
+Below the table: a "Success Definition" callout box with 3-4 clear pass/fail criteria
+
+
+Risks & Mitigation (half page)
+
+Maximum 4-5 risks. Each in one row: Risk | Impact (High/Med/Low) | Mitigation | Contingency Trigger
+No generic risks. Each risk should be specific to this campaign.
+
+
+Next Steps (half page)
+
+Numbered action items with owners and deadlines
+No open-ended questions like "Would you like me to refine this?" — the PDF is a finished deliverable
+
+
+
+What to REMOVE from the PDF (compared to current output):
+
+All emoji and unicode icons (the garbled characters like "Ø<ßÆ", "&þ", etc.)
+All chatbot-style headers like "STEP 1:", "STEP 2:" — replace with professional section titles
+All "Data Gap Identified" warning banners — convert to professional assumption notes
+All raw content IDs and technical asset names — translate to readable names
+All "Would you like me to…" prompts — these belong in chat, not in the PDF
+All redundant repetition of the same data point across multiple sections
+All markdown syntax (####, **, ---, |---|) — render as actual formatted elements
+The "Readiness Checklist" with mixed emoji checkmarks — replace with a clean status table using text labels
+
+
+PART 2: SAGE BRAND TEMPLATE — PDF VISUAL DESIGN
+Color Palette:
+
+Background: Black (#000000)
+Headlines & accents: Brilliant Green (#00D657)
+Body text: White (#FFFFFF)
+Tables — header row: Brilliant Green background with black text
+Tables — alternating rows: Dark Teal (#004D4D) and near-black (#1A1A1A)
+Extended colors for charts: Jade (#00A65C), Teal (#006362), Navy (#00293F)
+Warm accents if needed: Cherry (#4A1828), Terra (#A13829), Amber (#E98B5B)
+Status indicators: Green text = complete/good, Amber text = attention needed, Cherry text = missing/at risk
+
+Typography:
+
+Font: "Sage Text" if available, otherwise "Helvetica Neue" or "Inter"
+Cover title: Bold, white, 32-36pt
+Section titles: Bold, white, 22-26pt
+Sub-headers: Bold, white, 14-16pt
+Body text: Regular, white, 10-11pt
+Table text: Regular, white, 9-10pt
+Metadata (date, author): Brilliant Green, 10-12pt
+Key callout numbers: Brilliant Green, bold, 18-24pt
+
+Page Layout:
+
+Cover page: Black background, subtle green gradient glow in lower-right corner. Title top-left in white. Date and author in Brilliant Green below. Sage logo (green wordmark) in bottom-left.
+Section divider pages: Full black background, section title in large bold white text top-left (up to 3 lines)
+Content pages: Black background. Section header at top. Thin green accent line below header. Body content below. Sage logo bottom-left. Page number bottom-right. Copyright + confidential line in small green text at bottom center.
+"Callout boxes" for key insights: Rounded rectangle with dark green (#0A3D1F) fill, Brilliant Green left border (4px), white text inside
+
+Tables:
+
+Properly rendered table elements — never raw pipe-delimited text
+Header: Brilliant Green fill, black bold text
+Rows: Alternating dark teal / near-black
+Borders: Thin dark gray (#333333) or none
+Highlight cells (top performer, recommended option): Brilliant Green bold text
+
+Logo & Footer:
+
+Sage wordmark in Brilliant Green, bottom-left of every page
+Footer: "CONFIDENTIAL: INTERNAL USE ONLY" + "© 2026 The Sage Group plc, or its licensors. All rights reserved."
+Page numbers: bottom-right
+
+
+PART 3: TECHNICAL IMPLEMENTATION
+Processing Pipeline (the agent must do this before generating the PDF):
+
+Generate the campaign plan content in chat as normal
+When the user requests PDF download, run the content through a reformatter function that:
+
+Strips all markdown syntax
+Removes all emoji and non-ASCII decorative characters
+Converts chatbot-style phrasing to professional third-person voice
+Translates raw asset IDs to human-readable content names
+Removes all conversational prompts ("Would you like me to…")
+Restructures content into the 10-section document flow above
+Validates all tables have consistent column counts
+
+
+Pass the cleaned, restructured content to the PDF generator with brand styling applied
+Output a downloadable PDF file
+
+Error Prevention:
+
+Sanitize all strings before writing to PDF — remove characters that the PDF library can't render
+Test that fonts are embedded or available. If "Sage Text" isn't available, gracefully fall back to Helvetica Neue
+Validate the final PDF has no blank pages, no cut-off tables, and no garbled text
+
+
+The goal: when someone downloads this PDF and forwards it to their VP of Marketing, it should look like it came from a top-tier agency — not from a chatbot. Every page should be designed, every recommendation should be data-backed, and the document should be ready to present without any editing.
+
+
