@@ -1,0 +1,159 @@
+
+
+Update the Campaign Planner agent to remove all "create new content" functionality. This tool evaluates, compares, and plans campaigns using existing content only. However, add the ability for users to upload new content assets for evaluation — and ensure uploaded content is automatically added to the campaign content library for future comparisons.
+
+1. UPDATE THE INTAKE FORM
+Remove the "Create new content" option. Replace the "Content approach" field with an updated version:
+Updated intake form fields:
+
+Campaign objective — dropdown: Awareness / Lead Generation / Conversion / Retention
+Product — dropdown or search from product list
+Target country/region — dropdown
+Target industry — dropdown or free text
+Funnel stage — TOFU / MOFU / BOFU
+Content type — PDF / Webinar / Display / Email / Video / Other
+Content approach — radio buttons:
+
+"Select from existing content library" → shows a searchable list of content from the library filtered by the selections above
+"Upload a new content asset for evaluation" → shows a file upload area
+"Recommend the best content from library" → agent picks the top performer automatically
+
+
+Upload area (shown only when "Upload a new content asset" is selected):
+
+Drag-and-drop or file picker for PDF, PPTX, DOCX, image, or URL
+Required metadata fields that the user must fill in for the uploaded asset:
+
+Asset name
+Content type (auto-detected from file, editable)
+Product (pre-filled from form above, editable)
+Funnel stage (pre-filled from form above, editable)
+Target country (pre-filled from form above, editable)
+Target industry (pre-filled from form above, editable)
+Date created (date picker, defaults to today)
+
+
+A clear notice: "This asset will be added to your content library and available for future campaign comparisons."
+
+
+Timeline — optional dropdown: 4 weeks / 8 weeks / 12 weeks / Custom
+Budget — optional, small text field
+Additional context — optional free text
+
+2. CONTENT UPLOAD & LIBRARY INTEGRATION
+When a user uploads a content asset, the system must:
+Step 1 — Store the asset in the campaign content library:
+
+Save the file to the content library/database with all the metadata the user provided (asset name, content type, product, funnel stage, country, industry, date created)
+Generate a unique asset ID that follows a human-readable naming convention: [Product]_[Country]_[Industry]_[ContentType]_[FunnelStage]_[ShortName] (e.g., "Intacct_US_NFP_PDF_TOFU_FundAccountingGuide")
+Tag the asset as "New — Pending Performance Data" since it won't have any historical metrics yet
+The asset should now appear in the content library for all future campaign plans and comparisons
+
+Step 2 — Analyze the uploaded content:
+
+If it's a PDF or document, extract the text content and analyze: topic coverage, key themes, CTA type, length, and structure
+If it's an image or creative asset, note the format and let the user provide a description
+Use this analysis to match it against the most relevant historical content in the library
+
+Step 3 — Compare against historical performers:
+
+Find the top 5 closest matches in the library by: content type + funnel stage + product + country + industry
+Show the comparison table:
+
+| Content Asset | Type | Stage | Product | Country | Industry | Leads | SQOs | Conv% | Engagement | Age | Performance Score | Source |
+
+The uploaded asset will have no performance data yet, so its row should show "New — No historical data" in the metrics columns
+The comparison is about content quality and relevance, not performance (since the new asset has none)
+The agent should evaluate the uploaded content against top performers on: topic alignment, CTA strength, content depth, format effectiveness, and trend relevance (via web search)
+
+Step 4 — Provide a verdict:
+
+"This content is well-aligned with your top performers because [specific reasons]. Predicted performance range: [conservative/expected/optimistic based on comparable content]."
+Or: "This content has gaps compared to your top performers. Specifically: [what's missing]. Recommend these changes before launching: [specific edits]."
+Always frame this as optimization of the uploaded content, NOT as a recommendation to create something new.
+
+3. UPDATE THE "SELECT FROM EXISTING LIBRARY" FLOW
+When the user selects "Select from existing content library":
+
+Show a searchable, filterable list of all content in the library (including previously uploaded assets)
+Filters should match the intake form selections: content type, product, funnel stage, country, industry
+Each item in the list should show: asset name, content type, funnel stage, product, performance score (if available), age, and a tag indicating "Library Original" or "User Uploaded"
+The user can select one or multiple assets to evaluate for the campaign
+Previously uploaded assets that now have performance data (from past campaigns) should show their actual metrics
+
+4. CONTENT LIBRARY MANAGEMENT
+Add a "Content Library" section accessible from the Campaign Planner main screen (alongside "New campaign plan" and campaign history). This section should:
+
+Show all content assets in the library: both original dataset content and user-uploaded content
+Allow filtering by: content type, product, funnel stage, country, industry, date range, performance score range
+Show a status tag for each asset:
+
+Active — has performance data, less than 6 months old
+Aging — has performance data, 6-12 months old
+Stale — has performance data, 12+ months old
+New — recently uploaded, no performance data yet
+
+
+Allow users to upload new assets directly from this view (same upload flow as the intake form)
+Allow users to update metadata on existing assets (correct a wrong tag, update the funnel stage, etc.)
+Show a library health summary at the top: total assets, assets by stage, content gaps by product/market, freshness distribution
+
+5. REMOVE ALL "CREATE NEW CONTENT" REFERENCES
+Search the entire agent codebase and prompts and remove:
+
+Any option to "Create new content" or "Create new asset" from intake forms, system prompts, and UI
+Any agent behavior that generates content briefs for net-new content (e.g., "Suggested title", "Key topics to cover", "Recommended format")
+Any PDF section called "New Content Brief" or similar
+Any references to "content creation" as a deliverable
+
+However, keep these content-adjacent recommendations:
+
+"Refresh this existing content by updating X, Y, Z" — this is optimization, not creation
+"This content should be edited to include [trending topic]" — this is a revision suggestion
+"Consider updating the CTA from [generic] to [specific]" — this is an improvement recommendation
+"This content is outdated. Upload a replacement asset that addresses [current trends]" — this directs the user to bring in content, not to have the agent write it
+
+The line is: the agent can tell you what's wrong with content and what should be different, but it does not write or outline new content. It evaluates and recommends.
+6. UPDATE THE PDF EXPORT STRUCTURE
+Replace the previous "Content Strategy" section structure with:
+
+Cover Page
+Executive Summary
+Source Legend — explains Internal Data / Web Research / Industry Benchmark / Calculated / Assumption tags
+Industry & Trend Analysis — current trends from web search relevant to the campaign
+Content Evaluation & Comparison — the core section:
+
+Comparison table: selected/uploaded content vs. top 5 historical performers
+Performance score for each asset (where data exists)
+Verdict for the selected content: deploy as-is, refresh with specific changes, or select a different asset from library
+If content is uploaded (new): predicted performance range based on comparable historical content
+Source tags on every data point
+
+
+Content Optimization Recommendations — specific changes to improve the selected content (not a brief for new content):
+
+What to update based on current trends (from web search)
+CTA optimization based on historical performance (from internal data)
+Format/design recommendations based on what's performing best (from internal data + industry benchmarks)
+Localization or market-specific adjustments needed
+
+
+Channel Recommendations — best channels for this content type and segment
+Campaign Timeline
+KPIs & Expected Performance — with source tags and prediction ranges
+Risks & Mitigation
+Next Steps — action items focused on content optimization and deployment, not content creation
+
+7. AGENT SYSTEM PROMPT UPDATE
+Add this to the Campaign Planner agent's system prompt:
+
+"You are a content evaluation and campaign planning agent. You do NOT create new content. Your job is to:
+
+Evaluate content that exists in the library or that the user uploads
+Compare it against historically top-performing content using internal data
+Check it against current industry trends using web search
+Give a clear verdict: deploy as-is, refresh with specific changes, or recommend a better asset from the library
+Plan the campaign deployment: which channels, what timeline, what KPIs to expect
+
+When a user uploads new content, add it to the content library with the metadata they provide, then evaluate it against the closest historical matches. Never offer to write or outline new content. If content is fundamentally unsuitable, recommend a specific alternative from the library or tell the user what kind of replacement to source — but do not generate the replacement yourself.
+Every data point must be tagged with its source: Internal Data, Web Research (with citation), Industry Benchmark, Calculated (with formula), or Assumption. No unattributed claims."
