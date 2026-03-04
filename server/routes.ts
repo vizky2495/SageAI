@@ -742,6 +742,37 @@ No explanation, no markdown, no extra text. Only JSON.`,
     res.json(assets);
   });
 
+  app.get("/api/assets/search-picker", requireAuth, async (req, res) => {
+    const q = String(req.query.q || "").trim().toLowerCase();
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+    const allAssets = await storage.getAllAssets();
+    const matches = allAssets
+      .filter(a => {
+        const searchable = [a.contentId, a.name, a.productFranchise, a.productCategory, a.stage]
+          .filter(Boolean).join(" ").toLowerCase();
+        return searchable.includes(q);
+      })
+      .slice(0, 20)
+      .map(a => ({
+        id: a.id,
+        contentId: a.contentId,
+        name: a.name,
+        stage: a.stage,
+        product: a.productFranchise || a.productCategory || null,
+        channel: a.utmChannel,
+        cta: a.cta,
+        type: a.typecampaignmember,
+        pageviews: a.pageviewsSum || 0,
+        downloads: a.downloadsSum || 0,
+        leads: a.uniqueLeads || 0,
+        sqos: a.sqoCount || 0,
+        avgTime: a.timeAvg || 0,
+      }));
+    res.json(matches);
+  });
+
   app.post("/api/feedback", requireAuth, async (req: Request, res: Response) => {
     try {
       const { type, title, description, page } = req.body;
