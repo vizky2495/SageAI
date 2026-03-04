@@ -236,32 +236,140 @@ No explanation, no markdown, no extra text. Only JSON.`,
         isFallback = true;
       }
 
-      let benchmarks: any[] = [];
+      let matchedAssets: any[] = [];
+      let aggregateBenchmarks: any = null;
       try {
         const allAssets = await storage.getAllAssets();
-        const matches = allAssets.filter(a =>
-          a.stage === classification.stage &&
-          a.typecampaignmember &&
-          a.typecampaignmember.toLowerCase().includes(classification.contentType.toLowerCase().split(" ")[0])
+
+        const sameStageAndType = allAssets.filter(a => {
+          if (a.stage !== classification.stage) return false;
+          if (!a.typecampaignmember) return false;
+          const aType = a.typecampaignmember.toLowerCase();
+          const cType = classification.contentType.toLowerCase();
+          return aType.includes(cType.split(" ")[0]) || cType.includes(aType.split(" ")[0]);
+        });
+
+        const primaryMetricKey: Record<string, string> = { TOFU: "pageviewsSum", MOFU: "uniqueLeads", BOFU: "sqoCount" };
+        const metricKey = primaryMetricKey[classification.stage] || "pageviewsSum";
+
+        const metricValues = sameStageAndType.map(a => (a as any)[metricKey] || 0).sort((x: number, y: number) => x - y);
+        const q75Index = Math.floor(metricValues.length * 0.75);
+        const q75Threshold = metricValues.length > 0 ? metricValues[q75Index] : 0;
+        const topPerformers = sameStageAndType.filter(a => ((a as any)[metricKey] || 0) >= q75Threshold);
+
+        const pool = topPerformers.length >= 3 ? topPerformers : sameStageAndType;
+
+        const classTopicWords: Set<string> = new Set(
+          (classification.topic || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3)
         );
-        const sameProduct = classification.product !== "General"
-          ? matches.filter(a => a.productFranchise && a.productFranchise.toLowerCase().includes(classification.product.toLowerCase().split(" ").pop()!))
-          : matches;
-        const pool = sameProduct.length >= 3 ? sameProduct : matches;
-        const sorted = pool.sort((a, b) => ((b.pageviewsSum || 0) + (b.uniqueLeads || 0) * 10) - ((a.pageviewsSum || 0) + (a.uniqueLeads || 0) * 10));
-        benchmarks = sorted.slice(0, 5).map(a => ({
-          contentId: a.contentId,
-          name: a.name,
-          stage: a.stage,
-          type: a.typecampaignmember,
-          product: a.productFranchise,
-          channel: a.utmChannel,
-          pageviews: a.pageviewsSum || 0,
-          downloads: a.downloadsSum || 0,
-          leads: a.uniqueLeads || 0,
-          sqos: a.sqoCount || 0,
-          avgTime: a.timeAvg || 0,
+
+        const pdfWords: Set<string> = new Set(
+          text.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3).slice(0, 500)
+        );
+
+        const scored = pool.map(a => {
+          let productScore = 0;
+          if (classification.product !== "General" && a.productFranchise) {
+            const cp = classification.product.toLowerCase();
+            const ap = a.productFranchise.toLowerCase();
+            if (ap === cp) productScore = 1;
+            else if (ap.includes(cp.split(" ").pop()!) || cp.includes(ap.split(" ").pop()!)) productScore = 0.6;
+          }
+
+          let topicScore = 0;
+          if (classTopicWords.size > 0) {
+            const assetWords: Set<string> = new Set(
+              [a.name, a.objective, a.cta, a.campaignName]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+                .split(/\s+/)
+                .filter(w => w.length > 3)
+            );
+            const overlap = Array.from(classTopicWords).filter(w => assetWords.has(w)).length;
+            topicScore = classTopicWords.size > 0 ? overlap / classTopicWords.size : 0;
+            if (topicScore > 1) topicScore = 1;
+          }
+
+          let industryScore = 0;
+          if (classification.industry !== "General") {
+            const ci = classification.industry.toLowerCase();
+            const fields = [a.productCategory, a.campaignName, a.name, a.objective].filter(Boolean).join(" ").toLowerCase();
+            if (fields.includes(ci.split(" ")[0])) industryScore = 1;
+          }
+
+          let pageSimilarity = 0;
+          if (pdfWords.size > 0 && a.name) {
+            const assetNameWords: Set<string> = new Set(
+              [a.name, a.objective, a.cta].filter(Boolean).join(" ").toLowerCase().split(/\s+/).filter(w => w.length > 3)
+            );
+            if (assetNameWords.size > 0) {
+              const matchCount = Array.from(assetNameWords).filter(w => pdfWords.has(w)).length;
+              pageSimilarity = Math.min(matchCount / assetNameWords.size, 1);
+            }
+          }
+
+          const relevance = productScore * 0.4 + topicScore * 0.3 + industryScore * 0.15 + pageSimilarity * 0.15;
+
+          return {
+            asset: a,
+            relevance,
+          };
+        });
+
+        scored.sort((a, b) => b.relevance - a.relevance);
+        const top5 = scored.slice(0, 5);
+
+        matchedAssets = top5.map(s => ({
+          contentId: s.asset.contentId,
+          name: s.asset.name,
+          stage: s.asset.stage,
+          type: s.asset.typecampaignmember,
+          product: s.asset.productFranchise,
+          channel: s.asset.utmChannel,
+          cta: s.asset.cta,
+          pageviews: s.asset.pageviewsSum || 0,
+          downloads: s.asset.downloadsSum || 0,
+          leads: s.asset.uniqueLeads || 0,
+          sqos: s.asset.sqoCount || 0,
+          avgTime: s.asset.timeAvg || 0,
+          relevanceScore: Math.round(s.relevance * 100),
         }));
+
+        const benchmarkPool = topPerformers.length >= 3 ? topPerformers : sameStageAndType;
+        if (benchmarkPool.length > 0) {
+          const stats = (arr: number[]) => {
+            if (arr.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
+            const sorted = [...arr].sort((a, b) => a - b);
+            const sum = sorted.reduce((a, b) => a + b, 0);
+            const mean = sum / sorted.length;
+            const mid = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            return { min: sorted[0], max: sorted[sorted.length - 1], mean: Math.round(mean * 10) / 10, median };
+          };
+
+          const pv = benchmarkPool.map(a => a.pageviewsSum || 0);
+          const dl = benchmarkPool.map(a => a.downloadsSum || 0);
+          const ld = benchmarkPool.map(a => a.uniqueLeads || 0);
+          const sq = benchmarkPool.map(a => a.sqoCount || 0);
+          const tm = benchmarkPool.map(a => a.timeAvg || 0);
+
+          const ctaCounts = benchmarkPool.map(a => {
+            if (!a.cta) return 0;
+            return a.cta.split(/[,;|]/).filter((s: string) => s.trim()).length;
+          });
+
+          aggregateBenchmarks = {
+            sampleSize: benchmarkPool.length,
+            totalPoolSize: sameStageAndType.length,
+            pageviews: stats(pv),
+            downloads: stats(dl),
+            leads: stats(ld),
+            sqos: stats(sq),
+            timeOnPage: stats(tm),
+            avgCtaCount: ctaCounts.length > 0 ? Math.round(ctaCounts.reduce((a: number, b: number) => a + b, 0) / ctaCounts.length * 10) / 10 : 0,
+          };
+        }
       } catch (benchErr) {
         console.error("Benchmark lookup failed:", benchErr);
       }
@@ -273,7 +381,8 @@ No explanation, no markdown, no extra text. Only JSON.`,
         text,
         classification,
         isFallback,
-        benchmarks,
+        benchmarks: matchedAssets,
+        aggregateBenchmarks,
       });
     } catch (error: any) {
       console.error("PDF extraction error:", error);

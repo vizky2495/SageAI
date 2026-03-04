@@ -36,11 +36,31 @@ interface Benchmark {
   type: string;
   product: string;
   channel: string;
+  cta: string;
   pageviews: number;
   downloads: number;
   leads: number;
   sqos: number;
   avgTime: number;
+  relevanceScore: number;
+}
+
+interface MetricStats {
+  min: number;
+  max: number;
+  mean: number;
+  median: number;
+}
+
+interface AggregateBenchmarks {
+  sampleSize: number;
+  totalPoolSize: number;
+  pageviews: MetricStats;
+  downloads: MetricStats;
+  leads: MetricStats;
+  sqos: MetricStats;
+  timeOnPage: MetricStats;
+  avgCtaCount: number;
 }
 
 interface PdfResult {
@@ -51,6 +71,7 @@ interface PdfResult {
   classification: Classification;
   isFallback: boolean;
   benchmarks: Benchmark[];
+  aggregateBenchmarks: AggregateBenchmarks | null;
 }
 
 interface SlotState {
@@ -134,39 +155,96 @@ function ClassificationCard({ result, label }: { result: PdfResult; label: strin
   );
 }
 
-function BenchmarkTable({ benchmarks, label }: { benchmarks: Benchmark[]; label: string }) {
-  if (benchmarks.length === 0) return null;
+function StatCell({ label, stats }: { label: string; stats: MetricStats }) {
   return (
-    <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden" data-testid={`benchmarks-${label.toLowerCase()}`}>
+    <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">{label}</span>
+      <div className="grid grid-cols-4 gap-1 text-[10px]">
+        <div><span className="text-muted-foreground/60">Min</span><br/><span className="font-semibold tabular-nums">{stats.min.toLocaleString()}</span></div>
+        <div><span className="text-muted-foreground/60">Max</span><br/><span className="font-semibold tabular-nums">{stats.max.toLocaleString()}</span></div>
+        <div><span className="text-muted-foreground/60">Mean</span><br/><span className="font-semibold tabular-nums">{stats.mean.toLocaleString()}</span></div>
+        <div><span className="text-muted-foreground/60">Median</span><br/><span className="font-semibold tabular-nums">{stats.median.toLocaleString()}</span></div>
+      </div>
+    </div>
+  );
+}
+
+function AggregateBenchmarkCard({ agg, label }: { agg: AggregateBenchmarks; label: string }) {
+  return (
+    <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden" data-testid={`aggregate-benchmarks-${label.toLowerCase()}`}>
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/20 border-b border-border/30">
-        <TrendingUp className="h-3.5 w-3.5 text-primary" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Similar Content Benchmarks</span>
-        <Badge variant="outline" className="text-[9px] ml-auto">{benchmarks.length} matches</Badge>
+        <BarChart3 className="h-3.5 w-3.5 text-primary" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Performance Benchmarks</span>
+        <Badge variant="outline" className="text-[9px] ml-auto">{agg.sampleSize} of {agg.totalPoolSize} assets</Badge>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border/20">
-              <th className="text-left px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content</th>
-              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Views</th>
-              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Leads</th>
-              <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">SQOs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {benchmarks.map((b, i) => (
-              <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-muted/10 transition-colors">
-                <td className="px-3 py-1.5 max-w-[200px] truncate" title={b.name || b.contentId}>
-                  {b.name || b.contentId}
-                </td>
-                <td className="text-right px-2 py-1.5 tabular-nums">{b.pageviews.toLocaleString()}</td>
-                <td className="text-right px-2 py-1.5 tabular-nums">{b.leads.toLocaleString()}</td>
-                <td className="text-right px-2 py-1.5 tabular-nums">{b.sqos.toLocaleString()}</td>
+      <div className="p-3 grid grid-cols-2 gap-2">
+        <StatCell label="Pageviews" stats={agg.pageviews} />
+        <StatCell label="Downloads" stats={agg.downloads} />
+        <StatCell label="Leads" stats={agg.leads} />
+        <StatCell label="SQOs" stats={agg.sqos} />
+        <StatCell label="Avg Time on Page" stats={agg.timeOnPage} />
+        <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Avg CTA Count</span>
+          <span className="text-sm font-bold tabular-nums">{agg.avgCtaCount}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BenchmarkTable({ benchmarks, aggregateBenchmarks, label }: { benchmarks: Benchmark[]; aggregateBenchmarks: AggregateBenchmarks | null; label: string }) {
+  if (benchmarks.length === 0 && !aggregateBenchmarks) {
+    return (
+      <div className="rounded-xl bg-muted/10 border border-border/30 p-4 flex items-center gap-2 text-xs text-muted-foreground" data-testid={`benchmarks-empty-${label.toLowerCase().replace(/\s/g, "-")}`}>
+        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+        No matching content found in the library for this classification.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {benchmarks.length > 0 && (
+      <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden" data-testid={`benchmarks-${label.toLowerCase()}`}>
+        <div className="flex items-center gap-2 px-3 py-2 bg-muted/20 border-b border-border/30">
+          <TrendingUp className="h-3.5 w-3.5 text-primary" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Matching Content</span>
+          <Badge variant="outline" className="text-[9px] ml-auto">{benchmarks.length} matches</Badge>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border/20">
+                <th className="text-left px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content</th>
+                <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Match</th>
+                <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Views</th>
+                <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Leads</th>
+                <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">SQOs</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {benchmarks.map((b, i) => (
+                <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-muted/10 transition-colors">
+                  <td className="px-3 py-1.5 max-w-[180px] truncate" title={b.name || b.contentId}>
+                    {b.name || b.contentId}
+                  </td>
+                  <td className="text-right px-2 py-1.5">
+                    <Badge variant="outline" className={`text-[9px] tabular-nums ${b.relevanceScore >= 50 ? "text-emerald-400 border-emerald-500/30" : "text-muted-foreground"}`}>
+                      {b.relevanceScore}%
+                    </Badge>
+                  </td>
+                  <td className="text-right px-2 py-1.5 tabular-nums">{b.pageviews.toLocaleString()}</td>
+                  <td className="text-right px-2 py-1.5 tabular-nums">{b.leads.toLocaleString()}</td>
+                  <td className="text-right px-2 py-1.5 tabular-nums">{b.sqos.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+      )}
+      {aggregateBenchmarks && (
+        <AggregateBenchmarkCard agg={aggregateBenchmarks} label={label} />
+      )}
     </div>
   );
 }
@@ -221,7 +299,7 @@ function UploadSlot({
         </div>
 
         <ClassificationCard result={slot.result} label={label} />
-        <BenchmarkTable benchmarks={slot.result.benchmarks} label={label} />
+        <BenchmarkTable benchmarks={slot.result.benchmarks} aggregateBenchmarks={slot.result.aggregateBenchmarks} label={label} />
 
         <div className="rounded-xl bg-muted/10 border border-border/30 p-3">
           <div className="flex items-center justify-between mb-2">
@@ -294,9 +372,11 @@ function ComparisonSummary({ a, b }: { a: PdfResult; b: PdfResult }) {
   const sameType = ca.contentType.toLowerCase() === cb.contentType.toLowerCase();
   const comparable = sameStage && sameType;
 
-  const wordsA = new Set(a.text.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-  const wordsB = new Set(b.text.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-  const shared = [...wordsA].filter(w => wordsB.has(w));
+  const wordsAArr = a.text.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const wordsBArr = b.text.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const wordsA = new Set(wordsAArr);
+  const wordsB = new Set(wordsBArr);
+  const shared = Array.from(wordsA).filter(w => wordsB.has(w));
   const overlapPct = wordsA.size > 0 || wordsB.size > 0
     ? ((shared.length * 2) / (wordsA.size + wordsB.size) * 100).toFixed(1)
     : "0";
