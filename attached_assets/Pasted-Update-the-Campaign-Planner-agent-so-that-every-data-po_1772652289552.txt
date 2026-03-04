@@ -1,0 +1,87 @@
+Update the Campaign Planner agent so that every data point, statistic, benchmark, and claim in the campaign plan is tagged with a clear source label. The user must be able to look at any number in the plan and immediately know where it came from. This applies to both the in-chat response and the exported PDF.
+
+SOURCE CLASSIFICATION SYSTEM
+Every data point must be tagged with one of these source types:
+
+[Internal Data] — Comes directly from the dataset via the Data Agent. This includes: lead counts, SQO counts, conversion rates, engagement times, content performance metrics, channel breakdowns, asset-level statistics. These are facts from your own data. Display with high confidence.
+[Web Research] — Comes from web search during plan generation. This includes: industry trends, market sizing, regulatory updates, competitor activity, current best practices, content format trends. These should include the specific source name and year (e.g., "[Web Research: Blackbaud 2024 Nonprofit Technology Report]", "[Web Research: HubSpot State of Marketing 2025]"). If a web source cannot be named specifically, tag it as "[Web Research: Industry benchmark]" and note it should be independently verified.
+[Industry Benchmark] — Standard B2B marketing benchmarks that are commonly accepted but not from a single source. This includes: average email open rates, LinkedIn CTR ranges, typical B2B CPL ranges. Tag as "[Industry Benchmark]" and note the general source category (e.g., "[Industry Benchmark: B2B SaaS average per HubSpot/Demand Gen Report]").
+[Calculated] — Derived by the agent from internal data or a combination of sources. For example, if the agent multiplies an internal conversion rate by an estimated audience size to project leads, tag it as "[Calculated: based on Internal Data conversion rate × estimated audience]". Always show the calculation logic briefly.
+[Assumption] — Not backed by any data source. Used when the agent fills a gap with a reasonable professional estimate. Tag as "[Assumption]" and briefly state the basis (e.g., "[Assumption: based on comparable B2B SaaS campaigns in similar verticals]"). These should be flagged visually so the user knows to validate them.
+
+
+HOW TO DISPLAY SOURCES
+In tables:
+Add a "Source" column to every data table. Keep it concise. Examples:
+MetricValueSourceIntacct TOFU Downloads331 avg per assetInternal DataLead-to-SQO Conversion4.8%Internal DataNFP Cloud ERP Adoption Growth42% YoYWeb: Blackbaud 2024LinkedIn NFP Leader Usage61% weekly activeWeb: LinkedIn B2B Report 2025Projected Campaign Downloads850-1,100Calculated: 331 × 3x NFP sector multiplierCPL Target<$85Industry Benchmark: HubSpot B2B 2025
+In body text:
+Place the source tag in parentheses immediately after the claim. Examples:
+
+"Intacct TOFU content achieves a 4.8% lead-to-SQO conversion rate (Internal Data) compared to the 3.2% average for standard white papers (Internal Data)."
+"73% of nonprofit finance leaders report legacy systems as barriers to growth (Web Research: Blackbaud Nonprofit Technology Survey 2024)."
+"Nonprofit decision-makers show 67% lower display CTR than corporate finance audiences (Industry Benchmark: HubSpot 2024)."
+"Expected downloads of 850-1,100 are projected based on Intacct's historical 331 average downloads multiplied by a 3x NFP sector growth adjustment (Calculated: Internal Data × market multiplier assumption)."
+
+In the Key Insight callout box:
+Always state the source below the insight. Example:
+
+"Intacct TOFU content outperforms standard white papers by 6.1x on downloads and 1.5x on SQO conversion."
+Source: Internal Data — based on 47 Intacct TOFU assets vs. 23 white paper assets in dataset
+
+In KPI targets:
+Every target must show how it was derived. Add a "Benchmark Source" column (which the current PDF already has but with truncated text — make sure this column is wide enough to show the full source).
+MetricTargetHow DerivedSourceAsset Downloads850-1,100Intacct TOFU avg 331 × 3x multiplier for new vertical launchCalculated from Internal DataLeads Generated180-2402.8% download-to-lead rate applied to download targetInternal Data conversion rateSQOs35-454.8% TOFU-to-SQO applied to lead targetInternal Data conversion rateCPL<$85B2B financial services TOFU benchmark adjusted for NFP segmentIndustry Benchmark: HubSpot 2025Landing Page Conversion18-24%Intacct TOFU gated content avg 21%Internal DataLinkedIn Engagement2.7-3.4%B2B SaaS TOFU sponsored content benchmarkIndustry Benchmark: LinkedIn 2025
+
+SOURCE TAGGING IN THE PDF
+Visual treatment for different source types in the PDF:
+
+Internal Data — Display source tag in Brilliant Green text. This is your most reliable data. Use a small database icon or just the green text tag.
+Web Research — Display source tag in Jade (#00A65C) text. Include the publication name and year.
+Industry Benchmark — Display source tag in Teal (#006362) text.
+Calculated — Display source tag in white italic text with the formula/logic.
+Assumption — Display source tag in Amber (#E98B5B) text. This signals to the reader that this data point needs verification. Assumptions should stand out visually so they're never mistaken for hard data.
+
+Add a Source Legend on page 2 (after cover page, before content):
+Include a small legend box explaining the source types:
+
+Data Sources Used in This Plan
+🟢 Internal Data — From your content performance dataset (high confidence)
+🟩 Web Research — From current industry reports and publications (verified, cited)
+🔵 Industry Benchmark — Standard B2B marketing benchmarks (general guidance)
+⬜ Calculated — Derived from internal data with stated methodology
+🟠 Assumption — Professional estimate where data is unavailable (verify independently)
+
+Use colored dots or small colored squares instead of emoji if the PDF library doesn't support emoji cleanly.
+
+RULES FOR SOURCE INTEGRITY
+
+Never present an assumption as internal data. If the dataset doesn't contain a specific metric, do not imply it does. Tag it honestly.
+Never invent web sources. If the agent cites a report (e.g., "Blackbaud 2024"), it must have actually found this via web search. If the web search didn't return a specific source, tag the claim as "[Industry Benchmark]" or "[Assumption]" — never fabricate a citation.
+Flag confidence level for projections. When the agent projects performance (e.g., "Expected 850-1,100 downloads"), show the calculation chain:
+
+Base metric: 331 avg downloads per Intacct TOFU asset [Internal Data]
+Multiplier: 3x for new vertical launch [Assumption: based on comparable vertical launches in dataset]
+Result: 993 midpoint, range 850-1,100 [Calculated]
+
+This lets the user evaluate whether the projection methodology is reasonable.
+Web research claims must be current. Do not cite reports older than 18 months unless no newer data exists. If citing an older source, note the year and add: "(latest available; verify for updates)."
+Internal data claims must be traceable. When referencing internal data, specify enough detail that the user could verify it in the dataset. Instead of "Internal Data" alone, prefer "Internal Data: 47 Intacct TOFU assets, avg across all channels" or "Internal Data: US financial services segment, 2024-2025."
+Separate facts from recommendations. Data points are sourced. Recommendations are the agent's strategic judgment based on those data points. The recommendation itself doesn't need a source tag, but every data point supporting it does. Example:
+
+"LinkedIn is recommended as the primary channel." ← This is a recommendation, no source tag needed.
+"LinkedIn drove 38% of Intacct TOFU leads (Internal Data) and nonprofit finance leaders show 61% weekly active usage on the platform (Web Research: LinkedIn B2B Report 2025)." ← These are the supporting facts, both tagged.
+
+
+
+
+CURRENT PDF ISSUES TO FIX (source-related):
+The current campaign plan PDF has several unsourced or vaguely sourced claims that need to be fixed:
+
+"73% of nonprofit finance leaders report legacy systems as barriers to growth (Blackbaud 2024)" — Was this actually found via web search? If yes, keep it. If the agent made it up, remove it or tag as [Assumption].
+"Cloud ERP adoption in nonprofits grew 42% YoY" — Source missing. Must cite specific report or tag as [Assumption].
+"62% of nonprofit web traffic is mobile" — Source missing.
+"67% lower display CTR than corporate finance (HubSpot 2024)" — Was this from an actual web search result? Verify or tag as [Assumption].
+"US not-for-profit organizations representing a $2.6T sector" — Source missing. Cite the specific report.
+"$18,500 budget" — Where did this number come from? If the user didn't provide it, this should not appear. If the agent estimated it, it must be tagged as [Assumption] with explanation.
+
+Every single number in the plan must have a source. No exceptions.
