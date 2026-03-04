@@ -343,20 +343,40 @@ Benchmarks: ${benchmarkSummary}`
       if (!filename.toLowerCase().endsWith(".pdf")) {
         return res.status(400).json({ error: "Only PDF files are supported." });
       }
-      const pdfParse = (await import("pdf-parse")).default;
       const buffer = Buffer.from(fileBase64, "base64");
       if (buffer.length > MAX_PDF_BYTES) {
         return res.status(413).json({ error: `PDF exceeds the ${MAX_PDF_SIZE_MB}MB size limit.` });
       }
-      let parsed: any;
+
+      let text = "";
+      let pageCount = 0;
       try {
-        parsed = await pdfParse(buffer);
+        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const uint8 = new Uint8Array(buffer);
+        const loadingTask = pdfjsLib.getDocument({ data: uint8, disableFontFace: true, useSystemFonts: true, disableWorker: true } as any);
+        const doc = await loadingTask.promise;
+        pageCount = doc.numPages;
+        const pageTexts: string[] = [];
+        for (let i = 1; i <= pageCount; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items
+            .filter((item: any) => typeof item.str === "string")
+            .map((item: any) => item.str);
+          pageTexts.push(strings.join(" "));
+        }
+        text = pageTexts.join("\n").trim();
+        doc.destroy();
       } catch (parseErr: any) {
+        console.error("PDF extraction error:", parseErr);
         return res.status(422).json({ error: "Failed to extract text from PDF. The file may be corrupted or image-only." });
       }
-      const text = (parsed.text || "").trim();
-      const wordCount = text ? text.split(/\s+/).length : 0;
-      const pageCount = parsed.numpages || 0;
+
+      if (!text) {
+        return res.status(422).json({ error: "Could not extract any text from this PDF. It may be image-only or scanned." });
+      }
+
+      const wordCount = text.split(/\s+/).length;
 
       const textSnippet = text.slice(0, 2000);
       let classification: any = null;
