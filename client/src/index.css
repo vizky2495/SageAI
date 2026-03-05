@@ -54,55 +54,60 @@
 }
 
 :root {
-  --button-outline: rgba(0, 0, 0, 0.08);
-  --badge-outline: rgba(0, 0, 0, 0.04);
+  --button-outline: rgba(255, 255, 255, 0.1);
+  --badge-outline: rgba(255, 255, 255, 0.05);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(0, 0, 0, 0.03);
-  --elevate-2: rgba(0, 0, 0, 0.06);
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 150 15% 97%;
-  --foreground: 150 10% 10%;
+  /* Art direction: Sage brand — deep black, electric green, white text */
+  --background: 150 10% 4%;
+  --foreground: 0 0% 96%;
 
-  --card: 150 12% 99%;
-  --card-foreground: 150 10% 10%;
-  --card-border: 150 8% 88%;
+  --card: 150 8% 7%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 150 6% 14%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 150 10% 10%;
-  --popover-border: 150 8% 88%;
+  --popover: 150 8% 7%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 150 6% 14%;
 
-  --border: 150 8% 88%;
-  --input: 150 8% 90%;
-  --ring: 145 100% 36%;
+  --border: 150 6% 14%;
+  --input: 150 6% 18%;
+  --ring: 145 100% 42%;
 
-  --primary: 145 100% 36%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 145 100% 42%;
+  --primary-foreground: 0 0% 0%;
 
-  --secondary: 150 8% 93%;
-  --secondary-foreground: 150 10% 15%;
+  --secondary: 150 6% 12%;
+  --secondary-foreground: 0 0% 96%;
 
-  --muted: 150 8% 93%;
-  --muted-foreground: 150 6% 45%;
+  --muted: 150 6% 12%;
+  --muted-foreground: 150 6% 60%;
 
-  --accent: 145 80% 32%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 145 80% 36%;
+  --accent-foreground: 0 0% 0%;
 
   --destructive: 0 72% 52%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 150 12% 96%;
-  --sidebar-foreground: 150 10% 10%;
-  --sidebar-border: 150 8% 88%;
-  --sidebar-primary: 145 100% 36%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 145 80% 32%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-ring: 145 100% 36%;
+  --sidebar: 150 8% 5%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 150 6% 14%;
+  --sidebar-primary: 145 100% 42%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 145 80% 36%;
+  --sidebar-accent-foreground: 0 0% 0%;
+  --sidebar-ring: 145 100% 42%;
 
-  --chart-1: 145 100% 36%;
-  --chart-2: 165 70% 34%;
-  --chart-3: 140 60% 26%;
-  --chart-4: 50 80% 48%;
+  /* Stage colors — Sage green spectrum
+     TOFU: bright green (chart-1)
+     MOFU: teal-green (chart-2)
+     BOFU: deep emerald (chart-3) */
+  --chart-1: 145 100% 42%;
+  --chart-2: 165 70% 38%;
+  --chart-3: 140 60% 28%;
+  --chart-4: 50 80% 55%;
   --chart-5: 0 72% 52%;
 
   --font-sans: "Geist", "DM Sans", ui-sans-serif, system-ui, -apple-system,
@@ -177,7 +182,6 @@
 
   --background: 150 10% 4%;
   --foreground: 0 0% 96%;
-  color-scheme: dark;
 
   --card: 150 8% 7%;
   --card-foreground: 0 0% 96%;
@@ -323,21 +327,5 @@
     mix-blend-mode: soft-light;
     opacity: 0.22;
     pointer-events: none;
-  }
-
-  .hub-glow {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 40%;
-    background: linear-gradient(to top, hsl(145 100% 42% / 0.04), transparent);
-    animation: hub-glow-pulse 8s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
-
-  @keyframes hub-glow-pulse {
-    0% { opacity: 0.3; }
-    100% { opacity: 0.8; }
   }
 }

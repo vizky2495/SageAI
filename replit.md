@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 - **Animations**: Framer Motion for UI transitions.
 - **Fonts**: DM Sans, Geist, Geist Mono.
 - **Pages**:
-    - **Hub (`/`)**: Landing page with personalized greeting, navigation cards, "Upload & Evaluate Content" banner (links to campaign planner with upload pre-selected), recent activity feed, collapsible "Getting Started" guide, and light/dark theme toggle.
+    - **Hub (`/`)**: Landing page with navigation to core modules.
     - **Content Performance (`/performance`)**: KPI overview and high-level funnel insights.
     - **Deep Dive Analytics (`/analytics`)**: Detailed filtering and CTA/channel/product analysis.
     - **Content Library (`/content-library`)**: Content browsing, search, and an AI-powered Content Comparison tool. The comparison estimates new content performance against existing assets and provides strategic recommendations. PDF upload uses multi-stage extraction (pdfjs primary, raw buffer fallback), processes max 20 pages for large files (up to 50MB), and offers manual content entry as a fallback when extraction fails.
