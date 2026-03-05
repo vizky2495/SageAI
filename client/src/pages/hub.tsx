@@ -201,8 +201,14 @@ export default function HubPage() {
     ? `${user.firstName} ${user.lastName}`
     : user?.displayName || "";
 
-  const greeting = user?.firstName
-    ? `${getTimeGreeting()}, ${user.firstName}`
+  const inferredFirstName = user?.firstName
+    || (user?.displayName?.includes("@")
+      ? user.displayName.split("@")[0].split(".").map(s => s.charAt(0).toUpperCase() + s.slice(1))[0]
+      : user?.displayName?.split(" ")[0])
+    || "";
+
+  const greeting = inferredFirstName
+    ? `${getTimeGreeting()}, ${inferredFirstName}`
     : getTimeGreeting();
 
   return (
