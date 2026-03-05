@@ -364,7 +364,7 @@ function buildPlannerContext(summary: InsightsSummary): string {
 
   context += `\n--- TOP 50 CONTENT ASSETS (with type, objective, all metrics) ---\n`;
   for (const t of summary.top_content) {
-    context += `${t.contentId} | Name: ${t.name} | Type: ${t.contentType} | Stage: ${t.stage} | Product: ${t.product} | Channel: ${t.channel} | Objective: ${t.objective} | CTA: ${t.cta} | ${t.pageviews} views | ${t.downloads} downloads | ${t.leads} leads | ${t.sqos} SQOs | avg time ${t.avgTime}s\n`;
+    context += `${t.contentId} | Name: ${t.name} | URL: ${t.url || "N/A"} | Type: ${t.contentType} | Stage: ${t.stage} | Product: ${t.product} | Channel: ${t.channel} | Objective: ${t.objective} | CTA: ${t.cta} | ${t.pageviews} views | ${t.downloads} downloads | ${t.leads} leads | ${t.sqos} SQOs | avg time ${t.avgTime}s\n`;
   }
 
   return context;

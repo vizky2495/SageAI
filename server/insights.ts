@@ -54,6 +54,7 @@ export interface InsightsSummary {
   top_content: Array<{
     contentId: string;
     name: string;
+    url: string;
     stage: string;
     product: string;
     channel: string;
@@ -159,6 +160,7 @@ export async function buildInsightsSummary(): Promise<InsightsSummary | null> {
     .select({
       contentId: assetsAgg.contentId,
       name: assetsAgg.name,
+      url: assetsAgg.url,
       stage: assetsAgg.stage,
       product: assetsAgg.productFranchise,
       channel: assetsAgg.utmChannel,
@@ -257,6 +259,7 @@ export async function buildInsightsSummary(): Promise<InsightsSummary | null> {
     top_content: topContent.map((t) => ({
       contentId: t.contentId ?? "N/A",
       name: t.name || "N/A",
+      url: t.url || "",
       stage: t.stage ?? "UNKNOWN",
       product: t.product || "N/A",
       channel: t.channel || "N/A",
