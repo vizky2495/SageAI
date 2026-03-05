@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Library, BarChart3, Target, ArrowRight, LogOut } from "lucide-react";
+import { Library, BarChart3, Target, ArrowRight, LogOut, Sun, Moon } from "lucide-react";
 import OnboardingTour, { TourResetButton } from "@/components/onboarding-tour";
 import FeedbackButton from "@/components/feedback-button";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 
 interface CardDef {
   title: string;
@@ -196,6 +197,7 @@ function getTimeGreeting(): string {
 
 export default function HubPage() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const displayFullName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
@@ -272,9 +274,17 @@ export default function HubPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.8, duration: 0.5 }}
-        className="mt-8"
+        className="mt-8 flex items-center gap-3"
       >
         <TourResetButton />
+        <button
+          onClick={toggleTheme}
+          className="h-8 w-8 rounded-full border border-border/50 bg-card/70 backdrop-blur flex items-center justify-center hover:bg-muted/50 hover:border-border transition-colors"
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          data-testid="btn-hub-theme-toggle"
+        >
+          {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
+        </button>
       </motion.div>
     </div>
   );
