@@ -1,5 +1,6 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
+import AiInsightsBar from "@/components/ai-insights-bar";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -396,7 +397,9 @@ export default function AnalyticsPage() {
             </Card>
           </header>
 
-          <div className="grid gap-4 lg:grid-cols-3 mb-4">
+          <AiInsightsBar page="analytics" />
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-3 mb-4">
             {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((stage) => {
               const stageColors: Record<string, string> = { TOFU: "hsl(var(--chart-1))", MOFU: "hsl(var(--chart-2))", BOFU: "hsl(var(--chart-3))" };
               const data = ctaByStage[stage];
@@ -757,7 +760,6 @@ export default function AnalyticsPage() {
         accentColor="text-[#00D657]"
         accentBg="bg-[#00D657]"
         accentRing="ring-[#00D657]/50"
-        variant="commandbar"
         fallbackSuggestions={[
           "What is the content breakdown across funnel stages?",
           "Show me the channel distribution",

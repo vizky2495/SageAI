@@ -2,6 +2,7 @@ import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import ContentLibrary from "@/components/content-library";
 import ContentComparison from "@/components/content-comparison";
+import AiInsightsBar from "@/components/ai-insights-bar";
 import { motion } from "framer-motion";
 import { Library } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,9 @@ export default function ContentLibraryPage() {
             </div>
           </header>
 
-          <div className="mb-4">
+          <AiInsightsBar page="content-library" />
+
+          <div className="mb-4 mt-4">
             <ContentComparison />
           </div>
           <ContentLibrary />
@@ -58,7 +61,6 @@ export default function ContentLibraryPage() {
         accentColor="text-[#00D657]"
         accentBg="bg-[#00D657]"
         accentRing="ring-[#00D657]/50"
-        variant="commandbar"
         fallbackSuggestions={[
           "What content do we have for TOFU stage?",
           "Show me all Intacct content assets",

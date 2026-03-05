@@ -446,7 +446,89 @@ function getDatasetLabel(summary: InsightsSummary): string {
 
 const MAX_CONTEXT_EXCHANGES = 4;
 
+const assetInsightCache = new Map<string, { insight: string; performance: string; timestamp: number }>();
+const ASSET_INSIGHT_TTL = 5 * 60 * 1000;
+
+async function generateAssetInsight(
+  assetId: string,
+  summary: InsightsSummary
+): Promise<{ insight: string; performance: string }> {
+  const cached = assetInsightCache.get(assetId);
+  if (cached && Date.now() - cached.timestamp < ASSET_INSIGHT_TTL) {
+    return { insight: cached.insight, performance: cached.performance };
+  }
+
+  const asset = summary.top_content.find(a => a.contentId === assetId);
+
+  if (!asset) {
+    const allPageviews = summary.top_content.map(a => a.pageviews);
+    const median = allPageviews.length > 0
+      ? allPageviews.sort((a, b) => a - b)[Math.floor(allPageviews.length / 2)]
+      : 0;
+    const result = {
+      insight: "This asset has limited activity data. Consider refreshing its distribution strategy.",
+      performance: median > 0 ? "red" : "neutral",
+    };
+    assetInsightCache.set(assetId, { ...result, timestamp: Date.now() });
+    return result;
+  }
+
+  const stageAssets = summary.top_content.filter(a => a.stage === asset.stage);
+  const primaryMetric = asset.stage === "BOFU" ? "sqos" : asset.stage === "MOFU" ? "leads" : "pageviews";
+  const metricValues = stageAssets.map(a => (a as any)[primaryMetric] as number).sort((a, b) => a - b);
+  const assetMetricVal = (asset as any)[primaryMetric] as number;
+  const median = metricValues.length > 0 ? metricValues[Math.floor(metricValues.length / 2)] : 0;
+  const p75 = metricValues.length > 0 ? metricValues[Math.floor(metricValues.length * 0.75)] : 0;
+
+  let performance = "amber";
+  if (median > 0) {
+    if (assetMetricVal >= p75) performance = "green";
+    else if (assetMetricVal < median * 0.5) performance = "red";
+  }
+
+  let insight: string;
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 80,
+      system: "You generate one-line insights about content marketing assets. Be specific, data-driven, and actionable. Reference actual metrics. No filler. Max 15 words.",
+      messages: [{
+        role: "user",
+        content: `Asset: ${asset.contentId}\nStage: ${asset.stage}\nChannel: ${asset.channel}\nProduct: ${asset.product}\nPageviews: ${asset.pageviews}\nLeads: ${asset.leads}\nSQOs: ${asset.sqos}\nAvg Time: ${asset.avgTime}s\nStage median ${primaryMetric}: ${median}\nStage top 25% threshold: ${p75}\nPerformance: ${performance}`,
+      }],
+    });
+    insight = ((response.content[0] as any).text || "").trim();
+    if (!insight) throw new Error("Empty response");
+  } catch {
+    if (performance === "green") {
+      insight = `Top performer: ${assetMetricVal} ${primaryMetric}, above ${median} stage median.`;
+    } else if (performance === "red") {
+      insight = `Below average: ${assetMetricVal} ${primaryMetric} vs ${median} stage median. Needs optimization.`;
+    } else {
+      insight = `Average performer with ${assetMetricVal} ${primaryMetric}. Room for growth.`;
+    }
+  }
+
+  const result = { insight, performance };
+  assetInsightCache.set(assetId, { ...result, timestamp: Date.now() });
+  return result;
+}
+
 export function registerChatRoutes(app: Express): void {
+  app.get("/api/assets/:id/insight", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = decodeURIComponent(String(req.params.id));
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        return res.json({ insight: "No data available yet.", performance: "neutral" });
+      }
+      const result = await generateAssetInsight(assetId, summary);
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating asset insight:", error);
+      res.status(500).json({ error: "Failed to generate insight" });
+    }
+  });
   app.get("/api/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
       const agent = (req.query.agent as string) || undefined;
@@ -734,6 +816,182 @@ export function registerChatRoutes(app: Express): void {
       } else {
         res.status(500).json({ error: "Failed to send message" });
       }
+    }
+  });
+
+  const insightsCache = new Map<string, { insights: string[]; timestamp: number }>();
+  const INSIGHTS_CACHE_TTL = 5 * 60 * 1000;
+
+  function generateInsightsFromSummary(summary: InsightsSummary, page: string): string[] {
+    const insights: string[] = [];
+
+    if (page === "content-library") {
+      const totalAssets = summary.dataset_info.total_rows;
+      insights.push(`Your library contains ${totalAssets.toLocaleString()} content assets across ${summary.stage_summary.length} funnel stages`);
+
+      const stages = summary.stage_summary;
+      const maxStage = stages.reduce((a, b) => (b.count > a.count ? b : a), stages[0]);
+      const minStage = stages.reduce((a, b) => (b.count < a.count ? b : a), stages[0]);
+      if (maxStage && minStage && maxStage.stage !== minStage.stage) {
+        insights.push(`${maxStage.stage} has ${maxStage.count} assets while ${minStage.stage} only has ${minStage.count} — potential funnel gap`);
+      }
+
+      const zeroSqoStages = stages.filter(s => s.sqos === 0);
+      if (zeroSqoStages.length > 0 && zeroSqoStages.length < stages.length) {
+        insights.push(`${zeroSqoStages.map(s => s.stage).join(", ")} stage${zeroSqoStages.length > 1 ? "s have" : " has"} zero SQOs — review content effectiveness`);
+      }
+
+      if (summary.metric_availability.time_on_page) {
+        const topByTime = [...summary.top_content].sort((a, b) => b.avgTime - a.avgTime);
+        if (topByTime.length > 0) {
+          const best = topByTime[0];
+          insights.push(`Highest engagement: "${best.name || best.contentId}" averages ${Math.round(best.avgTime)}s on page`);
+        }
+      }
+
+      if (summary.product_mix.length > 1) {
+        const topProduct = summary.product_mix[0];
+        insights.push(`${topProduct.product} leads with ${topProduct.count} assets and ${topProduct.pageviews.toLocaleString()} total views`);
+      }
+
+      const lowPerformers = summary.top_content.filter(c => c.pageviews === 0 && c.leads === 0);
+      if (lowPerformers.length > 0) {
+        insights.push(`${lowPerformers.length} assets have zero views and zero leads — consider refreshing or retiring`);
+      }
+    }
+
+    if (page === "performance") {
+      if (summary.channel_mix.length > 1) {
+        const topChannel = summary.channel_mix[0];
+        const secondChannel = summary.channel_mix[1];
+        insights.push(`${topChannel.channel} dominates with ${topChannel.count} assets vs ${secondChannel.channel} at ${secondChannel.count}`);
+      }
+
+      if (summary.metric_availability.sqos) {
+        const totalSqos = summary.metric_totals.sqos;
+        const topSqoStage = summary.stage_summary.reduce((a, b) => (b.sqos > a.sqos ? b : a), summary.stage_summary[0]);
+        if (topSqoStage) {
+          insights.push(`${topSqoStage.stage} drives ${topSqoStage.sqos} of ${totalSqos} total SQOs (${totalSqos > 0 ? Math.round((topSqoStage.sqos / totalSqos) * 100) : 0}%)`);
+        }
+      }
+
+      if (summary.metric_availability.pageviews) {
+        insights.push(`Total pageviews across all content: ${summary.metric_totals.pageviews.toLocaleString()}`);
+      }
+
+      if (summary.metric_availability.leads) {
+        insights.push(`${summary.metric_totals.leads.toLocaleString()} total leads generated across the funnel`);
+      }
+
+      if (summary.product_mix.length > 2) {
+        const withSqos = summary.product_mix.filter(p => p.sqos > 0);
+        insights.push(`${withSqos.length} of ${summary.product_mix.length} products are generating SQOs`);
+      }
+    }
+
+    if (page === "analytics") {
+      if (summary.cta_table.length > 1) {
+        const topCta = summary.cta_table[0];
+        insights.push(`"${topCta.cta}" is the most common CTA with ${topCta.count} assets`);
+      }
+
+      if (summary.channel_mix.length > 1) {
+        const channelsByViews = [...summary.channel_mix].sort((a, b) => b.pageviews - a.pageviews);
+        if (channelsByViews[0]) {
+          insights.push(`${channelsByViews[0].channel} leads in traffic with ${channelsByViews[0].pageviews.toLocaleString()} pageviews`);
+        }
+      }
+
+      if (summary.metric_availability.sqos && summary.metric_availability.leads) {
+        const convRate = summary.metric_totals.leads > 0 ? (summary.metric_totals.sqos / summary.metric_totals.leads * 100).toFixed(1) : "0";
+        insights.push(`Overall lead-to-SQO conversion: ${convRate}% across ${summary.dataset_info.total_rows} assets`);
+      }
+
+      if (summary.content_type_mix.length > 1) {
+        const topType = summary.content_type_mix[0];
+        insights.push(`${topType.contentType} is your most-used content format with ${topType.count} assets`);
+      }
+
+      const stagesWithGaps = summary.stage_summary.filter(s => s.count < summary.dataset_info.total_rows * 0.1);
+      if (stagesWithGaps.length > 0) {
+        insights.push(`${stagesWithGaps.map(s => s.stage).join(", ")} represent${stagesWithGaps.length === 1 ? "s" : ""} less than 10% of total content — consider increasing coverage`);
+      }
+
+      if (summary.metric_availability.time_on_page) {
+        insights.push(`Average time on page across all content: ${summary.metric_totals.avg_time}s`);
+      }
+    }
+
+    return insights.length > 0 ? insights : [`${summary.dataset_info.total_rows} content assets loaded across ${summary.stage_summary.length} funnel stages`];
+  }
+
+  app.post("/api/assets/compare", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetA, assetB } = req.body;
+      if (!assetA || !assetB) {
+        return res.status(400).json({ error: "Two assets required for comparison" });
+      }
+
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        return res.json({ verdict: "No data available for comparison." });
+      }
+
+      const findAsset = (id: string) => summary.top_content.find(a => a.contentId === id);
+      const a = findAsset(assetA.contentId);
+      const b = findAsset(assetB.contentId);
+
+      const aData = a || { contentId: assetA.contentId, stage: assetA.stage, channel: assetA.utmChannel || "N/A", pageviews: assetA.pageviewsSum || 0, leads: assetA.uniqueLeads || 0, sqos: assetA.sqoCount || 0, avgTime: assetA.timeAvg || 0, product: assetA.productFranchise || "N/A" };
+      const bData = b || { contentId: assetB.contentId, stage: assetB.stage, channel: assetB.utmChannel || "N/A", pageviews: assetB.pageviewsSum || 0, leads: assetB.uniqueLeads || 0, sqos: assetB.sqoCount || 0, avgTime: assetB.timeAvg || 0, product: assetB.productFranchise || "N/A" };
+
+      let verdict: string;
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 150,
+          system: "You compare two marketing content assets and provide a concise verdict. Be specific, data-driven, and actionable. Max 3 sentences. Identify the winner and explain why with specific metrics.",
+          messages: [{
+            role: "user",
+            content: `Compare these two assets:\n\nAsset A: ${aData.contentId}\n- Stage: ${aData.stage}\n- Channel: ${aData.channel}\n- Pageviews: ${aData.pageviews}\n- Leads: ${aData.leads}\n- SQOs: ${aData.sqos}\n- Avg Time: ${aData.avgTime}s\n\nAsset B: ${bData.contentId}\n- Stage: ${bData.stage}\n- Channel: ${bData.channel}\n- Pageviews: ${bData.pageviews}\n- Leads: ${bData.leads}\n- SQOs: ${bData.sqos}\n- Avg Time: ${bData.avgTime}s`,
+          }],
+        });
+        verdict = ((response.content[0] as any).text || "").trim();
+        if (!verdict) throw new Error("Empty response");
+      } catch {
+        const aScore = aData.pageviews + aData.leads * 10 + aData.sqos * 50;
+        const bScore = bData.pageviews + bData.leads * 10 + bData.sqos * 50;
+        const winner = aScore >= bScore ? aData : bData;
+        const loser = aScore >= bScore ? bData : aData;
+        verdict = `${winner.contentId} outperforms with ${winner.pageviews} pageviews and ${winner.leads} leads vs ${loser.pageviews} pageviews and ${loser.leads} leads. Consider doubling down on ${winner.contentId}'s distribution strategy.`;
+      }
+
+      res.json({ verdict });
+    } catch (error) {
+      console.error("Error comparing assets:", error);
+      res.status(500).json({ error: "Failed to compare assets" });
+    }
+  });
+
+  app.get("/api/ai-insights", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const page = (req.query.page as string) || "content-library";
+      const cacheKey = page;
+      const cached = insightsCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < INSIGHTS_CACHE_TTL) {
+        return res.json({ insights: cached.insights });
+      }
+
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        return res.json({ insights: [] });
+      }
+
+      const insights = generateInsightsFromSummary(summary, page);
+      insightsCache.set(cacheKey, { insights, timestamp: Date.now() });
+      res.json({ insights });
+    } catch (error) {
+      console.error("Error generating AI insights:", error);
+      res.json({ insights: [] });
     }
   });
 }

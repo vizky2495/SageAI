@@ -1,0 +1,299 @@
+Implement a hybrid AI interaction system that combines inline contextual intelligence with a full chat experience. The user should never have to choose between the two — they should flow naturally from one to the other depending on what they need.
+
+THE CORE PRINCIPLE: START INLINE, ESCALATE TO CHAT
+Every AI interaction begins inline — attached to the content the user is looking at. If the user needs to go deeper, the inline interaction seamlessly transitions into the full chat with all context preserved. The user never has to re-explain what they were looking at.
+
+COMPONENT 1: INLINE AI ON EVERY CONTENT CARD
+Hover insight (appears after 1.5 seconds hover on any card):
+
+Small glassmorphic tooltip appears above/beside the card
+Shows one AI-generated insight specific to that asset:
+
+"Converts 2.3x above avg for TOFU email" or "Low engagement — 0s avg time, consider replacing" or "Top 5% performer in Sage 50 Accounting"
+
+
+Performance indicator: thin horizontal bar (green/amber/red)
+Three micro-action buttons in a row:
+
+"Ask" — opens inline chat bubble anchored to this card
+"Compare" — enters compare mode (select a second card)
+"Plan" — opens campaign planner with this asset pre-selected
+
+
+Cache insights after first generation so repeat hovers are instant
+
+Inline chat bubble (triggered by "Ask" button):
+
+A small chat interface expands directly below or beside the card (not a separate modal)
+Width: matches the card width or 350px minimum
+Height: 300px initially, expandable by dragging
+Contains: 2-3 lines showing the asset context at the top ("Asking about: Year-End Payroll Campaign Pt2 — TOFU — Sage 50 Accounting"), then a mini message area, then an input field
+The AI already has this asset's full data as context — no setup needed
+User can ask quick questions: "Why is the avg time so high?" or "What's the SQO rate compared to similar content?" and get answers right there
+At the bottom of every inline response, show a small link: "Continue in full chat →"
+Clicking "Continue in full chat" smoothly transitions the entire conversation (including the asset context and all messages so far) into the full chat window
+Only one inline chat can be open at a time — opening another closes the first
+
+Compare mode (triggered by "Compare" button):
+
+First card highlights with a green pulsing border and a label: "Card 1 selected — click another card to compare"
+When user clicks a second card, a comparison panel slides in:
+
+Appears as a glassmorphic overlay between/below the two cards
+Side-by-side table: Asset Name, Stage, Channel, Views, Leads, SQOs, Conv%, Avg Time, Performance Score
+AI-generated verdict at the bottom: "Asset A outperforms Asset B by 2.1x on SQO conversion. Asset B has higher engagement time (95m vs 44m) suggesting it retains attention but fails to convert. Recommendation: Use Asset A for lead gen campaigns, Asset B for awareness."
+Buttons: "Deep dive in chat →" | "Start campaign plan with winner →" | "Close"
+"Deep dive in chat" opens the full chat with both assets and the comparison already loaded as context
+
+
+
+
+COMPONENT 2: AI INSIGHTS BAR (persistent, page-level)
+A horizontal bar that sits between the page header and the content, showing rotating AI-generated insights:
+On Content Library page:
+
+Slim glassmorphic bar, full width, 48px height
+Left side: small green "AI" badge
+Center: rotating insights that crossfade every 8 seconds:
+
+"37 assets are older than 12 months — 15 are in your top-performing segments"
+"MOFU has 3x fewer assets than TOFU — potential content gap"
+"Sage Intacct TOFU converts 2.1x better than Sage 50 TOFU"
+"5 assets have 0 SQOs despite 100+ views — CTA optimization needed"
+
+
+Right side: left/right arrows to manually browse insights + "See all insights →" link
+Clicking any insight opens the Spotlight with a relevant follow-up pre-loaded
+
+On Performance page:
+
+Same bar format but with performance-specific insights:
+
+"Email channel SQO rate dropped 12% this quarter vs last"
+"Brand Search has the highest ROI at 29% lead-to-SQO conversion"
+
+
+
+On Campaign Planner page:
+
+Campaign-specific insights:
+
+"Your last 3 campaigns averaged 38 SQOs. Top performer used LinkedIn + Email combo."
+"TOFU PDF campaigns have 40% lower SQO rate than TOFU Webinar campaigns"
+
+
+
+
+COMPONENT 3: THE SPOTLIGHT (quick command + quick answers)
+Triggered by ⌘K / Ctrl+K or clicking the floating AI button:
+The floating trigger button:
+
+Fixed position: bottom-right corner, 24px from edges
+48px green glassmorphic circle with "AI" text or Sage logo
+Subtle pulse animation (3-second loop)
+On hover: expands to show "⌘K" shortcut hint beside it
+Small notification badge appears when the AI has proactive insights (see Component 6)
+
+Spotlight overlay when triggered:
+
+Dark overlay dims the page to 50%
+Center-screen command bar: 640px wide, top 25% of viewport
+Large glassmorphic input with green border, 56px height, 28px border-radius (pill)
+Animated placeholder cycling through contextual suggestions
+As the user types, a dropdown appears below with smart results:
+
+Intelligent result types based on what user types:
+
+Content name/ID → show matching asset cards with key metrics
+Question starting with "what," "why," "how," "which," "show" → show "Ask AI: [question]" as first result
+"compare" → show "Enter compare mode" option
+"gaps" or "missing" → show "Run content gap analysis"
+"evaluate" or "upload" → show "Upload & evaluate content" with inline file drop zone
+"plan" or "campaign" → show "Open Campaign Planner"
+"top" or "best" → show quick results: "Top 5 performers overall" / "Top 5 by SQOs" / "Top 5 by engagement"
+
+Quick answer mode:
+When user asks a question and presses Enter:
+
+Spotlight expands downward (max 60% viewport height) to show the AI response
+Response renders with rich formatting: tables, verdict badges, source tags, mini charts
+User can ask follow-ups in the same input — it becomes a mini conversation
+At the bottom of the expanded area: "Open in full chat →" button
+Press Escape to dismiss and return to page
+Conversation is auto-saved
+
+Key design rule: Spotlight is for quick interactions (1-3 exchanges). If the conversation goes beyond 3 messages, show a gentle prompt: "This looks like a deeper conversation. Want to continue in full chat?" with a one-click transition.
+
+COMPONENT 4: THE FULL CHAT (for deep conversations)
+The full chat is for campaign planning, deep content analysis, multi-asset comparisons, and extended conversations. It's accessed by:
+
+Clicking "Continue in full chat →" from any inline interaction or Spotlight
+Clicking "Open chat" from the navigation
+Starting a new campaign plan
+Typing "/chat" in Spotlight
+
+Full chat design — slide-up panel from bottom:
+
+Slides up from the bottom of the screen, 60% viewport height
+Width: 100% of viewport (not centered modal — it's a proper panel)
+Glassmorphic background with stronger blur
+Content above is dimmed but visible and still interactive (user can click cards above to add context to the chat)
+
+Chat layout:
+
+Header bar: Agent name (contextual) + page context badge ("Content Library — TOFU filtered") + conversation history icon + new conversation (+) button + minimize (chevron down) + expand to full screen + close (X)
+Message area: Scrollable. User messages right-aligned (dark teal glass cards). Agent messages left-aligned (dark glass cards with green avatar).
+Rich content rendering inside messages:
+
+Tables: glassmorphic styling, green header, scrollable horizontally
+Content cards: mini library cards rendered inline with "View in library" link
+Comparison tables: full side-by-side with verdict badges
+Charts: inline with transparent background, green data lines
+Campaign plan sections: collapsible glass cards, one per section
+Source tags: colored glass pills (green = Internal Data, jade = Web Research, teal = Industry Benchmark, amber = Assumption)
+PDF download: full-width green glass button when a plan is ready
+
+
+Input area (pinned to bottom):
+
+Full-width input with green border, 48px height
+Left side: paperclip (file upload) + @ mention (for referencing assets)
+Right side: green send button
+Above input: file chips when files are attached
+Drag-and-drop: dragging a file onto the chat panel shows a green dashed border overlay "Drop to upload and evaluate"
+
+
+
+Context preservation:
+
+When transitioning from inline or Spotlight to full chat, ALL prior messages and context transfer seamlessly
+The chat header shows the source: "Continued from: Inline — Year-End Payroll Card" or "Continued from: Spotlight"
+The asset(s) that were being discussed appear as pinned context cards at the top of the chat
+
+Interactive content cards in chat:
+When the user is in full chat and wants to reference a library asset, they can:
+
+Type "@" to get an autocomplete dropdown of assets
+Drag a content card from the library (visible above the chat panel) and drop it into the chat — it adds as context
+Click any content card rendered in an AI response to expand its full details
+
+Full screen mode:
+
+Click expand button to go full viewport
+Split layout: Left (55%) = conversation. Right (45%) = live data panel
+The right panel automatically populates as the conversation progresses:
+
+AI references an asset → the asset card appears in the right panel
+AI generates a comparison → the comparison table renders in the right panel
+AI builds a campaign plan → plan sections appear as a live document in the right panel
+The right panel is the "AI workspace" — it shows everything the AI is working with
+
+
+This makes the chat feel like a collaborative workspace, not just a messaging interface
+"Back to split view" or "Exit full screen" buttons to return to previous states
+
+
+COMPONENT 5: CONTEXTUAL AI ASSISTS ON FORMS AND DASHBOARDS
+On Performance dashboards:
+
+Every chart and metric has a small green "AI" icon (16px) next to it
+Clicking it generates an inline explanation anchored to that specific chart:
+
+"Email channel conversion dropped 12% MoM. Similar seasonal patterns observed in Q3 last year. Recommend shifting budget to LinkedIn which is trending upward."
+
+
+Appears as a glassmorphic tooltip, dismissible
+"Ask more →" link opens Spotlight with this metric as context
+
+On Campaign Planner wizard:
+
+Each step has an "AI Suggest" toggle (small green pill)
+When enabled, the AI suggests values for form fields based on data:
+
+Step 1: "Lead Generation campaigns have 12.4% SQO conversion historically — recommended for this segment"
+Step 2: "US market has 3.2x more benchmark data than UK — more reliable predictions"
+Step 3: "Top content match: [asset name] with 82/100 performance score"
+
+
+Suggestions appear as small glassmorphic cards beside each field — non-blocking, assistive
+User can click "Use this suggestion" to auto-fill or ignore it
+
+
+COMPONENT 6: PROACTIVE AI NOTIFICATIONS
+The AI doesn't always wait to be asked:
+Notification badge on floating AI button:
+
+When the AI has generated proactive insights, the floating button shows a small red/green badge number
+Clicking it shows a stack of notification cards above the button:
+
+"You've been browsing TOFU Sage 50 content. The top performer has 339 views and 5 SQOs — want to see it?" [View] [Dismiss]
+"3 assets matching your last campaign criteria were added this week" [Explore] [Dismiss]
+"Your last campaign plan is 7 days old. Want to refresh the trend analysis?" [Refresh] [Dismiss]
+
+
+Maximum 3 notifications at a time. Each is a small glassmorphic card.
+Notifications auto-dismiss after 30 seconds if not interacted with
+User can mute proactive AI in settings
+
+Smart card highlights in the library:
+
+When the AI detects assets relevant to the user's recent activity, those cards get a subtle green glow border and a tiny "AI suggested" tag in the top-right corner
+Very subtle — just a 1px green border glow. Not intrusive.
+Hovering on the "AI suggested" tag shows why: "Matches your recent TOFU Sage 50 browsing pattern"
+Can be toggled off in settings
+
+
+HOW IT ALL FLOWS TOGETHER — USER JOURNEY EXAMPLE:
+
+User opens Content Library, browses TOFU assets
+The AI Insights bar at the top rotates: "Sage Intacct TOFU converts 2.1x better than Sage 50 TOFU" — user reads this passively
+User hovers on a content card → tooltip shows "This asset has 339 views, 5 SQOs — top 10% for Sage 50 TOFU" with Ask / Compare / Plan buttons
+User clicks "Ask" → inline chat opens below the card. Types "Why does this have high engagement but low SQOs?"
+AI responds inline: "The 2,650s avg engagement suggests users find the content valuable, but the lack of CTA (none set) means there's no conversion path. Adding a demo request CTA could increase SQO rate by 3-5x based on comparable assets." [Continue in full chat →]
+User clicks "Continue in full chat →" → the bottom chat panel slides up with the entire conversation preserved. The asset card is pinned as context.
+User asks: "Show me similar assets that DO have CTAs and convert well"
+AI shows a comparison table in the chat with 5 similar assets, highlighting one with a "Request Demo" CTA that converts at 34.8%
+User says "Let's build a campaign plan using the original asset with an updated CTA"
+AI transitions into campaign planning mode — the right panel (in full-screen view) starts building the plan sections live as the conversation progresses
+User downloads the PDF directly from the chat
+
+At no point did the user leave the Content Library page, open a separate app, or lose context. That's the innovation.
+
+IMPLEMENTATION PRIORITY:
+Phase 1 (build first):
+
+Full chat panel (bottom slide-up) — this is the foundation
+Floating AI button with ⌘K Spotlight trigger
+Spotlight with quick answers
+Context preservation when transitioning between Spotlight and full chat
+
+Phase 2 (build next):
+
+Inline card hover insights
+Inline chat bubble on cards ("Ask" button)
+Compare mode between cards
+Transition from inline to full chat with context
+
+Phase 3 (build after):
+
+AI Insights bar on each page
+Full-screen split view with live data panel
+AI Suggest on Campaign Planner wizard fields
+AI icons on Performance dashboard charts
+
+Phase 4 (polish):
+
+Proactive notifications
+Smart card highlights
+Drag-and-drop cards into chat
+@ mention assets in chat
+
+
+VISUAL CONSISTENCY RULES:
+All AI elements share the same visual DNA so users instantly recognize them:
+
+Glassmorphic background: rgba(10, 20, 15, 0.85), backdrop-filter: blur(24px)
+Green border: 1px solid rgba(0, 214, 87, 0.2), brighter on hover/focus
+Green accent: all AI-generated text labels, tags, and indicators use Brilliant Green
+Spring animations: all transitions use spring physics (300-400ms, slight overshoot) — never linear easing
+The green "AI" badge/avatar appears consistently on every AI-generated element so users always know what's AI and what's static UI

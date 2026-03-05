@@ -1,5 +1,6 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
+import AiInsightsBar from "@/components/ai-insights-bar";
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
@@ -181,7 +182,9 @@ export default function FunnelDashboard() {
             )}
           </header>
 
-          <div className="grid gap-3 md:grid-cols-3">
+          <AiInsightsBar page="performance" />
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -421,7 +424,6 @@ export default function FunnelDashboard() {
         accentColor="text-[#00D657]"
         accentBg="bg-[#00D657]"
         accentRing="ring-[#00D657]/50"
-        variant="commandbar"
         fallbackSuggestions={[
           "What is the content breakdown across funnel stages?",
           "Show me the channel distribution",

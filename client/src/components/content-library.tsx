@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, createContext, useContext } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,15 @@ import {
   ExternalLink,
   Search,
   X,
+  MessageCircle,
+  GitCompare,
+  CalendarPlus,
+  Sparkles,
+  Loader2,
+  Send,
+  ArrowRight,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
 
 const PAGE_SIZE = 25;
@@ -24,6 +32,20 @@ const stageTones: Record<string, { bg: string; text: string; border: string }> =
   BOFU: { bg: "bg-chart-3/12", text: "text-chart-3", border: "border-chart-3/20" },
   UNKNOWN: { bg: "bg-chart-4/12", text: "text-chart-4", border: "border-chart-4/20" },
 };
+
+interface CompareContextType {
+  compareMode: boolean;
+  selectedCard: { asset: AssetAgg; stage: string } | null;
+  onCompareSelect: (asset: AssetAgg, stage: string) => void;
+  cancelCompare: () => void;
+}
+
+const CompareContext = createContext<CompareContextType>({
+  compareMode: false,
+  selectedCard: null,
+  onCompareSelect: () => {},
+  cancelCompare: () => {},
+});
 
 function formatCompact(n: number) {
   return Intl.NumberFormat(undefined, {
@@ -227,16 +249,499 @@ function ContentDetailModal({
   );
 }
 
-function ContentCard({
+function HoverInsightTooltip({
+  asset,
+  visible,
+  onAsk,
+  onCompare,
+  onPlan,
+}: {
+  asset: AssetAgg;
+  visible: boolean;
+  onAsk: () => void;
+  onCompare: () => void;
+  onPlan: () => void;
+}) {
+  const [insight, setInsight] = useState<string | null>(null);
+  const [performance, setPerformance] = useState<string>("neutral");
+  const [loading, setLoading] = useState(false);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (visible && !fetchedRef.current) {
+      fetchedRef.current = true;
+      setLoading(true);
+      authFetch(`/api/assets/${encodeURIComponent(asset.contentId)}/insight`)
+        .then(res => res.json())
+        .then(data => {
+          setInsight(data.insight || null);
+          setPerformance(data.performance || "neutral");
+        })
+        .catch(() => {
+          setInsight("Unable to load insight.");
+          setPerformance("neutral");
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [visible, asset.contentId]);
+
+  if (!visible) return null;
+
+  const perfColor =
+    performance === "green" ? "bg-emerald-500" :
+    performance === "red" ? "bg-red-500" :
+    performance === "amber" ? "bg-amber-500" :
+    "bg-muted-foreground/30";
+
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-[280px] animate-in fade-in slide-in-from-bottom-2 duration-200"
+      data-testid={`tooltip-insight-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
+    >
+      <div className="rounded-xl border bg-card/95 backdrop-blur-lg shadow-xl p-3 space-y-2">
+        <div className={`h-1 w-full rounded-full ${perfColor}`} data-testid="performance-bar" />
+
+        <div className="min-h-[28px] flex items-start gap-1.5">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Analyzing...</span>
+            </div>
+          ) : (
+            <>
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-500 mt-0.5" />
+              <p className="text-xs text-foreground leading-snug" data-testid="text-insight">
+                {insight}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 pt-1 border-t border-border/50">
+          <button
+            className="flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onAsk(); }}
+            data-testid="button-ask-ai"
+          >
+            <MessageCircle className="h-3 w-3" />
+            Ask
+          </button>
+          <button
+            className="flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onCompare(); }}
+            data-testid="button-compare"
+          >
+            <GitCompare className="h-3 w-3" />
+            Compare
+          </button>
+          <button
+            className="flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-medium bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onPlan(); }}
+            data-testid="button-plan"
+          >
+            <CalendarPlus className="h-3 w-3" />
+            Plan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface InlineChatMsg {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+}
+
+function InlineChatBubble({
   asset,
   stage,
+  onClose,
+  onEscalate,
 }: {
   asset: AssetAgg;
   stage: string;
+  onClose: () => void;
+  onEscalate: (msgs: InlineChatMsg[]) => void;
+}) {
+  const [msgs, setMsgs] = useState<InlineChatMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamContent, setStreamContent] = useState("");
+  const [convId, setConvId] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [msgs, streamContent]);
+
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 200);
+  }, []);
+
+  const assetContext = `Asset: ${asset.contentId}\nStage: ${stage}\nProduct: ${asset.productFranchise || "N/A"}\nChannel: ${asset.utmChannel || "N/A"}\nPageviews: ${asset.pageviewsSum}\nLeads: ${asset.uniqueLeads}\nSQOs: ${asset.sqoCount}\nAvg Time: ${asset.timeAvg}s`;
+
+  async function send(text: string) {
+    if (!text.trim() || streaming) return;
+    const userMsg: InlineChatMsg = { id: Date.now(), role: "user", content: text };
+    setMsgs(p => [...p, userMsg]);
+    setInput("");
+    setStreaming(true);
+    setStreamContent("");
+
+    try {
+      let cid = convId;
+      if (!cid) {
+        const res = await authFetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: `About: ${asset.contentId.slice(0, 40)}`, agent: "librarian" }),
+        });
+        const conv = await res.json();
+        cid = conv.id;
+        setConvId(conv.id);
+      }
+
+      const fullContent = `[Context about this asset]\n${assetContext}\n\n[User question]\n${text}`;
+      const res = await authFetch(`/api/conversations/${cid}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: fullContent }),
+      });
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.content) { full += data.content; setStreamContent(full); }
+                if (data.done) {
+                  setMsgs(p => [...p, { id: Date.now() + 1, role: "assistant", content: full }]);
+                  setStreamContent("");
+                }
+                if (data.error) {
+                  setMsgs(p => [...p, { id: Date.now() + 1, role: "assistant", content: "Sorry, something went wrong." }]);
+                  setStreamContent("");
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+    } catch {
+      setMsgs(p => [...p, { id: Date.now() + 1, role: "assistant", content: "Connection error. Please try again." }]);
+      setStreamContent("");
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  const suggestions = ["How is this performing?", "What could improve?", "Compare to similar assets"];
+
+  return (
+    <div
+      className="mt-2 rounded-xl border border-[#00D657]/20 overflow-hidden"
+      style={{ background: "rgba(10, 20, 15, 0.92)", backdropFilter: "blur(24px)", width: 280 }}
+      data-testid={`inline-chat-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
+    >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#00D657]/10">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="h-4 w-4 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
+            <Sparkles className="h-2.5 w-2.5 text-black" />
+          </div>
+          <span className="text-[10px] text-white/60 truncate">
+            {asset.contentId.slice(0, 25)} — {stage}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+            data-testid="btn-expand-inline-chat"
+          >
+            <ChevronRight className={`h-3 w-3 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+            data-testid="btn-close-inline-chat"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto px-3 py-2 space-y-2 scrollbar-thin"
+        style={{ height: expanded ? 450 : 300 }}
+      >
+        {msgs.length === 0 && !streamContent && (
+          <div className="space-y-1.5 py-2">
+            {suggestions.map(s => (
+              <button
+                key={s}
+                onClick={() => send(s)}
+                className="w-full text-left text-[11px] rounded-lg px-2.5 py-1.5 border border-white/5 bg-white/[0.03] text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition"
+                data-testid={`suggestion-inline-${s.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        {msgs.map(msg => (
+          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[90%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed ${msg.role === "user" ? "bg-[#004D4D] text-white" : "bg-white/5 text-white/80 border border-white/5"}`}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+        {streamContent && (
+          <div className="flex justify-start">
+            <div className="max-w-[90%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed bg-white/5 text-white/80 border border-white/5">
+              {streamContent}
+              <span className="inline-block w-1 h-3 bg-[#00D657] opacity-60 animate-pulse ml-0.5 rounded-sm" />
+            </div>
+          </div>
+        )}
+        {streaming && !streamContent && (
+          <div className="flex justify-start">
+            <div className="rounded-xl px-2.5 py-1.5 bg-white/5 border border-white/5 flex items-center gap-1">
+              <div className="h-1 w-1 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="h-1 w-1 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="h-1 w-1 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
+        {msgs.some(m => m.role === "assistant") && !streaming && (
+          <button
+            onClick={() => onEscalate(msgs)}
+            className="flex items-center gap-1 text-[10px] text-[#00D657] hover:text-[#00C04E] transition-colors mt-1"
+            data-testid="btn-escalate-inline"
+          >
+            <ArrowRight className="h-3 w-3" />
+            Continue in full chat →
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 px-2.5 py-2 border-t border-[#00D657]/10">
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") { e.preventDefault(); send(input); }
+            if (e.key === "Escape") onClose();
+          }}
+          placeholder="Ask about this asset..."
+          className="flex-1 bg-transparent border-none outline-none text-[11px] text-white placeholder:text-white/25"
+          disabled={streaming}
+          data-testid="input-inline-chat"
+        />
+        <button
+          onClick={() => send(input)}
+          disabled={!input.trim() || streaming}
+          className="h-6 w-6 rounded-full bg-[#00D657] hover:bg-[#00C04E] text-black flex items-center justify-center disabled:opacity-40 transition-colors shrink-0"
+          data-testid="btn-send-inline"
+        >
+          <Send className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonPanel({
+  assetA,
+  stageA,
+  assetB,
+  stageB,
+  onClose,
+  onDeepDive,
+  onPlanWithWinner,
+}: {
+  assetA: AssetAgg;
+  stageA: string;
+  assetB: AssetAgg;
+  stageB: string;
+  onClose: () => void;
+  onDeepDive: () => void;
+  onPlanWithWinner: () => void;
+}) {
+  const [verdict, setVerdict] = useState<string | null>(null);
+  const [loadingVerdict, setLoadingVerdict] = useState(true);
+
+  useEffect(() => {
+    setLoadingVerdict(true);
+    authFetch("/api/assets/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assetA, assetB }),
+    })
+      .then(res => res.json())
+      .then(data => setVerdict(data.verdict || "Unable to generate verdict."))
+      .catch(() => setVerdict("Unable to generate comparison verdict."))
+      .finally(() => setLoadingVerdict(false));
+  }, [assetA.contentId, assetB.contentId]);
+
+  const convA = assetA.uniqueLeads > 0 ? ((assetA.sqoCount / assetA.uniqueLeads) * 100).toFixed(1) : "0.0";
+  const convB = assetB.uniqueLeads > 0 ? ((assetB.sqoCount / assetB.uniqueLeads) * 100).toFixed(1) : "0.0";
+
+  const rows = [
+    { label: "Name", a: assetA.name || assetA.contentId, b: assetB.name || assetB.contentId },
+    { label: "Stage", a: stageA, b: stageB },
+    { label: "Channel", a: assetA.utmChannel || "—", b: assetB.utmChannel || "—" },
+    { label: "Views", a: formatCompact(assetA.pageviewsSum), b: formatCompact(assetB.pageviewsSum), numA: assetA.pageviewsSum, numB: assetB.pageviewsSum },
+    { label: "Leads", a: formatCompact(assetA.uniqueLeads), b: formatCompact(assetB.uniqueLeads), numA: assetA.uniqueLeads, numB: assetB.uniqueLeads },
+    { label: "SQOs", a: formatCompact(assetA.sqoCount), b: formatCompact(assetB.sqoCount), numA: assetA.sqoCount, numB: assetB.sqoCount },
+    { label: "Conv%", a: `${convA}%`, b: `${convB}%`, numA: parseFloat(convA), numB: parseFloat(convB) },
+    { label: "Avg Time", a: assetA.timeAvg > 0 ? `${Math.round(assetA.timeAvg)}s` : "0s", b: assetB.timeAvg > 0 ? `${Math.round(assetB.timeAvg)}s` : "0s", numA: assetA.timeAvg, numB: assetB.timeAvg },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      data-testid="comparison-overlay"
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border bg-card/95 backdrop-blur-lg p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="comparison-panel"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-emerald-500" />
+            <h2 className="text-lg font-bold" data-testid="text-comparison-title">Content Comparison</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-lg"
+            onClick={onClose}
+            data-testid="button-close-comparison"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="rounded-xl border overflow-hidden" data-testid="comparison-table">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[100px]">Metric</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-emerald-500 uppercase tracking-wider">Card 1</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-blue-500 uppercase tracking-wider">Card 2</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => {
+                const isNumeric = row.numA !== undefined && row.numB !== undefined;
+                const aWins = isNumeric && row.numA! > row.numB!;
+                const bWins = isNumeric && row.numB! > row.numA!;
+                return (
+                  <tr key={row.label} className={i % 2 === 0 ? "bg-card" : "bg-muted/10"}>
+                    <td className="px-4 py-2 text-xs font-medium text-muted-foreground">{row.label}</td>
+                    <td className={`px-4 py-2 font-medium ${aWins ? "text-emerald-500" : ""}`} data-testid={`compare-a-${row.label.toLowerCase().replace(/[^a-z]/g, "")}`}>
+                      {row.a}
+                      {aWins && <span className="ml-1 text-[10px]">&#9650;</span>}
+                    </td>
+                    <td className={`px-4 py-2 font-medium ${bWins ? "text-emerald-500" : ""}`} data-testid={`compare-b-${row.label.toLowerCase().replace(/[^a-z]/g, "")}`}>
+                      {row.b}
+                      {bWins && <span className="ml-1 text-[10px]">&#9650;</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 rounded-xl border bg-emerald-500/5 p-4" data-testid="comparison-verdict">
+          <div className="flex items-start gap-2">
+            <Sparkles className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5" />
+            <div className="flex-1">
+              <div className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1">AI Verdict</div>
+              {loadingVerdict ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Analyzing comparison...</span>
+                </div>
+              ) : (
+                <p className="text-sm leading-relaxed" data-testid="text-verdict">{verdict}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <Button
+            className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium h-9"
+            onClick={onDeepDive}
+            data-testid="button-deep-dive-chat"
+          >
+            <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+            Deep dive in chat
+            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+          </Button>
+          <Button
+            className="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium h-9"
+            onClick={onPlanWithWinner}
+            data-testid="button-plan-with-winner"
+          >
+            <CalendarPlus className="h-3.5 w-3.5 mr-1.5" />
+            Plan with winner
+            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-xl text-xs font-medium h-9"
+            onClick={onClose}
+            data-testid="button-close-comparison-bottom"
+          >
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentCard({
+  asset,
+  stage,
+  inlineChatActive,
+  onOpenInlineChat,
+  onCloseInlineChat,
+}: {
+  asset: AssetAgg;
+  stage: string;
+  inlineChatActive: boolean;
+  onOpenInlineChat: (assetId: string) => void;
+  onCloseInlineChat: () => void;
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [, navigate] = useLocation();
   const tone = stageTones[stage] || stageTones.TOFU;
+  const { compareMode, selectedCard, onCompareSelect } = useContext(CompareContext);
+
+  const isSelectedForCompare = selectedCard?.asset.contentId === asset.contentId;
 
   const secondary =
     asset.campaignName || asset.name || asset.formName || null;
@@ -255,25 +760,57 @@ function ContentCard({
   ].filter(Boolean) as string[];
   const tags = allTags.slice(0, 4);
 
+  const handleCardClick = () => {
+    if (compareMode && !isSelectedForCompare) {
+      onCompareSelect(asset, stage);
+      return;
+    }
+  };
+
   return (
     <>
       <div
-        className="w-[280px] shrink-0"
+        className="w-[280px] shrink-0 relative"
         style={{ paddingTop: 6, paddingBottom: 6 }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => {
+          setHovered(true);
+          if (!compareMode) {
+            hoverTimerRef.current = setTimeout(() => setShowTooltip(true), 1500);
+          }
+        }}
+        onMouseLeave={() => {
+          setHovered(false);
+          setShowTooltip(false);
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        }}
       >
+        {isSelectedForCompare && (
+          <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 rounded-full bg-emerald-500 px-3 py-0.5 text-[10px] font-bold text-white shadow-lg" data-testid="badge-card-selected">
+            Card 1 selected
+          </div>
+        )}
+        {compareMode && !isSelectedForCompare && (
+          <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 rounded-full bg-blue-500/80 px-3 py-0.5 text-[10px] font-bold text-white shadow-lg" data-testid="badge-select-card-2">
+            Click to compare
+          </div>
+        )}
         <Card
-          className="flex h-full flex-col rounded-2xl border p-4 backdrop-blur"
+          className={`flex h-full flex-col rounded-2xl border p-4 backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
           style={{
             transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease",
             transform: hovered ? "translateY(-4px)" : "translateY(0)",
-            boxShadow: hovered
+            boxShadow: isSelectedForCompare
+              ? "0 0 0 2px rgba(16, 185, 129, 0.6), 0 0 20px rgba(16, 185, 129, 0.2)"
+              : hovered
               ? "0 10px 25px -5px rgba(0,0,0,0.15), 0 4px 10px -5px rgba(0,0,0,0.1)"
               : "0 1px 3px 0 rgba(0,0,0,0.06)",
-            borderColor: hovered ? "hsl(var(--primary) / 0.35)" : undefined,
+            borderColor: isSelectedForCompare
+              ? "rgb(16, 185, 129)"
+              : hovered ? "hsl(var(--primary) / 0.35)" : undefined,
             background: hovered ? "hsl(var(--card))" : "hsl(var(--card) / 0.7)",
+            animation: isSelectedForCompare ? "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" : undefined,
           }}
+          onClick={handleCardClick}
           data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
         >
           <div className="flex items-start justify-between gap-2">
@@ -285,7 +822,10 @@ function ContentCard({
                   color: hovered ? "hsl(var(--primary))" : undefined,
                 }}
                 title={`${asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
-                onClick={() => setShowDetail(true)}
+                onClick={(e) => {
+                  if (compareMode) { e.preventDefault(); return; }
+                  setShowDetail(true);
+                }}
                 data-testid="card-title"
               >
                 {asset.contentId}
@@ -319,7 +859,10 @@ function ContentCard({
               </div>
               <button
                 className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
-                onClick={() => setShowDetail(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!compareMode) setShowDetail(true);
+                }}
                 title="Preview URL"
                 data-testid="button-preview-url"
               >
@@ -431,6 +974,35 @@ function ContentCard({
             )}
           </div>
         </Card>
+        <HoverInsightTooltip
+          asset={asset}
+          visible={showTooltip && !compareMode}
+          onAsk={() => {
+            setShowTooltip(false);
+            onOpenInlineChat(asset.contentId);
+          }}
+          onCompare={() => {
+            setShowTooltip(false);
+            onCompareSelect(asset, stage);
+          }}
+          onPlan={() => {
+            setShowTooltip(false);
+            navigate("/campaign-planner");
+          }}
+        />
+        {inlineChatActive && (
+          <InlineChatBubble
+            asset={asset}
+            stage={stage}
+            onClose={onCloseInlineChat}
+            onEscalate={(msgs) => {
+              onCloseInlineChat();
+              window.dispatchEvent(new CustomEvent("open-full-chat", {
+                detail: { asset, stage, messages: msgs },
+              }));
+            }}
+          />
+        )}
       </div>
 
       {showDetail && (
@@ -443,9 +1015,15 @@ function ContentCard({
 function StageCarousel({
   stage,
   search,
+  activeInlineChatId,
+  onOpenInlineChat,
+  onCloseInlineChat,
 }: {
   stage: "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
   search: string;
+  activeInlineChatId: string | null;
+  onOpenInlineChat: (assetId: string) => void;
+  onCloseInlineChat: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -562,7 +1140,14 @@ function StageCarousel({
         )}
 
         {allCards.map((asset) => (
-          <ContentCard key={asset.id} asset={asset} stage={stage} />
+          <ContentCard
+            key={asset.id}
+            asset={asset}
+            stage={stage}
+            inlineChatActive={activeInlineChatId === asset.contentId}
+            onOpenInlineChat={onOpenInlineChat}
+            onCloseInlineChat={onCloseInlineChat}
+          />
         ))}
 
         {isFetchingNextPage &&
@@ -583,6 +1168,12 @@ export default function ContentLibrary() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [, navigate] = useLocation();
+  const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);
+
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<{ asset: AssetAgg; stage: string } | null>(null);
+  const [comparisonPair, setComparisonPair] = useState<{ a: { asset: AssetAgg; stage: string }; b: { asset: AssetAgg; stage: string } } | null>(null);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -592,39 +1183,108 @@ export default function ContentLibrary() {
     }, 300);
   }, []);
 
+  const handleCompareSelect = useCallback((asset: AssetAgg, stage: string) => {
+    setActiveInlineChatId(null);
+    if (!selectedCard) {
+      setSelectedCard({ asset, stage });
+      setCompareMode(true);
+    } else {
+      if (selectedCard.asset.contentId === asset.contentId) return;
+      setComparisonPair({
+        a: selectedCard,
+        b: { asset, stage },
+      });
+      setCompareMode(false);
+      setSelectedCard(null);
+    }
+  }, [selectedCard]);
+
+  const cancelCompare = useCallback(() => {
+    setCompareMode(false);
+    setSelectedCard(null);
+  }, []);
+
+  const closeComparison = useCallback(() => {
+    setComparisonPair(null);
+  }, []);
+
+  const compareCtx: CompareContextType = {
+    compareMode,
+    selectedCard,
+    onCompareSelect: handleCompareSelect,
+    cancelCompare,
+  };
+
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
-      <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search by Content ID…"
-              className="h-9 rounded-xl pl-9 pr-9"
-              data-testid="input-content-search"
-            />
-            {search && (
-              <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setSearch("");
-                  setDebouncedSearch("");
-                }}
-                data-testid="button-clear-content-search"
-              >
-                <X className="h-4 w-4" />
-              </button>
+    <CompareContext.Provider value={compareCtx}>
+      <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
+        <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search by Content ID…"
+                className="h-9 rounded-xl pl-9 pr-9"
+                data-testid="input-content-search"
+              />
+              {search && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setSearch("");
+                    setDebouncedSearch("");
+                  }}
+                  data-testid="button-clear-content-search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {compareMode && (
+              <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                  <GitCompare className="h-3.5 w-3.5" />
+                  <span data-testid="text-compare-mode">Select a second card to compare</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 rounded-lg text-xs"
+                  onClick={cancelCompare}
+                  data-testid="button-cancel-compare"
+                >
+                  Cancel
+                </Button>
+              </div>
             )}
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      <StageCarousel stage="TOFU" search={debouncedSearch} />
-      <StageCarousel stage="MOFU" search={debouncedSearch} />
-      <StageCarousel stage="BOFU" search={debouncedSearch} />
-      <StageCarousel stage="UNKNOWN" search={debouncedSearch} />
-    </div>
+        <StageCarousel stage="TOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="MOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="BOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="UNKNOWN" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+      </div>
+
+      {comparisonPair && (
+        <ComparisonPanel
+          assetA={comparisonPair.a.asset}
+          stageA={comparisonPair.a.stage}
+          assetB={comparisonPair.b.asset}
+          stageB={comparisonPair.b.stage}
+          onClose={closeComparison}
+          onDeepDive={() => {
+            closeComparison();
+            navigate("/hub");
+          }}
+          onPlanWithWinner={() => {
+            closeComparison();
+            navigate("/campaign-planner");
+          }}
+        />
+      )}
+    </CompareContext.Provider>
   );
 }
