@@ -1,6 +1,7 @@
+import { useState, useCallback, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Sun, Moon } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -13,6 +14,41 @@ const nav: NavItem[] = [
   { label: "Analytics", href: "/analytics", testId: "link-nav-analytics" },
   { label: "My Reports", href: "/reports", testId: "link-nav-reports" },
 ];
+
+function ThemeToggleNav() {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  const toggle = useCallback(() => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("cia_theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("cia_theme", "light");
+    }
+  }, [isDark]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("cia_theme");
+    if (saved === "light") {
+      document.documentElement.classList.remove("dark");
+      setIsDark(false);
+    }
+  }, []);
+
+  return (
+    <button
+      onClick={toggle}
+      className="h-8 w-8 rounded-full border border-border/50 bg-card/70 backdrop-blur flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-colors"
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      data-testid="btn-theme-toggle-nav"
+    >
+      {isDark ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
+    </button>
+  );
+}
 
 export default function TopNav() {
   const [location] = useLocation();
@@ -27,6 +63,7 @@ export default function TopNav() {
           </div>
         </Link>
 
+        <div className="flex items-center gap-2">
         <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm overflow-x-auto">
           {nav.map((item) => {
             const active = location === item.href;
@@ -54,6 +91,8 @@ export default function TopNav() {
             );
           })}
         </nav>
+        <ThemeToggleNav />
+        </div>
       </div>
     </div>
   );

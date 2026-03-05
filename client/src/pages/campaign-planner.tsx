@@ -1205,7 +1205,7 @@ function ContentLibraryView({ products }: { products: string[] }) {
   );
 }
 
-function IntakeForm({ products, onSubmit, onCancel }: { products: string[]; onSubmit: (data: IntakeFormData) => void; onCancel: () => void }) {
+function IntakeForm({ products, onSubmit, onCancel, defaultApproach }: { products: string[]; onSubmit: (data: IntakeFormData) => void; onCancel: () => void; defaultApproach?: string }) {
   const [form, setForm] = useState<IntakeFormData>({
     objective: "",
     product: "",
@@ -1213,7 +1213,7 @@ function IntakeForm({ products, onSubmit, onCancel }: { products: string[]; onSu
     industry: "",
     funnelStage: "",
     contentType: "",
-    contentApproach: "recommend",
+    contentApproach: (defaultApproach === "upload" || defaultApproach === "existing") ? defaultApproach : "recommend",
     budget: "",
     timeline: "",
     additionalContext: "",
@@ -1402,6 +1402,8 @@ function CompletedPlanSummary({ msgs, convTitle, onExportPdf, onEditPlan }: { ms
 }
 
 export default function CampaignPlannerPage() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const approachFromUrl = urlParams.get("approach");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [convMessages, setConvMessages] = useState<Record<number, Message[]>>({});
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -1410,9 +1412,10 @@ export default function CampaignPlannerPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [showList, setShowList] = useState(true);
-  const [showIntakeForm, setShowIntakeForm] = useState(false);
+  const [showIntakeForm, setShowIntakeForm] = useState(!!approachFromUrl);
   const [showSummaryView, setShowSummaryView] = useState(false);
   const [products, setProducts] = useState<string[]>([]);
+  const [defaultApproach] = useState(approachFromUrl || "");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
@@ -1700,7 +1703,7 @@ export default function CampaignPlannerPage() {
             </div>
 
             {showIntakeForm ? (
-              <IntakeForm products={products} onSubmit={createConversationFromIntake} onCancel={() => setShowIntakeForm(false)} />
+              <IntakeForm products={products} onSubmit={createConversationFromIntake} onCancel={() => setShowIntakeForm(false)} defaultApproach={defaultApproach} />
             ) : (
               <>
                 <Button
