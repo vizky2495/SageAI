@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2 } from "lucide-react";
+import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2, GripHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { authFetch } from "@/lib/queryClient";
@@ -204,10 +204,10 @@ function getFileIcon(type: string) {
 }
 
 const CONVERSATION_STARTERS = [
-  { label: "Evaluate a content asset", prompt: "I'd like to evaluate a content asset's performance — show me the top performers.", icon: Upload },
-  { label: "Find best content for a campaign", prompt: "Help me find the best-performing content in our library for a new campaign.", icon: Search },
-  { label: "Compare two content pieces", prompt: "I want to compare two content assets side-by-side. Can you help me analyze their performance?", icon: BarChart3 },
-  { label: "Show content gaps in my library", prompt: "Analyze our content library and show me where we have gaps across funnel stages, products, and content types.", icon: Layers },
+  { label: "Evaluate a content asset", action: "upload" as const, prompt: "I'd like to evaluate a content asset's performance — show me the top performers.", icon: Upload },
+  { label: "Find best content for a campaign", action: "prefill" as const, prompt: "Find the best performing content for ", icon: Search },
+  { label: "Compare two content pieces", action: "send" as const, prompt: "I want to compare two content assets side-by-side. Can you help me analyze their performance?", icon: BarChart3 },
+  { label: "Show content gaps in my library", action: "send" as const, prompt: "Analyze our content library and show me where we have gaps across funnel stages, products, and content types.", icon: Layers },
 ];
 
 export default function PageChat({
@@ -231,9 +231,14 @@ export default function PageChat({
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [windowHeight, setWindowHeight] = useState(65);
+  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDragging = useRef(false);
+  const isResizing = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
   const { user } = useAuth();
 
   const scrollToBottom = useCallback(() => {
@@ -251,6 +256,38 @@ export default function PageChat({
     if (agent === "cia") fetchSuggestions();
   }, []);
 
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (isDragging.current) {
+        const newX = Math.max(0, Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x));
+        const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.current.y));
+        setWindowPos({ x: newX, y: newY });
+      }
+      if (isResizing.current) {
+        const newHeight = (window.innerHeight - e.clientY) / window.innerHeight * 100;
+        setWindowHeight(Math.max(30, Math.min(90, newHeight)));
+        setWindowPos((prev) => {
+          if (prev) {
+            return { ...prev, y: e.clientY };
+          }
+          return null;
+        });
+      }
+    }
+    function handleMouseUp() {
+      isDragging.current = false;
+      isResizing.current = false;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   async function fetchSuggestions() {
     try {
       const res = await authFetch("/api/chat/suggestions");
@@ -263,9 +300,14 @@ export default function PageChat({
     }
   }
 
-  const suggestions = agent === "cia" && dynamicSuggestions.length > 0
-    ? dynamicSuggestions
-    : fallbackSuggestions;
+  const allSuggestions = [
+    ...fallbackSuggestions,
+    ...(agent === "cia" ? dynamicSuggestions : []),
+    "Which content has the highest SQO conversion?",
+    "Show me aging content that needs a refresh",
+    "What are the top performers this quarter?",
+  ];
+  const suggestions = [...new Set(allSuggestions)].slice(0, 6);
 
   async function fetchConversations() {
     try {
@@ -492,21 +534,47 @@ export default function PageChat({
     }
   }
 
-  function handleBarFocus() {
-    if (!isExpanded) {
-      setIsExpanded(true);
-      setTimeout(() => inputRef.current?.focus(), 200);
+  function handleStarterClick(starter: typeof CONVERSATION_STARTERS[0]) {
+    if (starter.action === "upload") {
+      setInput(starter.prompt);
+      if (!isExpanded) setIsExpanded(true);
+      setTimeout(() => fileInputRef.current?.click(), 200);
+    } else if (starter.action === "prefill") {
+      setInput(starter.prompt);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      ensureConversationAndSend(starter.prompt);
     }
-  }
-
-  function handleStarterClick(prompt: string) {
-    ensureConversationAndSend(prompt);
   }
 
   function closeExpanded() {
     setIsExpanded(false);
     setIsFullscreen(false);
     setShowHistory(false);
+    setWindowPos(null);
+  }
+
+  function handleDragStart(e: React.MouseEvent) {
+    if (isFullscreen) return;
+    const windowEl = (e.currentTarget as HTMLElement).closest("[data-chat-window]") as HTMLElement;
+    if (!windowEl) return;
+    const rect = windowEl.getBoundingClientRect();
+    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    isDragging.current = true;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+    if (!windowPos) {
+      setWindowPos({ x: rect.left, y: rect.top });
+    }
+  }
+
+  function handleResizeStart(e: React.MouseEvent) {
+    if (isFullscreen) return;
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "ns-resize";
   }
 
   useEffect(() => {
@@ -547,7 +615,7 @@ export default function PageChat({
               return (
                 <button
                   key={starter.label}
-                  onClick={() => handleStarterClick(starter.prompt)}
+                  onClick={() => handleStarterClick(starter)}
                   className="flex flex-col items-start gap-2 rounded-xl border border-border/30 bg-muted/10 p-3 text-left hover:bg-muted/20 hover:border-[#00D657]/30 transition-all group"
                   data-testid={`starter-${starter.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}
                 >
@@ -756,6 +824,18 @@ export default function PageChat({
     </div>
   );
 
+  const windowStyle = isFullscreen
+    ? {}
+    : windowPos
+      ? { left: windowPos.x, top: windowPos.y, transform: "none", height: `${windowHeight}vh` }
+      : { height: `${windowHeight}vh` };
+
+  const windowClassName = isFullscreen
+    ? "fixed z-50 flex flex-col overflow-hidden rounded-none border border-[#00D657]/20 shadow-2xl inset-0"
+    : windowPos
+      ? "fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl w-[95vw] sm:w-[700px]"
+      : "fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl bottom-6 left-1/2 -translate-x-1/2 w-[95vw] sm:w-[700px]";
+
   return (
     <>
       <AnimatePresence>
@@ -766,7 +846,12 @@ export default function PageChat({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[3px]"
+              className="fixed inset-0 z-40"
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.25)",
+                backdropFilter: "blur(4px)",
+                WebkitBackdropFilter: "blur(4px)",
+              }}
               onClick={closeExpanded}
               data-testid={`chat-overlay-${agent}`}
             />
@@ -776,18 +861,29 @@ export default function PageChat({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 40, scale: 0.96 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl ${
-                isFullscreen
-                  ? "inset-0 rounded-none"
-                  : "bottom-6 left-1/2 -translate-x-1/2 w-[95vw] sm:w-[700px] h-[65vh]"
-              }`}
+              className={windowClassName}
               style={{
-                background: "rgba(20, 20, 20, 0.92)",
+                ...windowStyle,
+                background: "rgba(20, 20, 20, 0.95)",
                 backdropFilter: "blur(30px)",
               }}
+              data-chat-window
               data-testid={`chat-window-${agent}`}
             >
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0">
+              {!isFullscreen && (
+                <div
+                  className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-3 cursor-ns-resize z-10 flex items-center justify-center group"
+                  onMouseDown={handleResizeStart}
+                  data-testid={`resize-handle-${agent}`}
+                >
+                  <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#00D657]/40 transition-colors" />
+                </div>
+              )}
+
+              <div
+                className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0 cursor-grab active:cursor-grabbing select-none"
+                onMouseDown={handleDragStart}
+              >
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center">
                     <span className="text-[8px] font-bold text-black">CIA</span>
@@ -795,8 +891,9 @@ export default function PageChat({
                   <span className="text-sm font-semibold text-white truncate max-w-[200px]">
                     {activeConv?.title && activeConv.title !== "New Chat" ? activeConv.title : agentName}
                   </span>
+                  <GripHorizontal className="h-3.5 w-3.5 text-white/20 ml-1" />
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
                   <button
                     onClick={createConversation}
                     className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
@@ -910,12 +1007,15 @@ export default function PageChat({
             </div>
 
             <input
-
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleBarKeyDown}
-              onFocus={handleBarFocus}
+              onFocus={(e) => {
+                e.stopPropagation();
+                setIsExpanded(true);
+                setTimeout(() => inputRef.current?.focus(), 200);
+              }}
               placeholder={placeholder}
               className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder:text-white/30"
               data-testid={`input-bar-${agent}`}
@@ -926,6 +1026,7 @@ export default function PageChat({
                 onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
                 className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
                 title="Attach file"
+                data-testid={`btn-bar-attach-${agent}`}
               >
                 <Paperclip className="h-4 w-4 text-white/40 hover:text-white/70" />
               </button>
