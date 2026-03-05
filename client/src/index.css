@@ -54,61 +54,56 @@
 }
 
 :root {
-  --button-outline: rgba(255, 255, 255, 0.1);
-  --badge-outline: rgba(255, 255, 255, 0.05);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255, 255, 255, 0.04);
-  --elevate-2: rgba(255, 255, 255, 0.09);
+  --button-outline: rgba(0, 0, 0, 0.08);
+  --badge-outline: rgba(0, 0, 0, 0.04);
+  --opaque-button-border-intensity: -6;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.06);
 
-  /* Art direction: Sage brand — deep black, electric green, white text */
-  --background: 150 10% 4%;
-  --foreground: 0 0% 96%;
+  --background: 150 20% 98%;
+  --foreground: 150 10% 8%;
 
-  --card: 150 8% 7%;
-  --card-foreground: 0 0% 96%;
-  --card-border: 150 6% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 150 10% 8%;
+  --card-border: 150 10% 88%;
 
-  --popover: 150 8% 7%;
-  --popover-foreground: 0 0% 96%;
-  --popover-border: 150 6% 14%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 150 10% 8%;
+  --popover-border: 150 10% 88%;
 
-  --border: 150 6% 14%;
-  --input: 150 6% 18%;
-  --ring: 145 100% 42%;
+  --border: 150 10% 88%;
+  --input: 150 8% 84%;
+  --ring: 145 100% 36%;
 
-  --primary: 145 100% 42%;
-  --primary-foreground: 0 0% 0%;
+  --primary: 145 100% 36%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 150 6% 12%;
-  --secondary-foreground: 0 0% 96%;
+  --secondary: 150 10% 93%;
+  --secondary-foreground: 150 10% 12%;
 
-  --muted: 150 6% 12%;
-  --muted-foreground: 150 6% 60%;
+  --muted: 150 10% 93%;
+  --muted-foreground: 150 6% 40%;
 
-  --accent: 145 80% 36%;
-  --accent-foreground: 0 0% 0%;
+  --accent: 145 80% 32%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 72% 52%;
+  --destructive: 0 72% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 150 8% 5%;
-  --sidebar-foreground: 0 0% 96%;
-  --sidebar-border: 150 6% 14%;
-  --sidebar-primary: 145 100% 42%;
-  --sidebar-primary-foreground: 0 0% 0%;
-  --sidebar-accent: 145 80% 36%;
-  --sidebar-accent-foreground: 0 0% 0%;
-  --sidebar-ring: 145 100% 42%;
+  --sidebar: 150 15% 96%;
+  --sidebar-foreground: 150 10% 8%;
+  --sidebar-border: 150 10% 88%;
+  --sidebar-primary: 145 100% 36%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 145 80% 32%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 145 100% 36%;
 
-  /* Stage colors — Sage green spectrum
-     TOFU: bright green (chart-1)
-     MOFU: teal-green (chart-2)
-     BOFU: deep emerald (chart-3) */
-  --chart-1: 145 100% 42%;
-  --chart-2: 165 70% 38%;
-  --chart-3: 140 60% 28%;
-  --chart-4: 50 80% 55%;
-  --chart-5: 0 72% 52%;
+  --chart-1: 145 100% 36%;
+  --chart-2: 165 70% 32%;
+  --chart-3: 140 60% 24%;
+  --chart-4: 50 80% 45%;
+  --chart-5: 0 72% 50%;
 
   --font-sans: "Geist", "DM Sans", ui-sans-serif, system-ui, -apple-system,
     Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
@@ -197,6 +192,12 @@
 
   --primary: 145 100% 42%;
   --primary-foreground: 0 0% 0%;
+
+  --chart-1: 145 100% 42%;
+  --chart-2: 165 70% 38%;
+  --chart-3: 140 60% 28%;
+  --chart-4: 50 80% 55%;
+  --chart-5: 0 72% 55%;
 
   --secondary: 150 6% 12%;
   --secondary-foreground: 0 0% 96%;

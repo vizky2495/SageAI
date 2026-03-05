@@ -14,6 +14,7 @@ import LoginPage from "@/pages/login";
 import AdminPage from "@/pages/admin";
 import { queryClient } from "./lib/queryClient";
 import { AuthProvider, useAuth } from "./lib/auth";
+import { ThemeProvider } from "./lib/theme";
 
 function Router() {
   return (
@@ -52,12 +53,14 @@ function AuthGate() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <AuthGate />
-        </AuthProvider>
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <AuthProvider>
+            <Toaster />
+            <AuthGate />
+          </AuthProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 
 type NavItem = {
   label: string;
@@ -16,6 +17,7 @@ const nav: NavItem[] = [
 
 export default function TopNav() {
   const [location] = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className="sticky top-0 z-20 border-b bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/50">
@@ -27,33 +29,43 @@ export default function TopNav() {
           </div>
         </Link>
 
-        <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm overflow-x-auto">
-          {nav.map((item) => {
-            const active = location === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <motion.span
-                  className={`relative block whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition cursor-pointer ${
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  transition={{ type: "spring", stiffness: 520, damping: 42 }}
-                  data-testid={item.testId}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="navActive"
-                      className="absolute inset-0 -z-10 rounded-xl border bg-background"
-                      aria-hidden
-                    />
-                  )}
-                  {item.label}
-                </motion.span>
-              </Link>
-            );
-          })}
-        </nav>
+        <div className="flex items-center gap-2">
+          <nav className="flex items-center gap-1 rounded-2xl border bg-card/60 p-1 shadow-sm overflow-x-auto">
+            {nav.map((item) => {
+              const active = location === item.href;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <motion.span
+                    className={`relative block whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition cursor-pointer ${
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    transition={{ type: "spring", stiffness: 520, damping: 42 }}
+                    data-testid={item.testId}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="navActive"
+                        className="absolute inset-0 -z-10 rounded-xl border bg-background"
+                        aria-hidden
+                      />
+                    )}
+                    {item.label}
+                  </motion.span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <button
+            onClick={toggleTheme}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border bg-card/60 text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="btn-theme-toggle"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
     </div>
   );

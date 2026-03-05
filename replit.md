@@ -22,6 +22,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: TanStack React Query for server state.
 - **UI Components**: `shadcn/ui` with Radix UI primitives, custom "Sage" color palette, and Tailwind CSS v4 for styling.
 - **Data Visualization**: Recharts for interactive charts.
+- **Theming**: Dark/Light mode toggle with `ThemeProvider` (`client/src/lib/theme.tsx`). Persisted in `localStorage` (`cia-theme`). Flash prevention script in `index.html`. Toggle button in TopNav.
 - **Animations**: Framer Motion for UI transitions.
 - **Fonts**: DM Sans, Geist, Geist Mono.
 - **Pages**:
