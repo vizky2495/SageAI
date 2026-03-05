@@ -1,0 +1,112 @@
+
+Redesign the chat experience across the CIA Platform (Content Library, Content Performance, and Campaign Planner). The current "Ask Content Librarian" button is too small and hidden in the bottom-right corner. The chat should be a first-class feature — prominent, powerful, and contextually aware. Apply the following based on current best practices from leading AI platforms.
+
+PART 1: MAKE CHAT THE PRIMARY INTERACTION METHOD
+Replace the small floating button with a persistent chat panel:
+
+On desktop: Implement a split-screen layout. The left side (60-65%) shows the current page content (library, performance, etc.). The right side (35-40%) is a persistent, always-visible chat panel. Users can collapse/expand the chat panel with a single click, but it should default to OPEN on first visit.
+On mobile: Use a slide-up panel that covers 85% of the screen when opened, triggered by a prominent bottom-bar button.
+The chat panel should feel like a co-pilot sidebar, similar to how Notion AI sits beside your content — not a disconnected popup window.
+
+
+
+PART 2: CONTEXTUAL AWARENESS — THE CHAT KNOWS WHERE YOU ARE
+The chat agent should automatically have context about what the user is currently viewing. This is the key differentiator from a generic chatbot.
+Page context injection:
+
+If the user is browsing the Content Library and has filtered to TOFU assets → the chat should know this. If they type "which of these has the best conversion?" the agent should answer about the currently visible TOFU assets without asking for clarification.
+If the user is viewing a specific content card → the chat should know which asset they're looking at. If they ask "how does this compare to similar content?" the agent should pull comparison data for that specific asset.
+If the user is in the Campaign Planner with a campaign plan open → the chat should have the full plan context and allow follow-up questions like "what if we switch to BOFU?" or "show me alternatives for the US market."
+If the user is on the Performance dashboard with specific filters applied → the chat should respect those filters.
+
+How to implement:
+Pass the current page state (active filters, selected assets, visible data) to the agent as context with every message. The user should never have to re-explain what they're looking at.
+
+PART 3: SMART INPUT BAR — MORE THAN A TEXT BOX
+Replace the basic text input with a rich, contextual input bar at the bottom of the chat panel:
+Input bar components:
+
+Large text input field with placeholder text that changes based on context:
+
+On Library page: "Ask about any content asset, compare performance, or find content..."
+On Performance page: "Ask about KPIs, trends, channel performance..."
+On Campaign Planner: "Plan a campaign, evaluate content, or ask about benchmarks..."
+
+
+File upload button (paperclip icon):
+
+Accepts: PDF, DOCX, PPTX, images, CSV
+When a file is uploaded:
+
+Show a file preview chip above the input bar (filename, size, type icon)
+Auto-detect the content type and show a small tag (e.g., "PDF detected — TOFU content")
+Ask the user: "Would you like to add this to the content library?" with a one-click "Yes, add to library" button
+If they confirm, save it to the library with auto-populated metadata and prompt for any missing fields
+The file content is immediately available as context for the conversation
+
+
+
+Clicking a quick action fills the input with a pre-written prompt and sends it immediately
+
+
+"@" mention for assets: Let users type @ to reference a specific content asset by name or ID directly in their message (with autocomplete dropdown). Example: "Compare @FundAccountingGuide against @CloudERPWhitepaper for US market"
+
+
+PART 4: RICH RESPONSE RENDERING — NOT JUST TEXT BUBBLES
+The chat should render responses as rich, interactive elements — not plain text walls:
+Data tables rendered inline:
+When the agent returns comparison data or performance metrics, render them as actual formatted tables inside the chat — with Sage brand styling (green header, dark alternating rows). Tables should be horizontally scrollable on mobile.
+Content cards inline:
+When the agent references a specific content asset, render it as a mini content card (same style as the library cards) directly in the chat with: name, type tag, funnel stage tag, key metrics, and a "View in Library" link and url as well. 
+Charts inline:
+When showing performance trends or comparisons, render a small inline chart (bar chart for comparisons, line chart for trends) using your charting library. Keep it compact — max 200px height.
+Verdict badges:
+When the agent gives a content verdict, show it as a colored badge:
+
+Ready to use or - "DEPLOY" — Brilliant Green badge
+"REFRESH" — Amber badge with a list of specific changes
+"REPLACE" — Cherry/red badge with recommended alternatives
+
+
+.
+
+
+
+
+
+PART 6: CONVERSATION MEMORY & HISTORY
+Within a session:
+
+The chat remembers everything discussed in the current session
+Users can reference earlier messages: "go back to that comparison table" or "use the same filters as before"
+Uploaded files remain in context for the entire session
+
+Across sessions:
+
+Chat history is saved and accessible from a sidebar within the chat panel
+Each conversation has an auto-generated title (from the earlier conversation naming prompt)
+Users can pin important conversations for quick access
+Show "Continue conversation" option when a user returns to a previous campaign plan
+
+Conversation starters for new chats:
+When the chat panel is empty (new conversation), show 3-4 large clickable cards as conversation starters:
+
+"Evaluate a content asset" (with upload icon)
+"Find the best content for a campaign" (with search icon)
+"Compare two content pieces" (with compare icon)
+"Show me content gaps in my library" (with gap analysis icon)
+
+
+PART 7: VISUAL DESIGN — SAGE BRAND ALIGNMENT
+
+Chat panel background: Very dark gray (#0D0D0D) — slightly lighter than the page background for separation
+User message bubbles: Dark teal (#004D4D) with white text, aligned right
+Agent message bubbles: Near-black (#1A1A1A) with white text, aligned left
+Agent avatar: Small Brilliant Green circle with "CIA" initials or a small Sage-green bot icon
+Input bar: Dark background (#1A1A1A) with a Brilliant Green border on focus
+Send button: Brilliant Green circle with white arrow
+File upload chips: Dark background with green border, file type icon on left
+Quick action pills: Dark background with green text, green border on hover
+Scrollbar: Thin, dark, unobtrusive
+Typing indicator: Three pulsing green dots
+Timestamps: Small, gray (#666666) text below each message group
