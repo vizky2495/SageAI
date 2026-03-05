@@ -1,0 +1,170 @@
+Redesign the CIA Platform's visual design and chat experience using the most innovative 2026 UI/UX patterns. The goal is to make the platform feel premium, intelligent, and alive — like a high-end fintech dashboard meets an AI co-pilot. Apply these across the entire platform: Landing Page, Content Library, Content Performance, and Campaign Planner.
+
+PART 1: VISUAL FOUNDATION — "SAGE LIQUID GLASS"
+Build the entire UI around a signature look I'm calling "Sage Liquid Glass" — glassmorphism adapted to the Sage brand palette.
+Background:
+
+Base: Deep black (#000000) to very dark green (#050F08)
+Animated gradient mesh in the background that moves very slowly (20-30 second loop). Colors: deep black, dark forest green (#0A2E1A), hints of Brilliant Green (#00D657) glow — like aurora borealis but extremely subtle. This should feel like a living, breathing canvas. Use CSS animations or a lightweight canvas shader — keep it performant.
+The gradient should react subtly to mouse position on desktop — the green glow shifts slightly toward where the cursor is. Very subtle, 5-10% movement max. This creates a feeling of the interface being alive and responsive.
+
+Glass cards (for all content cards, panels, and containers):
+
+Background: rgba(255, 255, 255, 0.03) — barely visible white tint
+Backdrop-filter: blur(20px)
+Border: 1px solid rgba(0, 214, 87, 0.1) — very subtle green edge
+Border-radius: 16px
+Box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3)
+On hover: border transitions to rgba(0, 214, 87, 0.3) over 300ms, and a subtle inner glow appears (box-shadow: inset 0 0 20px rgba(0, 214, 87, 0.05))
+This creates the frosted glass look that lets the animated gradient show through, giving every card depth and life
+
+Typography:
+
+Primary font: Inter or the closest available sans-serif (if Sage Text isn't available)
+Headings: White (#FFFFFF), bold, with a very subtle green text-shadow (0 0 40px rgba(0, 214, 87, 0.15)) — gives headings a gentle glow
+Body text: Soft white (#E0E0E0) for readability
+Accent text / labels / tags: Brilliant Green (#00D657)
+Metadata / secondary text: Muted gray (#888888)
+
+
+PART 2: THE CHAT EXPERIENCE — "COMMAND BAR"
+Replace the current chat with a Spotlight/Command Bar inspired design — the most modern AI interaction pattern in 2026.
+Collapsed state — The Command Bar:
+
+Fixed at bottom center of every page (not full-width — approximately 60% of viewport width, centered)
+Height: 56px
+Glass card styling: frosted glass background with green border, 24px border-radius (pill-shaped)
+Floating slightly above the bottom edge (24px margin-bottom) with a soft shadow underneath
+Contents:
+
+Left: Subtle green pulsing dot (AI active indicator) + context label that changes per page ("Content Librarian" / "Performance Analyst" / "Campaign Planner") in small muted text
+Center: Input text with dynamic placeholder that types out and cycles through examples:
+
+"Compare TOFU content for Intacct..." (types out, pauses 3s, erases)
+"Which content has the best conversion?" (types out, pauses 3s, erases)
+"Upload a PDF to evaluate..." (types out, pauses 3s, erases)
+
+
+Right: Paperclip icon (file upload) + Brilliant Green send button (circle) + keyboard shortcut hint "⌘K" in muted text
+
+
+The bar has a very subtle floating animation — moves up/down 2px on a 4-second loop. This makes it feel alive without being distracting.
+On hover: the green border brightens and a soft green glow appears beneath the bar
+
+Expanded state — The Chat Window:
+When the user clicks the command bar, starts typing, or presses ⌘K:
+
+The command bar transforms smoothly (400ms spring animation) into a centered chat window
+Size: 700px wide × 60% viewport height, centered on screen
+Glass card styling: stronger frosted glass effect (backdrop-filter: blur(30px), rgba(10, 15, 12, 0.85))
+The rest of the page dims to 40% brightness with a smooth overlay fade
+The window appears to "bloom" from the command bar — scaling up from the bar's position with a spring animation (scale 0.95 → 1.0 with slight overshoot)
+
+Chat window layout:
+
+Top bar: Glass header with agent avatar (green glowing circle with "CIA" initials), agent name, context badge (e.g., "Viewing: TOFU Assets"), and three buttons: minimize (arrow down), full screen (expand icon), close (X). All icons are white with green on hover.
+Messages area:
+
+User messages: Aligned right. Dark teal glass cards (rgba(0, 77, 77, 0.4) with backdrop blur). White text.
+Agent messages: Aligned left. Darker glass cards (rgba(20, 20, 20, 0.6) with backdrop blur). White text. Small green "CIA" avatar circle to the left of each message.
+Messages appear with a subtle slide-up + fade-in animation (200ms)
+Agent typing indicator: Three dots that pulse in sequence (green), with a soft glass card background
+
+
+Rich content inside messages:
+
+Tables render with glassmorphism: glass header row with green text, alternating row backgrounds with slight transparency variation
+Content cards render as mini glass cards with green accents
+Charts render with green data lines on a transparent background — the animated gradient shows through
+Verdict badges: "DEPLOY" = green glass pill with glow, "REFRESH" = amber glass pill, "REPLACE" = cherry/red glass pill
+Source tags: Small glass pills with color coding — green for Internal Data, jade for Web Research, teal for Industry Benchmark, amber for Assumption
+PDF download button: Full-width glass button with green border and green text, green glow on hover
+Collapsible sections for long content: Glass cards with a green chevron toggle
+
+
+Input area (bottom of chat window):
+
+Same styling as the command bar but now inside the window
+File upload chips appear above the input as glass pills with filename, file type icon, and X to remove
+Drag-and-drop zone: When user drags a file over the chat window, the entire window gets a pulsing green dashed border overlay with text "Drop file to upload"
+
+
+
+Full screen state:
+
+Smooth transition from centered window to full viewport
+Left sidebar (250px, glass panel) shows conversation history. Each conversation is a glass card with title, date, and a green dot for active conversation.
+Main chat area takes remaining width
+"Back to [page name]" button at top left as a glass pill with a back arrow
+
+Empty state (new conversation):
+
+Agent avatar in center, larger (64px), with a soft green glow halo animation
+Agent name below: "Content Librarian" (or contextual name)
+One-line description: "I can help you find, evaluate, and compare content assets"
+4 quick action cards in a 2×2 grid, each as a small glass card with:
+
+An icon (green, 24px): Upload icon, Search icon, Compare icon, Gap icon
+Short label: "Evaluate content" / "Find best content" / "Compare assets" / "Show content gaps"
+Hover: card border glows green, slight scale-up (1.02)
+
+
+Below the cards: 3-4 suggested prompts as clickable glass pills with green text
+Input bar at bottom
+
+
+PART 3: MICRO-INTERACTIONS & ANIMATIONS
+These small details are what make the UI feel premium and innovative:
+Page transitions:
+
+When navigating between Content Library → Performance → Campaign Planner, content fades and slides (300ms ease-out). No hard page reloads.
+
+Card interactions:
+
+Content cards in the library: on hover, the card lifts slightly (translateY -4px), border glows green, and a subtle green light reflection passes across the glass surface (like light reflecting off real glass). Duration: 300ms.
+On click: card has a subtle press animation (scale 0.98 then back to 1.0, 150ms)
+
+Data loading:
+
+When data loads, numbers count up from 0 to their final value (1.5s animation). Example: Pageviews "0" → "1,247" with easing.
+Tables appear row by row with a stagger animation (50ms delay per row, slide up + fade in)
+Charts draw their lines/bars progressively (1s animation)
+
+Chat animations:
+
+User message: slides in from right with a subtle bounce (spring physics)
+Agent message: slides in from left, with each rich element (tables, cards, badges) appearing with a staggered fade-in (100ms delay between elements)
+Verdict badges: when they appear, they have a brief pulse/glow animation to draw attention
+"Thinking" state: instead of just three dots, show a subtle expanding green ring animation around the agent avatar — like a sonar pulse. This looks much more intelligent than standard dots.
+
+Command bar attention cue:
+
+If the user has been on a page for 30+ seconds without interacting with the chat, the command bar does a single subtle pulse (green glow brightens for 1s then fades). This happens once per session, just to remind the user the AI is available. Not intrusive.
+
+Scroll effects:
+
+As the user scrolls the content library, the animated background gradient subtly parallax-scrolls at 20% of the speed — creating depth.
+The command bar stays fixed and always visible
+
+
+PART 4: CONTENT LIBRARY CARD REDESIGN
+Update the content cards to match the glassmorphism design:
+
+Glass card background with the animated gradient showing through
+Funnel stage tag (TOFU/MOFU/BOFU): Glass pill with colored glow — TOFU = green glow, MOFU = amber glow, BOFU = teal glow
+Content type tags (Email, NCA, Intacct, etc.): Small glass pills with muted borders
+Metrics display: Key numbers (Pageviews, Downloads, Avg Time) in large Brilliant Green text. Labels in muted gray above.
+Asset name: Currently shows raw IDs like "CL_ACS_CAEN_SMA_WEB...". Add a tooltip on hover that shows the full ID, but display a human-readable short name if available.
+Performance score bar: A thin horizontal green bar at the bottom of each card showing relative performance (0-100). Higher scores = brighter green, lower scores = the bar is shorter and more muted. This gives instant visual comparison across cards.
+"Quick evaluate" action: On hover, a small green button appears at the bottom-right of the card: "Evaluate →". Clicking it opens the chat with this asset pre-loaded as context.
+
+
+PART 5: PERFORMANCE CONSIDERATIONS
+These visual effects must not slow down the platform:
+
+The animated background gradient should use CSS animations or a lightweight WebGL shader — not JavaScript animation loops
+Backdrop-filter blur can be heavy on some browsers. Set a fallback: if performance is poor (detect via requestAnimationFrame timing), replace glassmorphism with solid dark backgrounds with subtle borders. The experience should degrade gracefully.
+All animations should respect prefers-reduced-motion — if the user has reduced motion enabled in their OS, disable all animations and show static versions
+Lazy-load content cards below the fold
+Chat messages should use virtual scrolling for long conversations (only render visible messages)
+Test on Chrome, Firefox, Safari, and Edge. Glassmorphism blur works differently across browsers.
