@@ -21,13 +21,13 @@ interface CardDef {
 const cards: CardDef[] = [
   {
     title: "Content Library",
-    description: "Browse all content assets by funnel stage, search by content ID, and preview URLs.",
+    description: "Browse all content assets by funnel stage, search by content ID, upload new assets, and preview URLs.",
     href: "/content-library",
     icon: Library,
     accentHsl: "145 80% 42%",
     iconBg: "bg-emerald-500/10 ring-emerald-500/30",
     iconColor: "text-emerald-400",
-    tags: ["TOFU", "MOFU", "BOFU", "Search", "Preview"],
+    tags: ["TOFU", "MOFU", "BOFU", "Search", "Upload"],
     testId: "card-hub-content-library",
   },
   {
@@ -43,13 +43,13 @@ const cards: CardDef[] = [
   },
   {
     title: "Campaign Planner",
-    description: "AI-powered content effectiveness assessment. Compare your content against database benchmarks.",
+    description: "Evaluate your content against top performers. Get a data-backed verdict: deploy, refresh, or replace — with channel and timing recommendations.",
     href: "/campaign-planner",
     icon: Target,
     accentHsl: "270 70% 60%",
     iconBg: "bg-violet-500/10 ring-violet-500/30",
     iconColor: "text-violet-400",
-    tags: ["AI Agent", "Budget", "Score", "Templates", "PDF"],
+    tags: ["AI Agent", "Compare", "Score", "Trends", "PDF Export"],
     testId: "card-hub-campaign-planner",
   },
 ];
@@ -91,7 +91,7 @@ function HubCard({ card, index }: { card: CardDef; index: number }) {
             transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
             transition: hovering ? "transform 0.1s ease-out" : "transform 0.5s ease-out",
             boxShadow: hovering
-              ? `0 20px 60px -15px hsl(${card.accentHsl} / 0.2), 0 0 0 1px hsl(${card.accentHsl} / 0.15)`
+              ? `0 20px 60px -15px hsl(${card.accentHsl} / 0.25), 0 0 0 1px hsl(${card.accentHsl} / 0.35)`
               : "0 0 0 1px hsl(var(--border) / 0.6)",
           }}
         >
@@ -157,8 +157,8 @@ function HubCard({ card, index }: { card: CardDef; index: number }) {
               ))}
             </div>
 
-            <div className="mt-auto flex items-center justify-between pt-3 border-t transition-colors duration-300" style={{ borderColor: hovering ? `hsl(${card.accentHsl} / 0.15)` : "hsl(var(--border) / 0.3)" }}>
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200" style={{ color: hovering ? "hsl(var(--foreground))" : undefined }}>
+            <div className="mt-auto flex items-center justify-between pt-3 border-t transition-colors duration-300" style={{ borderColor: hovering ? `hsl(${card.accentHsl} / 0.2)` : "hsl(var(--border) / 0.3)" }}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors duration-200" style={{ color: hovering ? "#00D657" : undefined }}>
                 <span>Explore</span>
                 <ArrowRight
                   className="h-3.5 w-3.5 transition-transform duration-300"
@@ -233,6 +233,7 @@ export default function HubPage() {
 
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_50%_20%,hsl(145_100%_42%/0.08),transparent_60%),radial-gradient(800px_circle_at_20%_80%,hsl(200_80%_50%/0.06),transparent_55%),radial-gradient(800px_circle_at_80%_70%,hsl(270_60%_50%/0.06),transparent_55%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-[40%] animate-hub-glow" style={{ background: "radial-gradient(ellipse 80% 50% at 50% 100%, hsl(145 100% 42% / 0.06), transparent 70%)" }} />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/60" />
         <div className="absolute inset-0 grain" />
       </div>
