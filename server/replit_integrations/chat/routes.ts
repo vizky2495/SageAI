@@ -454,9 +454,8 @@ export function registerChatRoutes(app: Express): void {
       const convos = await chatStorage.getAllConversations(agent, userId);
 
       for (const conv of convos) {
-        if (conv.title === "New Chat") {
-          await chatStorage.updateConversationTitle(conv.id, "New Conversation");
-          conv.title = "New Conversation";
+        if (conv.title === "New Chat" || conv.title === "New Conversation") {
+          conv.title = "Untitled Chat";
         }
       }
 
@@ -563,7 +562,8 @@ export function registerChatRoutes(app: Express): void {
       const allHistory = await chatStorage.getMessagesByConversation(conversationId);
 
       if (allHistory.length === 1) {
-        await chatStorage.updateConversationTitle(conversationId, "New Conversation");
+        const fallbackTitle = content.slice(0, 50).split(/\s+/).slice(0, 6).join(" ") + (content.length > 50 ? "..." : "");
+        await chatStorage.updateConversationTitle(conversationId, fallbackTitle);
       }
 
       const summary = await buildInsightsSummary();
@@ -593,12 +593,13 @@ export function registerChatRoutes(app: Express): void {
               const titleResponse = await anthropic.messages.create({
                 model: "claude-sonnet-4-5",
                 max_tokens: 30,
-                system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else. If the message is just a greeting (hi, hello, hey) or too vague to summarize, return exactly: New Conversation",
+                system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else.",
                 messages: [
                   { role: "user", content },
                 ],
               });
-              const title = (titleResponse.content[0] as any).text?.trim() || "New Conversation";
+              const rawTitle = (titleResponse.content[0] as any).text?.trim();
+              const title = (rawTitle && rawTitle !== "New Conversation") ? rawTitle : content.slice(0, 50).split(/\s+/).slice(0, 6).join(" ");
               await chatStorage.updateConversationTitle(conversationId, title);
               res.write(`data: ${JSON.stringify({ title })}\n\n`);
             } catch (e) {
@@ -709,12 +710,13 @@ export function registerChatRoutes(app: Express): void {
           const titleResponse = await anthropic.messages.create({
             model: "claude-sonnet-4-5",
             max_tokens: 30,
-            system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else. If the message is just a greeting (hi, hello, hey) or too vague to summarize, return exactly: New Conversation",
+            system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else.",
             messages: [
               { role: "user", content },
             ],
           });
-          const title = (titleResponse.content[0] as any).text?.trim() || "New Conversation";
+          const rawTitle = (titleResponse.content[0] as any).text?.trim();
+          const title = (rawTitle && rawTitle !== "New Conversation") ? rawTitle : content.slice(0, 50).split(/\s+/).slice(0, 6).join(" ");
           await chatStorage.updateConversationTitle(conversationId, title);
           res.write(`data: ${JSON.stringify({ title })}\n\n`);
         } catch (e) {

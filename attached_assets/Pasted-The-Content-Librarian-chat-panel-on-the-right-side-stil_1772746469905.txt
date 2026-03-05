@@ -1,0 +1,51 @@
+The Content Librarian chat panel on the right side still has major UI problems. Fix ALL of the following:
+
+FIX 1: MOVE CHAT FROM RIGHT PANEL TO BOTTOM COMMAND BAR
+Remove the right-side panel entirely. It is eating 30% of the screen width and pushing the content library cards into a cramped space. Replace it with a bottom command bar:
+
+Delete the entire right-side chat panel component
+Add a fixed bottom bar, centered horizontally, 60% viewport width, 56px height, pill-shaped (border-radius 28px)
+Position: fixed, bottom 24px, centered with left: 50%, transform: translateX(-50%)
+Background: rgba(20, 20, 20, 0.9) with backdrop-filter: blur(20px)
+Border: 1px solid rgba(0, 214, 87, 0.3)
+Inside the bar (left to right):
+
+Green dot + "Content Librarian" label in small gray text
+Text input taking up remaining space. Placeholder: "Ask about any content asset..."
+Paperclip icon button (file upload)
+Green circular send button
+
+
+When clicked or focused: the bar expands upward into a chat window (centered, 700px wide, 60vh tall) with smooth animation
+The content library behind it should now use the FULL page width — no more squished cards
+
+FIX 2: CONVERSATION NAMES ARE STILL BROKEN
+I can see "New Conversation" appearing twice in the history list. The conversation naming fix from earlier has not been applied. Apply it now:
+
+After the user sends their first message, generate a short title (5-8 words) from the user's query
+Use a lightweight LLM call: "Summarize this query into a 5-8 word conversation title. Return only the title. Query: {user_message}"
+Never use "New Conversation" as a permanent name. If title generation fails, use the first 6 words of the user's message as the title.
+The first conversation "Best-Performing Content for New Campaign" is correct — this is what all conversations should look like.
+
+FIX 3: THE CHAT INPUT IS NOT VISIBLE AT ALL
+In the current right panel, there is no visible text input field or send button. Users cannot see where to type. The conversation history takes up the entire panel with no input area. Fix:
+
+In the bottom command bar design: the input is always visible, always prominent, always has a green border
+In the expanded chat window: the input is pinned to the bottom, never scrolls away, always has the green border and send button visible
+The input must be the most visually prominent interactive element — larger than any button or link on the panel
+
+FIX 4: CONVERSATION HISTORY SHOULD BE SECONDARY, NOT PRIMARY
+The current panel shows conversation history as the main content (New Conversation list). This is wrong — the primary action is asking a question, not browsing old chats.
+In the new bottom command bar + expanded chat window design:
+
+Default view when expanded: empty chat with quick action cards and the input field — ready to chat immediately
+Conversation history: accessible via a small history icon in the top bar of the expanded window, opens as a slide-out sidebar within the chat window. Not the default view.
+The "+ New conversation" button should be in the chat window header, not taking up prime real estate as a full-width green button
+
+FIX 5: CONTENT LIBRARY SHOULD USE FULL WIDTH
+Once the right panel is removed:
+
+Content cards should fill the full page width
+Show 4-5 cards per row instead of the current 3-4 cramped cards
+Cards should have more breathing room — 16px gap between cards
+The "Content Comparison" dropdown, search bar, and funnel stage sections should all stretch to full width

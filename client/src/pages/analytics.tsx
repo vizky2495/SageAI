@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="min-h-screen">
       <TopNav />
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,hsl(var(--chart-1)/0.16),transparent_58%),radial-gradient(900px_circle_at_80%_0%,hsl(var(--chart-2)/0.14),transparent_62%),radial-gradient(900px_circle_at_75%_80%,hsl(var(--chart-3)/0.12),transparent_58%)]" />
@@ -285,9 +285,7 @@ export default function AnalyticsPage() {
         <div className="absolute inset-0 grain" />
       </div>
 
-      <div className="flex flex-1 min-h-0">
-      <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8">
+      <div className="mx-auto w-full max-w-[1400px] px-6 py-8 pb-24">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -750,7 +748,6 @@ export default function AnalyticsPage() {
           </Tabs>
         </motion.div>
       </div>
-      </div>
 
       <PageChat
         agent="cia"
@@ -760,7 +757,7 @@ export default function AnalyticsPage() {
         accentColor="text-[#00D657]"
         accentBg="bg-[#00D657]"
         accentRing="ring-[#00D657]/50"
-        variant="sidebar"
+        variant="commandbar"
         fallbackSuggestions={[
           "What is the content breakdown across funnel stages?",
           "Show me the channel distribution",
@@ -768,7 +765,6 @@ export default function AnalyticsPage() {
           "What are the top content assets by time on page?",
         ]}
       />
-      </div>
     </div>
   );
 }

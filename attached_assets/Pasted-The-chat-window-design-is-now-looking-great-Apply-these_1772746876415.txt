@@ -1,0 +1,34 @@
+The chat window design is now looking great. Apply these final polish items:
+1. The background dimming is too heavy:
+The content library behind the chat window is almost completely unreadable. Reduce the overlay opacity so users can still see their content while chatting:
+
+Change the backdrop overlay from the current heavy dim to approximately 50-60% opacity black
+The content behind should be blurred slightly (backdrop-filter: blur(4px)) but still recognizable — the user should be able to see which page they're on
+
+2. Add the collapsed command bar state:
+Right now it seems the chat window opens as the default expanded view. Add the collapsed state:
+
+When the chat window is closed (X button), it should collapse down to a slim command bar at the bottom center of the screen — not disappear entirely
+The command bar stays visible at all times so the user always knows the AI is available
+Clicking the command bar or pressing ⌘K / Ctrl+K opens the expanded chat window again
+
+3. Add more suggested prompts:
+Currently showing 2 suggested prompts ("What content do we have for TOFU stage?" and "Show me all Intacct content assets"). Add 2-3 more that are contextually useful:
+
+"Which content has the highest SQO conversion?"
+"Show me aging content that needs a refresh"
+"What are the top performers this quarter?"
+
+4. Quick action cards should trigger immediately:
+When a user clicks "Evaluate a content asset" — it should either open a file upload dialog directly or pre-fill the input with a prompt like "I'd like to evaluate a content asset" and show the file upload area. Don't just type text into the input and wait — take action.
+Same for the other cards:
+
+"Find best content for a campaign" → Pre-fill: "Find the best performing content for" and place cursor at end so user can type their criteria
+"Compare two content pieces" → Show two search/select fields so user can pick two assets
+"Show content gaps in my library" → Execute immediately and show results — no additional input needed
+
+5. Make the chat window draggable and resizable (optional but nice):
+
+Let users drag the chat window by the header bar to reposition it on screen
+Let users drag the top edge to resize the height
+This way users can position the chat where it doesn't block the content they're looking at

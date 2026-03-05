@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageSquare, X, Send, Plus, Trash2, ChevronLeft, ShieldCheck, Copy, Check, Paperclip, ZoomIn, PanelRightClose, PanelRightOpen, Upload, Search, BarChart3, Layers, FileText, File } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { authFetch } from "@/lib/queryClient";
@@ -38,7 +37,7 @@ interface PageChatProps {
   accentBg: string;
   accentRing: string;
   fallbackSuggestions: string[];
-  variant?: "sidebar" | "floating";
+  variant?: "commandbar" | "floating";
   pageContext?: string;
 }
 
@@ -205,7 +204,7 @@ function getFileIcon(type: string) {
 }
 
 const CONVERSATION_STARTERS = [
-  { label: "Evaluate a content asset", prompt: "I'd like to evaluate a content asset's performance. What data do you need from me?", icon: Upload },
+  { label: "Evaluate a content asset", prompt: "I'd like to evaluate a content asset's performance — show me the top performers.", icon: Upload },
   { label: "Find best content for a campaign", prompt: "Help me find the best-performing content in our library for a new campaign.", icon: Search },
   { label: "Compare two content pieces", prompt: "I want to compare two content assets side-by-side. Can you help me analyze their performance?", icon: BarChart3 },
   { label: "Show content gaps in my library", prompt: "Analyze our content library and show me where we have gaps across funnel stages, products, and content types.", icon: Layers },
@@ -216,42 +215,26 @@ export default function PageChat({
   agentName,
   description,
   placeholder,
-  accentColor,
-  accentBg,
-  accentRing,
   fallbackSuggestions,
-  variant = "sidebar",
   pageContext,
 }: PageChatProps) {
-  const [isOpen, setIsOpen] = useState(() => {
-    if (variant === "floating") return false;
-    const stored = localStorage.getItem("cia-chat-open");
-    return stored !== "false";
-  });
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
-  const [showList, setShowList] = useState(true);
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
-
-  const isSidebar = variant === "sidebar";
-
-  useEffect(() => {
-    if (isSidebar) {
-      localStorage.setItem("cia-chat-open", String(isOpen));
-    }
-  }, [isOpen, isSidebar]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -300,7 +283,8 @@ export default function PageChat({
       const data = await res.json();
       setActiveConv(data);
       setMsgs(data.messages || []);
-      setShowList(false);
+      setShowHistory(false);
+      if (!isExpanded) setIsExpanded(true);
     } catch (e) {
       console.error("Failed to open conversation", e);
     }
@@ -316,7 +300,7 @@ export default function PageChat({
       const conv = await res.json();
       setActiveConv(conv);
       setMsgs([]);
-      setShowList(false);
+      setShowHistory(false);
       fetchConversations();
     } catch (e) {
       console.error("Failed to create conversation", e);
@@ -330,7 +314,6 @@ export default function PageChat({
       if (activeConv?.id === id) {
         setActiveConv(null);
         setMsgs([]);
-        setShowList(true);
       }
       fetchConversations();
     } catch (err) {
@@ -365,7 +348,7 @@ export default function PageChat({
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function sendMessageDirect(text: string) {
+  async function ensureConversationAndSend(text: string) {
     if (!activeConv) {
       try {
         const res = await authFetch("/api/conversations", {
@@ -375,7 +358,7 @@ export default function PageChat({
         });
         const conv = await res.json();
         setActiveConv(conv);
-        setShowList(false);
+        setMsgs([]);
         fetchConversations();
         setTimeout(() => sendWithConv(conv.id, text), 100);
       } catch (e) {
@@ -484,11 +467,10 @@ export default function PageChat({
 
   async function sendMessage() {
     if ((!input.trim() && pendingImages.length === 0 && pendingFiles.length === 0) || isStreaming) return;
-    if (!activeConv) {
-      await sendMessageDirect(input.trim());
-      return;
+    if (!isExpanded) {
+      setIsExpanded(true);
     }
-    sendWithConv(activeConv.id, input.trim());
+    await ensureConversationAndSend(input.trim());
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -498,465 +480,484 @@ export default function PageChat({
     }
   }
 
-  function handleStarterClick(prompt: string) {
-    sendMessageDirect(prompt);
+  function handleBarKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (input.trim()) {
+        setIsExpanded(true);
+        setTimeout(() => ensureConversationAndSend(input.trim()), 150);
+      } else {
+        setIsExpanded(true);
+      }
+    }
   }
 
-  const chatContent = (
-    <div className={`flex flex-col h-full ${isSidebar ? "bg-[--chat-bg]" : "bg-card"}`} style={{ "--chat-bg": "var(--chat-panel-bg, hsl(var(--card)))" } as React.CSSProperties} data-testid={`chat-panel-${agent}`}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 shrink-0">
-        <div className="flex items-center gap-2">
-          {!showList && activeConv && (
-            <button
-              onClick={() => setShowList(true)}
-              className="p-1 rounded-lg hover:bg-muted/50 transition-colors"
-              data-testid={`btn-back-${agent}`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          )}
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center">
-              <span className="text-[8px] font-bold text-black">CIA</span>
+  function handleBarFocus() {
+    if (!isExpanded) {
+      setIsExpanded(true);
+      setTimeout(() => inputRef.current?.focus(), 200);
+    }
+  }
+
+  function handleStarterClick(prompt: string) {
+    ensureConversationAndSend(prompt);
+  }
+
+  function closeExpanded() {
+    setIsExpanded(false);
+    setIsFullscreen(false);
+    setShowHistory(false);
+  }
+
+  useEffect(() => {
+    function handleGlobalKeydown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        if (isExpanded) {
+          closeExpanded();
+        } else {
+          setIsExpanded(true);
+          setTimeout(() => inputRef.current?.focus(), 200);
+        }
+      }
+      if (e.key === "Escape" && isExpanded) {
+        closeExpanded();
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeydown);
+    return () => window.removeEventListener("keydown", handleGlobalKeydown);
+  }, [isExpanded]);
+
+  const chatMessages = (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+      {msgs.length === 0 && !streamingContent && (
+        <div className="py-4">
+          <div className="text-center mb-6">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#00D657] mb-3">
+              <span className="text-sm font-bold text-black">CIA</span>
             </div>
-            <span className="text-sm font-semibold truncate">
-              {showList ? agentName : (activeConv?.title || "New Chat")}
-            </span>
+            <div className="text-base font-semibold mb-1">{agentName}</div>
+            <div className="text-xs text-muted-foreground max-w-[280px] mx-auto">
+              {description}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={createConversation}
-            className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-            title="New chat"
-            data-testid={`btn-new-chat-${agent}`}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          {isSidebar ? (
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-              title="Collapse panel"
-              data-testid={`btn-collapse-chat-${agent}`}
-            >
-              <PanelRightClose className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
-              data-testid={`btn-close-chat-${agent}`}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {showList ? (
-        <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
-          <div className="mb-3">
-            <Button
-              onClick={createConversation}
-              className="w-full rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-medium"
-              data-testid={`btn-new-conv-${agent}`}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New conversation
-            </Button>
-          </div>
-          {conversations.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              No conversations yet. Start a new chat to talk to {agentName}.
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => openConversation(conv)}
-                  className="flex items-center justify-between rounded-xl border border-border/30 bg-muted/10 px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition group"
-                  data-testid={`conv-item-${agent}-${conv.id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{conv.title}</div>
-                    <div className="text-xs text-muted-foreground/60">
-                      {new Date(conv.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => deleteConversation(conv.id, e)}
-                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all"
-                    data-testid={`btn-delete-conv-${agent}-${conv.id}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
-            {msgs.length === 0 && !streamingContent && (
-              <div className="py-4">
-                <div className="text-center mb-6">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#00D657] mb-3">
-                    <span className="text-xs font-bold text-black">CIA</span>
-                  </div>
-                  <div className="text-base font-semibold mb-1">{agentName}</div>
-                  <div className="text-xs text-muted-foreground max-w-[240px] mx-auto">
-                    {description}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  {CONVERSATION_STARTERS.map((starter) => {
-                    const Icon = starter.icon;
-                    return (
-                      <button
-                        key={starter.label}
-                        onClick={() => handleStarterClick(starter.prompt)}
-                        className="flex flex-col items-start gap-2 rounded-xl border border-border/30 bg-muted/10 p-3 text-left hover:bg-muted/20 hover:border-[#00D657]/30 transition-all group"
-                        data-testid={`starter-${starter.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}
-                      >
-                        <div className="h-7 w-7 rounded-lg bg-[#00D657]/10 flex items-center justify-center group-hover:bg-[#00D657]/20 transition-colors">
-                          <Icon className="h-3.5 w-3.5 text-[#00D657]" />
-                        </div>
-                        <span className="text-xs font-medium leading-tight">{starter.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="space-y-1.5">
-                  {suggestions.map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => {
-                        setInput(q);
-                        setTimeout(() => inputRef.current?.focus(), 50);
-                      }}
-                      className="w-full text-left text-xs rounded-xl border border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20 hover:border-[#00D657]/30 transition text-muted-foreground hover:text-foreground"
-                      data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {msgs.map((msg, idx) => {
-              const prevMsg = idx > 0 ? msgs[idx - 1] : null;
-              const showTimestamp = !prevMsg || prevMsg.role !== msg.role;
-
+          <div className="grid grid-cols-2 gap-2 mb-4 max-w-[500px] mx-auto">
+            {CONVERSATION_STARTERS.map((starter) => {
+              const Icon = starter.icon;
               return (
-                <div key={msg.id}>
-                  {msg.role === "assistant" && showTimestamp && (
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
-                        <span className="text-[7px] font-bold text-black">CIA</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/50">{agentName}</span>
-                    </div>
-                  )}
-                  <div
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                    data-testid={`msg-${agent}-${msg.role}-${msg.id}`}
-                  >
-                    <div className={`max-w-[88%] ${msg.role === "assistant" ? "ml-6" : ""}`}>
-                      <div
-                        className={`rounded-2xl px-3.5 py-2.5 text-sm ${
-                          msg.role === "user"
-                            ? "bg-[#004D4D] text-white"
-                            : "bg-[#1A1A1A] dark:bg-[#1A1A1A] bg-muted/50 border border-border/20"
-                        }`}
-                      >
-                        {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
-                        {msg.images && msg.images.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {msg.images.map((img, imgIdx) => (
-                              <button
-                                key={imgIdx}
-                                onClick={() => setLightboxImage(img)}
-                                className="relative group/img rounded-lg overflow-hidden border border-white/20"
-                                data-testid={`msg-image-${msg.id}-${imgIdx}`}
-                              >
-                                <img src={img} alt="Attachment" className="h-16 w-16 object-cover" />
-                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
-                                  <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {msg.role === "assistant" && (
-                        <div className="flex items-center gap-2 mt-1 ml-1">
-                          {msg.grounded && (
-                            <div className="flex items-center gap-1" data-testid={`badge-grounded-${agent}-${msg.id}`}>
-                              <ShieldCheck className="h-3 w-3 text-[#00D657]" />
-                              <span className="text-[10px] text-[#00D657] opacity-80 font-medium">Grounded</span>
-                            </div>
-                          )}
-                          <CopyButton text={msg.content} msgId={msg.id} />
-                          <span className="text-[9px] text-muted-foreground/40">
-                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                <button
+                  key={starter.label}
+                  onClick={() => handleStarterClick(starter.prompt)}
+                  className="flex flex-col items-start gap-2 rounded-xl border border-border/30 bg-muted/10 p-3 text-left hover:bg-muted/20 hover:border-[#00D657]/30 transition-all group"
+                  data-testid={`starter-${starter.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  <div className="h-7 w-7 rounded-lg bg-[#00D657]/10 flex items-center justify-center group-hover:bg-[#00D657]/20 transition-colors">
+                    <Icon className="h-3.5 w-3.5 text-[#00D657]" />
                   </div>
-                  {msg.role === "user" && (
-                    <div className="flex justify-end mt-0.5 mr-1">
-                      <span className="text-[9px] text-muted-foreground/40">
-                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                  <span className="text-xs font-medium leading-tight">{starter.label}</span>
+                </button>
               );
             })}
+          </div>
+          <div className="space-y-1.5 max-w-[500px] mx-auto">
+            {suggestions.map((q) => (
+              <button
+                key={q}
+                onClick={() => {
+                  setInput(q);
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                }}
+                className="w-full text-left text-xs rounded-xl border border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20 hover:border-[#00D657]/30 transition text-muted-foreground hover:text-foreground"
+                data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-            {streamingContent && (
-              <div className="flex justify-start" data-testid={`msg-streaming-${agent}`}>
-                <div className="flex items-start gap-1.5">
-                  <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0 mt-1">
-                    <span className="text-[7px] font-bold text-black">CIA</span>
-                  </div>
-                  <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
-                    {renderMarkdown(streamingContent)}
-                    <span className="inline-block w-1.5 h-4 bg-[#00D657] opacity-60 animate-pulse ml-0.5 rounded-sm" />
-                  </div>
+      {msgs.map((msg, idx) => {
+        const prevMsg = idx > 0 ? msgs[idx - 1] : null;
+        const showAvatar = msg.role === "assistant" && (!prevMsg || prevMsg.role !== "assistant");
+
+        return (
+          <div key={msg.id}>
+            {showAvatar && (
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
+                  <span className="text-[7px] font-bold text-black">CIA</span>
                 </div>
+                <span className="text-[10px] text-muted-foreground/50">{agentName}</span>
               </div>
             )}
-
-            {isStreaming && !streamingContent && (
-              <div className="flex justify-start" data-testid={`msg-thinking-${agent}`}>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
-                    <span className="text-[7px] font-bold text-black">CIA</span>
-                  </div>
-                  <div className="rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              data-testid={`msg-${agent}-${msg.role}-${msg.id}`}
+            >
+              <div className={`max-w-[85%] ${msg.role === "assistant" ? "ml-6" : ""}`}>
+                <div
+                  className={`rounded-2xl px-3.5 py-2.5 text-sm ${
+                    msg.role === "user"
+                      ? "bg-[#004D4D] text-white"
+                      : "dark:bg-[#1A1A1A] bg-muted/50 border border-border/20"
+                  }`}
+                >
+                  {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {msg.images.map((img, imgIdx) => (
+                        <button
+                          key={imgIdx}
+                          onClick={() => setLightboxImage(img)}
+                          className="relative group/img rounded-lg overflow-hidden border border-white/20"
+                          data-testid={`msg-image-${msg.id}-${imgIdx}`}
+                        >
+                          <img src={img} alt="Attachment" className="h-16 w-16 object-cover" />
+                          <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
+                            <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
+                {msg.role === "assistant" && (
+                  <div className="flex items-center gap-2 mt-1 ml-1">
+                    {msg.grounded && (
+                      <div className="flex items-center gap-1" data-testid={`badge-grounded-${agent}-${msg.id}`}>
+                        <ShieldCheck className="h-3 w-3 text-[#00D657]" />
+                        <span className="text-[10px] text-[#00D657] opacity-80 font-medium">Grounded</span>
+                      </div>
+                    )}
+                    <CopyButton text={msg.content} msgId={msg.id} />
+                    <span className="text-[9px] text-muted-foreground/40">
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            {msg.role === "user" && (
+              <div className="flex justify-end mt-0.5 mr-1">
+                <span className="text-[9px] text-muted-foreground/40">
+                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             )}
           </div>
+        );
+      })}
 
-          <div className="p-3 border-t border-border/30 shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.csv"
-              multiple
-              className="hidden"
-              onChange={handleFileSelect}
-              data-testid={`input-file-${agent}`}
-            />
-            {pendingFiles.length > 0 && (
-              <div className="flex gap-1.5 mb-2 flex-wrap" data-testid={`preview-files-${agent}`}>
-                {pendingFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5 rounded-lg border border-[#00D657]/30 bg-muted/20 px-2 py-1 text-xs group/file">
-                    {getFileIcon(file.type)}
-                    <span className="max-w-[100px] truncate">{file.name}</span>
-                    <span className="text-muted-foreground/50">{formatFileSize(file.size)}</span>
-                    <button onClick={() => removePendingFile(idx)} className="ml-0.5 opacity-0 group-hover/file:opacity-100 transition-opacity">
-                      <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {pendingImages.length > 0 && (
-              <div className="flex gap-1.5 mb-2 flex-wrap" data-testid={`preview-images-${agent}`}>
-                {pendingImages.map((img, idx) => (
-                  <div key={idx} className="relative group/preview">
-                    <img src={img} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border/40" />
-                    <button
-                      onClick={() => removePendingImage(idx)}
-                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/preview:opacity-100 transition-opacity"
-                      data-testid={`btn-remove-image-${agent}-${idx}`}
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming}
-                className="p-2.5 rounded-xl border border-border/30 bg-muted/20 hover:bg-muted/40 hover:border-[#00D657]/30 transition-colors shrink-0 disabled:opacity-50"
-                title="Attach file"
-                data-testid={`btn-attach-${agent}`}
-              >
-                <Paperclip className="h-4 w-4 text-muted-foreground" />
-              </button>
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                className="flex-1 resize-none rounded-xl border border-border/30 dark:bg-[#1A1A1A] bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[40px] max-h-[100px] transition-colors"
-                rows={1}
-                disabled={isStreaming}
-                data-testid={`input-chat-${agent}`}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={(!input.trim() && pendingImages.length === 0 && pendingFiles.length === 0) || isStreaming}
-                className="h-10 w-10 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black flex items-center justify-center shrink-0 disabled:opacity-40 disabled:hover:bg-[#00D657] transition-colors"
-                data-testid={`btn-send-${agent}`}
-              >
-                <Send className="h-4 w-4" />
-              </button>
+      {streamingContent && (
+        <div className="flex justify-start" data-testid={`msg-streaming-${agent}`}>
+          <div className="flex items-start gap-1.5">
+            <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0 mt-1">
+              <span className="text-[7px] font-bold text-black">CIA</span>
+            </div>
+            <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
+              {renderMarkdown(streamingContent)}
+              <span className="inline-block w-1.5 h-4 bg-[#00D657] opacity-60 animate-pulse ml-0.5 rounded-sm" />
             </div>
           </div>
-        </>
+        </div>
+      )}
+
+      {isStreaming && !streamingContent && (
+        <div className="flex justify-start" data-testid={`msg-thinking-${agent}`}>
+          <div className="flex items-center gap-1.5">
+            <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
+              <span className="text-[7px] font-bold text-black">CIA</span>
+            </div>
+            <div className="rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
+              <div className="flex items-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 
-  if (isSidebar) {
-    return (
-      <>
-        <AnimatePresence mode="wait">
-          {isOpen ? (
-            <motion.div
-              key="open"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 380, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              className="hidden md:flex border-l border-border/30 h-full shrink-0 overflow-hidden"
-              data-testid={`chat-sidebar-${agent}`}
-            >
-              <div className="w-[380px] h-full">
-                {chatContent}
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="closed"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 44, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              className="hidden md:flex border-l border-border/30 h-full shrink-0"
-              data-testid={`chat-sidebar-collapsed-${agent}`}
-            >
-              <button
-                onClick={() => setIsOpen(true)}
-                className="flex flex-col items-center justify-center w-[44px] h-full hover:bg-muted/20 transition-colors gap-3"
-                title="Open chat"
-                data-testid={`btn-expand-chat-${agent}`}
-              >
-                <PanelRightOpen className="h-4 w-4 text-muted-foreground" />
-                <span className="text-[10px] font-medium text-muted-foreground [writing-mode:vertical-rl] rotate-180">
-                  {agentName}
-                </span>
+  const chatInputArea = (
+    <div className="p-3 border-t border-border/30 shrink-0">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.csv"
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+        data-testid={`input-file-${agent}`}
+      />
+      {pendingFiles.length > 0 && (
+        <div className="flex gap-1.5 mb-2 flex-wrap" data-testid={`preview-files-${agent}`}>
+          {pendingFiles.map((file, idx) => (
+            <div key={idx} className="flex items-center gap-1.5 rounded-lg border border-[#00D657]/30 bg-muted/20 px-2 py-1 text-xs group/file">
+              {getFileIcon(file.type)}
+              <span className="max-w-[100px] truncate">{file.name}</span>
+              <span className="text-muted-foreground/50">{formatFileSize(file.size)}</span>
+              <button onClick={() => removePendingFile(idx)} className="ml-0.5 opacity-0 group-hover/file:opacity-100 transition-opacity">
+                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
               </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="md:hidden">
-          <AnimatePresence>
-            {isMobileOpen && (
-              <>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
-                  onClick={() => setIsMobileOpen(false)}
-                />
-                <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: "0%" }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                  className="fixed bottom-0 left-0 right-0 z-50 h-[85vh] rounded-t-2xl border-t border-border/30 bg-card shadow-2xl overflow-hidden"
-                  data-testid={`chat-mobile-panel-${agent}`}
-                >
-                  {chatContent}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-
-          {!isMobileOpen && (
-            <button
-              onClick={() => setIsMobileOpen(true)}
-              className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full bg-[#00D657] text-black px-4 py-2.5 shadow-lg font-medium text-sm"
-              data-testid={`btn-mobile-chat-${agent}`}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Ask {agentName}
-            </button>
-          )}
+            </div>
+          ))}
         </div>
-      </>
-    );
-  }
+      )}
+      {pendingImages.length > 0 && (
+        <div className="flex gap-1.5 mb-2 flex-wrap" data-testid={`preview-images-${agent}`}>
+          {pendingImages.map((img, idx) => (
+            <div key={idx} className="relative group/preview">
+              <img src={img} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border/40" />
+              <button
+                onClick={() => removePendingImage(idx)}
+                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/preview:opacity-100 transition-opacity"
+                data-testid={`btn-remove-image-${agent}-${idx}`}
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isStreaming}
+          className="p-2.5 rounded-xl border border-border/30 bg-muted/20 hover:bg-muted/40 hover:border-[#00D657]/30 transition-colors shrink-0 disabled:opacity-50"
+          title="Attach file"
+          data-testid={`btn-attach-${agent}`}
+        >
+          <Paperclip className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="flex-1 resize-none rounded-xl border border-border/30 dark:bg-[#1A1A1A] bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[40px] max-h-[120px] transition-colors"
+          rows={1}
+          disabled={isStreaming}
+          data-testid={`input-chat-${agent}`}
+        />
+        <button
+          onClick={sendMessage}
+          disabled={(!input.trim() && pendingImages.length === 0 && pendingFiles.length === 0) || isStreaming}
+          className="h-10 w-10 rounded-full bg-[#00D657] hover:bg-[#00C04E] text-black flex items-center justify-center shrink-0 disabled:opacity-40 disabled:hover:bg-[#00D657] transition-colors"
+          data-testid={`btn-send-${agent}`}
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <>
       <AnimatePresence>
-        {isOpen && (
+        {isExpanded && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] md:hidden"
-              onClick={() => setIsOpen(false)}
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[3px]"
+              onClick={closeExpanded}
               data-testid={`chat-overlay-${agent}`}
             />
 
             <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              className="fixed top-0 right-0 z-50 h-full w-full sm:w-[420px] border-l border-border/40 bg-card shadow-2xl flex flex-col"
+              initial={{ opacity: 0, y: 40, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 40, scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl ${
+                isFullscreen
+                  ? "inset-0 rounded-none"
+                  : "bottom-6 left-1/2 -translate-x-1/2 w-[95vw] sm:w-[700px] h-[65vh]"
+              }`}
+              style={{
+                background: "rgba(20, 20, 20, 0.92)",
+                backdropFilter: "blur(30px)",
+              }}
+              data-testid={`chat-window-${agent}`}
             >
-              {chatContent}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center">
+                    <span className="text-[8px] font-bold text-black">CIA</span>
+                  </div>
+                  <span className="text-sm font-semibold text-white truncate max-w-[200px]">
+                    {activeConv?.title && activeConv.title !== "New Chat" ? activeConv.title : agentName}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={createConversation}
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                    title="New conversation"
+                    data-testid={`btn-new-chat-${agent}`}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                    title="Conversation history"
+                    data-testid={`btn-history-${agent}`}
+                  >
+                    <History className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                    title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                    data-testid={`btn-fullscreen-${agent}`}
+                  >
+                    {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                  <button
+                    onClick={closeExpanded}
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                    data-testid={`btn-close-chat-${agent}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-1 min-h-0">
+                <AnimatePresence>
+                  {showHistory && (
+                    <motion.div
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 240, opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="border-r border-border/20 overflow-hidden shrink-0"
+                    >
+                      <div className="w-[240px] h-full overflow-y-auto p-2 scrollbar-thin">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold px-2 py-1 mb-1">History</div>
+                        {conversations.length === 0 ? (
+                          <div className="text-xs text-muted-foreground/40 text-center py-4">No conversations yet</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {conversations.map((conv) => (
+                              <div
+                                key={conv.id}
+                                onClick={() => openConversation(conv)}
+                                className={`flex items-center justify-between rounded-lg px-2 py-1.5 cursor-pointer transition group text-xs ${
+                                  activeConv?.id === conv.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
+                                }`}
+                                data-testid={`conv-item-${agent}-${conv.id}`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium">{conv.title}</div>
+                                  <div className="text-[10px] text-muted-foreground/40">
+                                    {new Date(conv.createdAt).toLocaleDateString()}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={(e) => deleteConversation(conv.id, e)}
+                                  className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all shrink-0"
+                                  data-testid={`btn-delete-conv-${agent}-${conv.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex-1 flex flex-col min-w-0">
+                  {chatMessages}
+                  {chatInputArea}
+                </div>
+              </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {!isOpen && (
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            onClick={() => setIsOpen(true)}
-            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-border/50 bg-card/90 backdrop-blur shadow-lg px-4 py-2.5 hover:shadow-xl hover:border-border/80 transition-all group"
-            data-testid={`btn-toggle-chat-${agent}`}
+      {!isExpanded && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[90vw] sm:w-[60vw] max-w-[700px]"
+          data-testid={`command-bar-${agent}`}
+        >
+          <div
+            className="flex items-center gap-3 h-14 rounded-full px-4 border border-[#00D657]/30 shadow-lg hover:border-[#00D657]/50 hover:shadow-[0_0_20px_rgba(0,214,87,0.1)] transition-all cursor-text"
+            style={{
+              background: "rgba(20, 20, 20, 0.9)",
+              backdropFilter: "blur(20px)",
+            }}
+            onClick={() => {
+              setIsExpanded(true);
+              setTimeout(() => inputRef.current?.focus(), 200);
+            }}
           >
-            <div className={`h-7 w-7 rounded-full flex items-center justify-center ring-1 ${accentRing}`} style={{ background: "hsl(var(--muted)/0.5)" }}>
-              <MessageSquare className={`h-3.5 w-3.5 ${accentColor}`} />
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="h-2.5 w-2.5 rounded-full bg-[#00D657] animate-pulse" />
+              <span className="text-xs text-white/40 hidden sm:inline">{agentName}</span>
             </div>
-            <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-              Ask {agentName}
-            </span>
-          </motion.button>
-        )}
-      </AnimatePresence>
+
+            <input
+
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleBarKeyDown}
+              onFocus={handleBarFocus}
+              placeholder={placeholder}
+              className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder:text-white/30"
+              data-testid={`input-bar-${agent}`}
+            />
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                title="Attach file"
+              >
+                <Paperclip className="h-4 w-4 text-white/40 hover:text-white/70" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (input.trim()) {
+                    setIsExpanded(true);
+                    setTimeout(() => ensureConversationAndSend(input.trim()), 150);
+                  }
+                }}
+                disabled={!input.trim()}
+                className="h-8 w-8 rounded-full bg-[#00D657] hover:bg-[#00C04E] text-black flex items-center justify-center disabled:opacity-40 transition-colors"
+                data-testid={`btn-bar-send-${agent}`}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-[10px] text-white/20 hidden sm:inline ml-1">⌘K</span>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.csv"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+            data-testid={`input-file-bar-${agent}`}
+          />
+        </div>
+      )}
 
       <AnimatePresence>
         {lightboxImage && (
