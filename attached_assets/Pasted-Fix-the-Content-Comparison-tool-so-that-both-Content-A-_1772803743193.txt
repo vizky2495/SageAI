@@ -1,0 +1,107 @@
+Fix the Content Comparison tool so that both Content A and Content B panels have upload capability directly inline. Users should never see a "content not uploaded" message without an immediate way to fix it right there.
+
+FIX CONTENT A (BASELINE) PANEL:
+Currently it shows: "Content not uploaded for this asset. Performance comparison is available. Upload the content file in the Content Library to also compare topics, messaging, CTA quality, and structure."
+This message tells the user to go somewhere else to upload. That's bad UX. Replace with:
+
+Keep the message but shorten it: "Content not uploaded. Upload here for full quality comparison."
+Directly below the message, show:
+
+A drag-and-drop zone (compact, approximately 60px height): "Drop PDF, DOCX, or PPTX here"
+"Or browse files" clickable link
+Accepted formats note: "PDF, DOCX, PPTX, PNG, JPG"
+
+
+If the asset has a URL from the engagement data, also show the URL as a clickable link: "Asset URL: www.sage.com/..." so the user can visit the page, download the content manually, and then upload the file
+When file is uploaded:
+
+Show processing state: "Analyzing content..."
+On success: the message area transforms to show content summary, topic tags, and CTA status
+The content is stored permanently in content_stored linked to this asset_id
+The comparison automatically re-runs to include the content quality dimension
+
+
+
+FIX CONTENT B (NEW CONTENT) PANEL:
+Content B currently shows the asset card with tags but no upload option. Fix:
+
+If Content B was selected from the library AND has no stored content:
+
+Show the same upload prompt as Content A: "Content not uploaded. Upload here for full quality comparison."
+Drag-and-drop zone + browse files link
+Show URL if available
+Same processing and auto-refresh behavior
+
+
+If Content B was selected from the library AND already has stored content:
+
+Show a green checkmark: "Content available"
+Show content summary preview (1-2 lines)
+"Replace with new version" link if user wants to update
+
+
+If Content B is a new upload (user chose "Upload new content" tab):
+
+Show the full upload form as it currently works
+
+
+
+
+BOTH PANELS SHOULD FOLLOW THE SAME PATTERN:
+For any asset selected in either panel (A or B), show one of three states:
+State 1 — Content available:
+
+Green checkmark icon + "Content uploaded"
+1-2 line content summary
+Topic tags as small pills
+CTA status pill
+Small "Replace" link to upload a new version
+
+State 2 — Content not available, asset has URL:
+
+Gray upload icon
+"Content not uploaded"
+Asset URL displayed as a clickable link: "Visit: [url]" — so user can go download the content from the page
+Compact drag-and-drop upload zone directly in the panel
+"Upload file for full comparison" label
+Note below: "Performance comparison will run with engagement data. Upload the file to also compare content quality, topics, CTA, and messaging."
+
+State 3 — Content not available, no URL:
+
+Gray upload icon
+"Content not uploaded — no URL available"
+Compact drag-and-drop upload zone directly in the panel
+"Upload file for full comparison" label
+
+
+AFTER UPLOAD — AUTO-REFRESH COMPARISON:
+When content is uploaded for either Content A or Content B during a comparison:
+
+Store the content permanently in content_stored (linked to asset_id)
+Automatically re-trigger the comparison with the new content included
+The AI Comparison Verdict section should update to include content quality analysis
+Add new sections to the comparison results:
+
+"Content Quality Comparison" — topics, messaging depth, CTA strength, structure
+These sections appear below the existing Performance Comparison table
+
+
+If only one side has content uploaded, show one-sided quality analysis: "Content A analysis available. Upload content for Content B to enable side-by-side quality comparison."
+
+
+FIX THE AI COMPARISON VERDICT:
+The current verdict says: "Content B has a readiness score of 44/100 with projected leads of 3-5."
+This verdict should clearly state what data it's based on:
+
+If both have engagement data only (no stored content): "This comparison is based on performance metrics only. [Source: Internal Data]. Upload content files for both assets to also compare content quality, topics, and messaging."
+If both have engagement data AND stored content: "This comparison includes performance metrics [Source: Internal Data] and content quality analysis [Source: Content Analysis]." Then provide the full multi-dimensional verdict.
+If one has content and the other doesn't: "Performance comparison is complete for both assets. Content quality analysis is available for [Asset A] only. Upload content for [Asset B] to enable full comparison."
+
+
+ALSO FIX — SHOW ASSET NAMES IN HUMAN-READABLE FORMAT:
+The verdict currently references raw IDs: "Content B (CL_ACG_CA_PUR_Sage50StudentRegForm_COM|BOT|GNRC)"
+Generate human-readable names from the IDs and use those in the verdict:
+
+"CL_ACS_US_SMA_PDF_TOFU_HumanFirm" → "Human Firm PDF (US, TOFU)"
+"CL_ACG_CA_PUR_Sage50StudentRegForm_COM|BOT|GNRC" → "Sage 50 Student Registration Form (CA, BOFU)"
+Show the readable name prominently, raw ID in smaller text for reference

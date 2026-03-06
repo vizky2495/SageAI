@@ -29,6 +29,8 @@ import {
   Library,
   PenLine,
   CircleCheck,
+  CheckCircle,
+  ExternalLink,
 } from "lucide-react";
 
 interface Classification {
@@ -116,6 +118,7 @@ interface PdfResult {
   benchmarks: Benchmark[];
   aggregateBenchmarks: AggregateBenchmarks | null;
   analysis: Analysis | null;
+  contentId?: string;
 }
 
 interface AssetPickerItem {
@@ -127,6 +130,7 @@ interface AssetPickerItem {
   channel: string | null;
   cta: string | null;
   type: string | null;
+  url: string | null;
   pageviews: number;
   downloads: number;
   leads: number;
@@ -146,6 +150,7 @@ interface LibraryAsset {
   dateCreated: string;
   source: "dataset" | "uploaded";
   description: string;
+  url: string | null;
   pageviewsSum: number;
   timeAvg: number;
   downloadsSum: number;
@@ -689,6 +694,7 @@ function LibraryPickerPanel({
                   channel: null,
                   cta: null,
                   type: asset.contentType || null,
+                  url: asset.url || null,
                   pageviews: asset.pageviewsSum || 0,
                   downloads: asset.downloadsSum || 0,
                   leads: asset.uniqueLeads || 0,
@@ -871,14 +877,203 @@ function ManualEntryPanel({
   );
 }
 
+interface ContentInfo {
+  fetchStatus: string;
+  contentSummary: string | null;
+  extractedTopics: string[] | null;
+  extractedCta: { text: string; type: string; strength: string } | null;
+}
+
+function parseHumanReadableName(contentId: string): string {
+  if (!contentId || contentId.length < 5) return contentId;
+  const parts = contentId.split("_");
+  if (parts.length < 4) return contentId;
+  const regionMap: Record<string, string> = { US: "US", UK: "UK", CA: "Canada", CAEN: "English Canada", CAFR: "French Canada", DE: "Germany", FR: "France", AU: "Australia", ZA: "South Africa" };
+  const stageMap: Record<string, string> = { TOFU: "TOFU", MOFU: "MOFU", BOFU: "BOFU" };
+  let region = "";
+  let stage = "";
+  let nameChunks: string[] = [];
+  for (const p of parts.slice(2)) {
+    if (regionMap[p]) { region = regionMap[p]; continue; }
+    if (stageMap[p]) { stage = stageMap[p]; continue; }
+    if (/^[A-Z]{2,4}$/.test(p) && p.length <= 4) continue;
+    if (/^\d{4}/.test(p)) { nameChunks.push(p.replace(/^\d+/, "")); continue; }
+    nameChunks.push(p);
+  }
+  const name = nameChunks
+    .join(" ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/\|/g, ", ")
+    .trim();
+  if (!name) return contentId;
+  const suffix = [region, stage].filter(Boolean).join(", ");
+  return suffix ? `${name} (${suffix})` : name;
+}
+
+function ContentStatusPanel({
+  assetId,
+  contentId,
+  url,
+  contentInfo,
+  onUploadComplete,
+}: {
+  assetId: string;
+  contentId: string;
+  url: string | null;
+  contentInfo: ContentInfo | null;
+  onUploadComplete: () => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showReplace, setShowReplace] = useState(false);
+
+  const hasContent = contentInfo?.fetchStatus === "success";
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await authFetch("/api/content/upload-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId: contentId, fileBase64: base64, filename: file.name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(err.message || "Upload failed");
+      }
+      setShowReplace(false);
+      onUploadComplete();
+    } catch (err: any) {
+      setUploadError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }
+
+  if (uploading) {
+    return (
+      <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-3 flex items-center gap-2" data-testid="content-uploading">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <span className="text-xs font-medium">Analyzing content...</span>
+      </div>
+    );
+  }
+
+  if (hasContent && !showReplace) {
+    return (
+      <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-3 py-2.5 space-y-2" data-testid="content-available">
+        <div className="flex items-center gap-1.5">
+          <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+          <span className="text-[11px] font-medium text-emerald-400">Content uploaded</span>
+          <button
+            onClick={() => setShowReplace(true)}
+            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="btn-replace-content"
+          >
+            Replace
+          </button>
+        </div>
+        {contentInfo?.contentSummary && (
+          <p className="text-[11px] text-muted-foreground line-clamp-2">{contentInfo.contentSummary}</p>
+        )}
+        <div className="flex flex-wrap gap-1">
+          {contentInfo?.extractedTopics?.slice(0, 4).map((t, i) => (
+            <span key={i} className="inline-flex items-center rounded-full bg-muted/30 px-2 py-0.5 text-[9px] text-muted-foreground">{t}</span>
+          ))}
+          {contentInfo?.extractedCta && (
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] ${
+              contentInfo.extractedCta.strength === "strong" ? "bg-emerald-500/10 text-emerald-400" :
+              contentInfo.extractedCta.strength === "moderate" ? "bg-amber-500/10 text-amber-400" :
+              "bg-muted/30 text-muted-foreground"
+            }`}>
+              CTA: {contentInfo.extractedCta.text}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg bg-muted/5 border border-border/30 px-3 py-2.5 space-y-2" data-testid="content-not-available">
+      <div className="flex items-center gap-1.5">
+        <Upload className="h-3.5 w-3.5 text-muted-foreground/60" />
+        <span className="text-[11px] font-medium">
+          {showReplace ? "Upload new version" : "Content not uploaded. Upload here for full quality comparison."}
+        </span>
+        {showReplace && (
+          <button onClick={() => setShowReplace(false)} className="ml-auto text-[10px] text-muted-foreground hover:text-foreground">Cancel</button>
+        )}
+      </div>
+      {url && !showReplace && (
+        <a
+          href={url.startsWith("http") ? url : `https://${url}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-[10px] text-primary hover:underline truncate"
+          data-testid="link-asset-url"
+        >
+          <ExternalLink className="h-3 w-3 shrink-0" />
+          <span className="truncate">{url}</span>
+        </a>
+      )}
+      <label
+        className={`flex items-center gap-2 rounded-lg border border-dashed px-3 py-3 cursor-pointer transition-all ${
+          dragOver ? "border-primary bg-primary/5" : "border-border/40 hover:border-primary/40 hover:bg-primary/5"
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        data-testid="comparison-dropzone"
+      >
+        <Upload className={`h-4 w-4 shrink-0 ${dragOver ? "text-primary" : "text-muted-foreground/40"}`} />
+        <div className="text-[10px]">
+          <span className="font-medium">Drop file here</span>
+          <span className="text-muted-foreground"> or </span>
+          <span className="text-primary font-medium">browse files</span>
+          <div className="text-muted-foreground/60 mt-0.5">PDF, DOCX, PPTX, PNG, JPG</div>
+        </div>
+        <input
+          type="file"
+          className="hidden"
+          accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+      </label>
+      {uploadError && (
+        <div className="text-[10px] text-destructive flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          {uploadError}
+        </div>
+      )}
+      {!showReplace && (
+        <p className="text-[10px] text-muted-foreground/60">Performance comparison runs with engagement data. Upload to also compare content quality, topics, CTA, and messaging.</p>
+      )}
+    </div>
+  );
+}
+
 function SelectedAssetCard({
   asset,
   onClear,
-  hasContent,
+  contentInfo,
+  onUploadComplete,
 }: {
   asset: AssetPickerItem;
   onClear: () => void;
-  hasContent?: boolean;
+  contentInfo: ContentInfo | null;
+  onUploadComplete: () => void;
 }) {
   return (
     <div className="rounded-xl bg-muted/10 border border-border/30 p-4 space-y-3">
@@ -888,7 +1083,7 @@ function SelectedAssetCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold truncate" data-testid="text-selected-asset-name">
-            {asset.name || asset.contentId}
+            {parseHumanReadableName(asset.name || asset.contentId)}
           </p>
           <p className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.contentId}</p>
         </div>
@@ -922,11 +1117,13 @@ function SelectedAssetCard({
         <MetricPill label="Avg Time" value={asset.avgTime} />
       </div>
 
-      {hasContent === false && (
-        <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2 text-[11px] text-muted-foreground" data-testid="text-content-not-uploaded">
-          Content not uploaded for this asset. Performance comparison is available. Upload the content file in the Content Library to also compare topics, messaging, CTA quality, and structure.
-        </div>
-      )}
+      <ContentStatusPanel
+        assetId={asset.id}
+        contentId={asset.contentId}
+        url={asset.url}
+        contentInfo={contentInfo}
+        onUploadComplete={onUploadComplete}
+      />
     </div>
   );
 }
@@ -935,10 +1132,14 @@ function ComparisonResults({
   contentA,
   comparisonData,
   isLoadingVerdict,
+  contentInfoA,
+  contentInfoB,
 }: {
   contentA: { name: string; stage: string; product: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
   comparisonData: FullComparisonResult;
   isLoadingVerdict?: boolean;
+  contentInfoA?: ContentInfo | null;
+  contentInfoB?: ContentInfo | null;
 }) {
   const bAnalysis = comparisonData.analysis;
   const aMetrics = contentA.metrics;
@@ -1251,7 +1452,102 @@ function ComparisonResults({
           </div>
         </Card>
       )}
+
+      <ContentQualitySection
+        nameA={contentA.name}
+        nameB={comparisonData.classification.contentType || "New Content"}
+        contentInfoA={contentInfoA}
+        contentInfoB={contentInfoB}
+      />
     </motion.div>
+  );
+}
+
+function ContentQualitySection({
+  nameA,
+  nameB,
+  contentInfoA,
+  contentInfoB,
+}: {
+  nameA: string;
+  nameB: string;
+  contentInfoA?: ContentInfo | null;
+  contentInfoB?: ContentInfo | null;
+}) {
+  const aAvailable = contentInfoA?.fetchStatus === "success";
+  const bAvailable = contentInfoB?.fetchStatus === "success";
+
+  if (!aAvailable && !bAvailable) {
+    return (
+      <Card className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-5 backdrop-blur" data-testid="quality-comparison-empty">
+        <div className="flex items-center gap-2 mb-2">
+          <Layers className="h-4 w-4 text-muted-foreground/50" />
+          <h3 className="text-sm font-semibold text-muted-foreground">Content Quality Comparison</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">Upload content files for both assets to enable side-by-side quality comparison of topics, messaging, CTA strength, and structure.</p>
+      </Card>
+    );
+  }
+
+  const renderSide = (label: string, info: ContentInfo | null | undefined, available: boolean) => (
+    <div className="space-y-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      {available && info ? (
+        <div className="space-y-2">
+          {info.contentSummary && (
+            <div>
+              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">Summary</span>
+              <p className="text-[11px] text-foreground/80 line-clamp-3">{info.contentSummary}</p>
+            </div>
+          )}
+          {info.extractedTopics && info.extractedTopics.length > 0 && (
+            <div>
+              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">Topics</span>
+              <div className="flex flex-wrap gap-1">
+                {info.extractedTopics.map((t, i) => (
+                  <span key={i} className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[9px]">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {info.extractedCta && (
+            <div>
+              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">CTA</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${
+                  info.extractedCta.strength === "strong" ? "bg-emerald-500/10 text-emerald-400" :
+                  info.extractedCta.strength === "moderate" ? "bg-amber-500/10 text-amber-400" :
+                  "bg-muted/30 text-muted-foreground"
+                }`}>
+                  {info.extractedCta.strength}
+                </span>
+                <span className="text-[10px] text-foreground/70">{info.extractedCta.text}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground/50 italic">No content uploaded</p>
+      )}
+    </div>
+  );
+
+  return (
+    <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="quality-comparison">
+      <div className="flex items-center gap-2 mb-3">
+        <Layers className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold">Content Quality Comparison</h3>
+      </div>
+      {(!aAvailable || !bAvailable) && (
+        <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2 mb-3 text-[11px] text-muted-foreground">
+          Content analysis available for {aAvailable ? parseHumanReadableName(nameA) : parseHumanReadableName(nameB)} only. Upload content for {aAvailable ? parseHumanReadableName(nameB) : parseHumanReadableName(nameA)} to enable side-by-side quality comparison.
+        </div>
+      )}
+      <div className="grid sm:grid-cols-2 gap-4">
+        {renderSide(parseHumanReadableName(nameA), contentInfoA, !!aAvailable)}
+        {renderSide(parseHumanReadableName(nameB), contentInfoB, !!bAvailable)}
+      </div>
+    </Card>
   );
 }
 
@@ -1272,7 +1568,14 @@ export default function ContentComparison() {
   const [comparisonResult, setComparisonResult] = useState<FullComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
-  const [baselineHasContent, setBaselineHasContent] = useState<boolean | undefined>(undefined);
+  const [contentStatusMap, setContentStatusMap] = useState<Record<string, ContentInfo>>({});
+
+  function refreshContentStatus() {
+    authFetch("/api/content/status")
+      .then(r => r.json())
+      .then((map: Record<string, ContentInfo>) => setContentStatusMap(map))
+      .catch(() => {});
+  }
 
   function handleNewContentReady(result: PdfResult, _savedToLibrary: boolean) {
     setNewContentResult(result);
@@ -1286,14 +1589,7 @@ export default function ContentComparison() {
     setComparisonLoading(true);
     setComparisonError(null);
     setComparisonResult(null);
-    setBaselineHasContent(undefined);
-    authFetch("/api/content/status")
-      .then(r => r.json())
-      .then((statusMap: Record<string, { fetchStatus: string }>) => {
-        const entry = statusMap[asset.contentId];
-        setBaselineHasContent(entry ? entry.fetchStatus === "success" : false);
-      })
-      .catch(() => setBaselineHasContent(undefined));
+    refreshContentStatus();
 
     const contentBResult = newContentResult;
     if (!contentBResult) {
@@ -1327,6 +1623,7 @@ export default function ContentComparison() {
             },
             contentB: {
               name: contentBResult.filename,
+              contentId: contentBResult.contentId || contentBResult.filename,
               stage: contentBResult.classification.stage,
               product: contentBResult.classification.product,
               contentType: contentBResult.classification.contentType,
@@ -1360,6 +1657,7 @@ export default function ContentComparison() {
           },
           contentB: {
             name: contentBResult.filename,
+            contentId: contentBResult.contentId || contentBResult.filename,
             stage: contentBResult.classification.stage,
             product: contentBResult.classification.product,
             contentType: contentBResult.classification.contentType,
@@ -1492,6 +1790,7 @@ export default function ContentComparison() {
                         benchmarks: [],
                         aggregateBenchmarks: null,
                         analysis: null,
+                        contentId: asset.contentId,
                       };
                       handleNewContentReady(manualResult, false);
                     }} />
@@ -1548,23 +1847,56 @@ export default function ContentComparison() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Baseline (Content A)</span>
-                <SelectedAssetCard asset={slotA.selectedAsset} onClear={() => { setSlotA(EMPTY_SLOT_A); setStep("baseline"); setBaselineHasContent(undefined); }} hasContent={baselineHasContent} />
+                <SelectedAssetCard
+                  asset={slotA.selectedAsset}
+                  onClear={() => { setSlotA(EMPTY_SLOT_A); setStep("baseline"); }}
+                  contentInfo={contentStatusMap[slotA.selectedAsset.contentId] || null}
+                  onUploadComplete={() => { refreshContentStatus(); if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }}
+                />
               </div>
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">New Content (Content B)</span>
-                <div className="rounded-xl bg-muted/10 border border-border/30 p-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-sm font-medium truncate">{newContentResult?.filename}</span>
+                {newContentResult?.isFallback && newContentResult?.classification ? (
+                  <SelectedAssetCard
+                    asset={{
+                      id: "",
+                      contentId: newContentResult.filename,
+                      name: newContentResult.filename,
+                      stage: newContentResult.classification.stage,
+                      product: newContentResult.classification.product || null,
+                      channel: null,
+                      cta: null,
+                      type: newContentResult.classification.contentType || null,
+                      url: null,
+                      pageviews: 0,
+                      downloads: 0,
+                      leads: 0,
+                      sqos: 0,
+                      avgTime: 0,
+                    }}
+                    onClear={() => { setStep("intake"); handleReset(); }}
+                    contentInfo={contentStatusMap[newContentResult.filename] || null}
+                    onUploadComplete={() => { refreshContentStatus(); if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }}
+                  />
+                ) : (
+                  <div className="rounded-xl bg-muted/10 border border-border/30 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-sm font-medium truncate">{newContentResult?.filename}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span>{newContentResult?.classification.contentType}</span>
+                      <Badge className={`${stageBadgeColors[newContentResult?.classification.stage || ""] || "bg-muted"} border text-[9px]`}>
+                        {newContentResult?.classification.stage}
+                      </Badge>
+                      {newContentResult?.classification.product && <span>{newContentResult.classification.product}</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-[11px] font-medium text-emerald-400">Content analyzed</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
-                    <span>{newContentResult?.classification.contentType}</span>
-                    <Badge className={`${stageBadgeColors[newContentResult?.classification.stage || ""] || "bg-muted"} border text-[9px]`}>
-                      {newContentResult?.classification.stage}
-                    </Badge>
-                    {newContentResult?.classification.product && <span>{newContentResult.classification.product}</span>}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -1609,6 +1941,8 @@ export default function ContentComparison() {
           contentA={getContentAInfo()!}
           comparisonData={comparisonResult}
           isLoadingVerdict={comparisonLoading}
+          contentInfoA={slotA.selectedAsset ? contentStatusMap[slotA.selectedAsset.contentId] || null : null}
+          contentInfoB={newContentResult?.isFallback ? (contentStatusMap[newContentResult.contentId || newContentResult.filename] || null) : null}
         />
       )}
     </div>
@@ -1638,6 +1972,7 @@ function BaselineAssetBrowser({ onSelect }: { onSelect: (asset: AssetPickerItem)
           channel: a.utmChannel || null,
           cta: a.typecampaignmember || null,
           type: a.typecampaignmember || null,
+          url: a.url || null,
           pageviews: a.pageviewsSum || 0,
           downloads: a.downloadsSum || 0,
           leads: a.uniqueLeads || 0,
