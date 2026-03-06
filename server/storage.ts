@@ -54,7 +54,7 @@ export interface IStorage {
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
-  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }>>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }>>;
   deleteContent(assetId: string): Promise<void>;
   getContentStats(): Promise<{ totalStored: number; totalSize: number }>;
   createContentPlaceholders(assetIds: { assetId: string; sourceUrl?: string | null }[]): Promise<number>;
@@ -89,7 +89,12 @@ export class DatabaseStorage implements IStorage {
   }): Promise<{ data: AssetAgg[]; total: number }> {
     const conditions = [eq(assetsAgg.stage, opts.stage as any)];
     if (opts.search) {
-      conditions.push(ilike(assetsAgg.contentId, `%${opts.search}%`));
+      conditions.push(
+        sql`(${ilike(assetsAgg.contentId, `%${opts.search}%`)} OR ${assetsAgg.contentId} IN (
+          SELECT ${contentStored.assetId} FROM ${contentStored}
+          WHERE ${contentStored.keywordTags}::text ILIKE ${'%' + opts.search + '%'}
+        ))`
+      );
     }
     if (opts.product) {
       conditions.push(eq(assetsAgg.productFranchise, opts.product));
@@ -254,7 +259,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }>> {
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }>> {
     const rows = await db
       .select({
         assetId: contentStored.assetId,
@@ -263,9 +268,10 @@ export class DatabaseStorage implements IStorage {
         contentSummary: contentStored.contentSummary,
         extractedTopics: contentStored.extractedTopics,
         extractedCta: contentStored.extractedCta,
+        keywordTags: contentStored.keywordTags,
       })
       .from(contentStored);
-    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }> = {};
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }> = {};
     for (const r of rows) {
       map[r.assetId] = {
         fetchStatus: r.fetchStatus,
@@ -273,6 +279,7 @@ export class DatabaseStorage implements IStorage {
         contentSummary: r.contentSummary,
         extractedTopics: r.extractedTopics as string[] | null,
         extractedCta: r.extractedCta as { text: string; type: string; strength: string; location: string } | null,
+        keywordTags: r.keywordTags as string[] | null,
       };
     }
     return map;

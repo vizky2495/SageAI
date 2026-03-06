@@ -284,7 +284,7 @@ function CopyButton({ text, msgId }: { text: string; msgId: number }) {
 
 function sanitizePdfText(text: string): string {
   return text
-    .replace(/[\u2700-\u27BF\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, "")
+    .replace(/[\u2700-\u27BF]/g, "")
     .replace(/[^\x00-\x7F\xA0-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2022\u2026]/g, "")
     .replace(/\u2013/g, "-").replace(/\u2014/g, " - ")
     .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')

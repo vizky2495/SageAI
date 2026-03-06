@@ -178,6 +178,7 @@ export const contentStored = pgTable("content_stored", {
   extractedCta: jsonb("extracted_cta").$type<{ text: string; type: string; strength: string; location: string } | null>(),
   contentStructure: jsonb("content_structure").$type<{ wordCount: number; sectionCount: number; pageCount: number; headings: string[] }>(),
   messagingThemes: jsonb("messaging_themes").$type<string[]>(),
+  keywordTags: jsonb("keyword_tags").$type<string[]>(),
   contentFormat: text("content_format"),
   sourceType: text("source_type").notNull().default("not_stored"),
   sourceUrl: text("source_url"),

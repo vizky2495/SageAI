@@ -1,0 +1,207 @@
+Fix the Content Comparison Report PDF completely. The PDF has critical issues: empty pages, AI not reading uploaded content, weak verdicts, missing metadata, and poor branding. Make the PDF dynamic, focused on content insights and auto-generated keyword tags. We are NOT creating new content — the report helps users understand what existing content covers and whether it resonates with the target audience.
+
+CRITICAL FIX 1: AI MUST READ THE UPLOADED CONTENT
+Both assets show "Content uploaded" but "AI analysis unavailable." The content was stored but never sent to the AI. Fix:
+
+When content is uploaded for an asset, immediately extract the text and run it through the AI to generate: content_summary, extracted_topics, keyword_tags, messaging_themes, content_structure
+Store the analysis in content_stored table
+When a comparison is run, pull both full content texts from content_stored and send them to the AI in a single prompt along with all metadata and engagement data
+The AI must produce the full comparison: content overview, keyword tags, audience resonance, topic relevance, shared vs different, what makes it work, what could be improved, and verdict
+If AI analysis failed at upload time, retry when comparison is triggered
+Never show "content not uploaded" when content IS uploaded — show the actual error and a "Retry Analysis" button
+
+
+CRITICAL FIX 2: PDF MUST CONTAIN THE SAME ANALYSIS SHOWN ON SCREEN
+
+The PDF should render the exact same content the user saw on screen
+The PDF generation function should receive the complete comparison results object and render it into pages
+If a section has content, render it. If a section has no content, skip it entirely. Never render a page with just a header.
+
+
+CRITICAL FIX 3: DYNAMIC PAGE COUNT
+Do NOT hardcode the PDF to 7 pages. Generate only pages that have content:
+
+Full analysis with both content files uploaded: may be 5-8 pages depending on depth
+Engagement data only (no content uploaded): may be 2-3 pages
+Long sections flow naturally across pages. Short sections can share a page.
+Content drives page count, not a fixed template
+
+
+CRITICAL FIX 4: METADATA MUST NOT SHOW "N/A" WHEN DATA EXISTS
+
+Pull ALL available metadata from engagement data: country, industry, language, channel, campaign, content type, product
+If a field genuinely doesn't exist, show "Not specified" not "N/A"
+
+
+CRITICAL FIX 5: HIDE PERFORMANCE COMPARISON WHEN ONE SIDE HAS NO DATA
+
+If BOTH have meaningful engagement data: show performance comparison table
+If only ONE has data: show inline summary only, no half-empty table: "Performance data available for [Content A] only: 65 pageviews, 65 leads, 2 SQOs, 855s avg time. [Content B] has no engagement history yet." [Source: Internal Data]
+If NEITHER has data: skip performance section entirely
+
+
+NEW FEATURE: AUTO-GENERATED KEYWORD TAGS
+When the AI reads uploaded content, it must generate keyword tags — these are the key terms, concepts, and themes the content is talking about. These tags serve as a quick visual summary of what each content piece covers.
+How to generate tags:
+
+The AI reads the full content text and extracts 8-15 keyword tags per content piece
+Tags should be specific and meaningful, not generic. Examples:
+
+Good tags: "Year-End Payroll", "T4 Slips", "CRA Reporting", "Penalty Avoidance", "Canadian Tax Compliance", "Sage 50 Payroll Module", "Employee Deductions", "ROE Filing"
+Bad tags: "Accounting", "Software", "Business", "Finance" — these are too generic to be useful
+
+
+Tags should capture: specific topics covered, specific regulations or standards mentioned, specific product features discussed, specific industries or markets referenced, specific processes explained
+Each tag should be 1-3 words maximum
+
+Where tags appear:
+On the comparison UI (on screen):
+
+Below each content card, show the auto-generated tags as small colored pills
+Content A tags in one color (e.g., teal pills)
+Content B tags in a different color (e.g., jade pills)
+Tags that appear in BOTH content pieces should be highlighted differently (e.g., green pills with a small "shared" indicator) — this instantly shows the user where content overlaps
+Tags unique to one piece stay in their default color
+
+In the PDF report:
+
+Show tags for each content piece in the Content Overview section, directly below each summary
+Format as small colored pills or bracketed labels: [Year-End Payroll] [T4 Slips] [CRA Reporting] [Penalty Avoidance]
+Shared tags between both pieces marked with a "shared" label or different color
+In the "What's Shared, What's Different" section, use the tags to visually show overlap: "Shared tags: [Payroll] [Canadian Market]. Unique to Content A: [CRA Reporting] [T4 Slips] [Penalty Avoidance]. Unique to Content B: [Sage 50 Setup] [Feature Overview] [Module Tour]"
+
+In the Content Library cards (stored permanently):
+
+After AI analysis, store the generated tags in the content_stored table as a new field: keyword_tags (JSON array)
+Display these tags on library cards below the content summary
+These tags persist permanently — they help users browse and understand content at a glance without opening the preview
+Tags are searchable — when a user searches "CRA reporting" in the library, assets with that tag surface first
+
+
+CONTENT INSIGHTS: WHAT THIS CONTENT TALKS ABOUT
+The comparison should clearly explain what each content piece is about — not just list topics, but explain what the content actually says about each topic and why it matters.
+For each content piece, the AI should produce:
+"What This Content Covers" — a structured breakdown:
+Content A — Human Firm EN:
+
+Primary focus: "This content is primarily about [main topic]. It walks the reader through [what it explains]."
+Key topics discussed:
+
+"[Topic 1]" — "The content explains [what it says about this topic], including [specific details, examples, or guidance provided]. This is covered in [depth level: a brief mention / a full section / a detailed walkthrough]."
+"[Topic 2]" — "The content addresses [what it says], specifically [details]. It provides [practical steps / general overview / comparison / case study]."
+"[Topic 3]" — same format
+
+
+What it does NOT cover: "Notable gaps include [topics you'd expect given the product/stage/audience that are missing]. For example, [specific gap] is not mentioned despite being relevant to [audience]."
+Keyword tags: [Tag 1] [Tag 2] [Tag 3] [Tag 4] [Tag 5] ...
+
+Content B — Whitepaper When Every Visit Matters:
+
+Same format as above
+
+Then a comparison insight:
+"Content A talks about [these themes] while Content B talks about [these themes]. The overlap is in [shared areas]. The key difference is that Content A approaches [topic] from a [compliance/process/educational] angle while Content B approaches it from a [product/feature/case study] angle. For [target audience], Content [A/B]'s approach is more likely to resonate because [specific reason tied to audience needs]."
+
+"WHAT MAKES THIS CONTENT WORK" SECTION (for content with strong engagement):
+When a content piece has strong engagement metrics, the AI should explain WHY by connecting the content characteristics to the performance data:
+
+Topic resonance: "This content covers [topic] — a time-sensitive, high-urgency topic for [audience]. The 855-second avg engagement time suggests users are reading through the entire piece, not bouncing." [Source: Content Analysis + Internal Data]
+Depth factor: "At [X] words with [step-by-step walkthroughs / detailed examples / practical guidance], this content provides actionable depth that keeps users engaged." [Source: Content Analysis + Internal Data]
+Specificity factor: "This content references specific [regulations / processes / market practices] relevant to [country/industry]. Market-specific content resonates more strongly than generic content." [Source: Content Analysis]
+Approach: "The content leads with [the reader's problem / a case study / a practical scenario] rather than [product features / generic information]. This approach connects with readers who are actively dealing with [situation]." [Source: Content Analysis]
+
+Only show this section when there is engagement data to support it. Do not fabricate explanations for content with no data.
+
+"WHAT COULD BE IMPROVED" SECTION (for content with gaps):
+When the AI identifies quality gaps or weak resonance in a content piece:
+
+Specificity gap: "This content is generic and doesn't reference [country]-specific [regulations/practices]. Adding [specific examples] would improve resonance with [target audience]." [Source: Content Analysis]
+Depth gap: "At [X] words, this provides a surface-level overview. The comparison shows that [other content piece] covers similar topics in [X]x more depth and has [X]x higher engagement." [Source: Content Analysis + Internal Data]
+Funnel misalignment: "This content is tagged as [stage] but reads more like [different stage] material — it [assumes too much / too little prior knowledge]. Consider re-tagging." [Source: Content Analysis]
+Audience misalignment: "This content doesn't address the specific pain points of [industry/audience]. Compare with [other piece] which directly addresses [specific pain points] and achieves stronger engagement." [Source: Content Analysis]
+
+Only show specific issues that the AI actually found in the content. Never generate generic improvement advice.
+
+UPDATED PDF STRUCTURE (dynamic pages):
+Cover page:
+
+Black background with subtle green gradient glow in lower-right
+"Content Comparison Report" in large bold white (32-36pt)
+Subtitle with both content names in lighter weight
+Date and "Prepared by Content Intelligence Analyst" in Brilliant Green
+Sage logo (green wordmark) bottom-left
+Confidential notice + copyright at bottom
+
+Content Overview section:
+
+AI-generated plain language summary of each content piece (2-3 sentences each)
+Auto-generated keyword tags displayed as pills below each summary
+Shared tags highlighted
+Metadata table with actual data (no "N/A" where data exists)
+Engagement inline summary (not a half-empty table)
+
+What This Content Covers section:
+
+Detailed breakdown of each piece: primary focus, key topics with what the content says about each, what it does NOT cover, keyword tags
+Comparison insight connecting the two
+
+Audience Resonance Assessment section (only if content uploaded):
+
+Country fit, Industry fit, Funnel stage fit, Product fit
+Each rated Strong/Moderate/Weak with explanation
+
+What's Shared, What's Different section (only if content uploaded):
+
+Overlap and divergence using keyword tags as visual anchors
+Shared tags vs unique tags per piece
+
+What Makes This Content Work section (only for assets with engagement data):
+
+Success factors reverse-engineered from content + data
+Each factor connected to a real metric
+
+What Could Be Improved section (only when AI identifies specific gaps):
+
+Specific gaps with actionable fixes
+References to the other content piece where it does better
+
+Verdict & Suggestions section:
+
+Substantive verdict: which content resonates better with target audience and why (2-3 paragraphs)
+Numbered actionable suggestions grounded in the analysis
+Source tags on everything
+
+Performance section (only if both sides have meaningful data):
+
+Real numbers only, no projections
+If one side has no data: inline summary, no table
+
+
+PDF STYLING — SAGE BRAND TEMPLATE:
+
+All pages: black background (#000000)
+Section headers: Brilliant Green (#00D657), bold, thin green accent line below
+Body text: white (#E0E0E0)
+Keyword tags: rendered as small rounded rectangles — teal for Content A tags, jade for Content B tags, green with border for shared tags
+Tables: green header row with black text, alternating dark teal (#004D4D) / near-black (#1A1A1A) rows, full text wrapping, no truncation
+Source tags: smaller colored text — green for Internal Data, jade for Content Analysis, amber for AI Recommendation
+Callout boxes for "What Makes This Content Work" items: dark green fill (#0A3D1F) with Brilliant Green left border, white text
+Ratings: Strong in green, Moderate in amber, Weak in cherry/red text
+Sage logo bottom-left every page, page numbers bottom-right, confidential + copyright centered at bottom
+Generous spacing between sections
+No emoji, no garbled characters, no raw markdown
+
+
+CRITICAL RULES:
+
+Never generate a page with just a header and no content — fill it or skip it
+Never say "content not uploaded" when content IS uploaded — check actual data
+Never show "N/A" when data exists — pull from engagement data
+Never show half-empty performance table — use inline summary
+Never fabricate projections, forecasts, benchmarks, or scores
+Never show a verdict that just repeats numbers — analyze and interpret the actual content
+Always tag every data point with its source
+PDF must contain the same analysis shown on screen
+Keyword tags must be specific and meaningful — never generic terms like "Business" or "Software"
+We are NOT creating new content — no replication guides or content creation templates. The report helps users understand what existing content covers and whether it resonates.
+

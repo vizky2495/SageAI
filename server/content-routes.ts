@@ -32,6 +32,7 @@ async function analyzeContentWithAI(text: string, url?: string): Promise<{
   cta: { text: string; type: string; strength: string; location: string } | null;
   structure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] };
   messagingThemes: string[];
+  keywordTags: string[];
 }> {
   const truncated = text.slice(0, 15000);
   const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -39,7 +40,7 @@ async function analyzeContentWithAI(text: string, url?: string): Promise<{
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      max_tokens: 2500,
       messages: [
         {
           role: "user",
@@ -49,7 +50,8 @@ async function analyzeContentWithAI(text: string, url?: string): Promise<{
   "topics": ["topic1", "topic2", ...],  // 3-8 key topics/themes
   "cta": { "text": "CTA text found", "type": "demo_request|free_trial|download|contact|learn_more|subscribe|purchase|none", "strength": "strong|moderate|weak|none", "location": "hero|body|footer|sidebar|popup" } or null if no CTA,
   "headings": ["heading1", "heading2", ...],  // extracted section headings
-  "messagingThemes": ["theme1", "theme2", ...]  // 2-5 overarching messaging themes (e.g. "cost savings", "ease of use", "security")
+  "messagingThemes": ["theme1", "theme2", ...],  // 2-5 overarching messaging themes (e.g. "cost savings", "ease of use", "security")
+  "keywordTags": ["tag1", "tag2", ...]  // 8-15 specific keyword tags. Each tag 1-3 words. Must be SPECIFIC and meaningful — capture specific topics, regulations, standards, product features, industries, markets, processes. Good examples: "Year-End Payroll", "T4 Slips", "CRA Reporting", "Penalty Avoidance", "Sage 50 Payroll Module". Bad examples: "Accounting", "Software", "Business" (too generic).
 }
 
 Content${url ? ` from ${url}` : ""}:
@@ -76,6 +78,7 @@ ${truncated}`,
         headings,
       },
       messagingThemes: Array.isArray(parsed.messagingThemes) ? parsed.messagingThemes.slice(0, 5) : [],
+      keywordTags: Array.isArray(parsed.keywordTags) ? parsed.keywordTags.slice(0, 15) : [],
     };
   } catch (err) {
     console.error("AI content analysis failed:", err);
@@ -85,6 +88,7 @@ ${truncated}`,
       cta: null,
       structure: { wordCount, sectionCount: 1, pageCount: 1, headings: [] },
       messagingThemes: [],
+      keywordTags: [],
     };
   }
 }
@@ -220,6 +224,7 @@ async function fetchAndStoreUrl(assetId: string, url: string, storedBy = "user")
     extractedCta: analysis.cta,
     contentStructure: analysis.structure,
     messagingThemes: analysis.messagingThemes,
+    keywordTags: analysis.keywordTags,
     contentFormat,
     sourceType: "url_fetched",
     sourceUrl: url,
@@ -347,6 +352,7 @@ export function registerContentRoutes(app: Express): void {
         extractedCta: analysis.cta,
         contentStructure: analysis.structure,
         messagingThemes: analysis.messagingThemes,
+        keywordTags: analysis.keywordTags,
         contentFormat,
         sourceType: "file_uploaded",
         storedFileBase64: fileBase64,

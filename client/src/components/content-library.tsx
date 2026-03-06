@@ -44,6 +44,7 @@ interface ContentStatusEntry {
   contentSummary: string | null;
   extractedTopics: string[] | null;
   extractedCta: { text: string; type: string; strength: string; location: string } | null;
+  keywordTags: string[] | null;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -1194,6 +1195,18 @@ function ContentCard({
                 >
                   CTA: {contentStatus.extractedCta.type.replace(/_/g, " ")}
                 </Badge>
+              )}
+              {contentStatus.keywordTags && contentStatus.keywordTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1" data-testid="card-keyword-tags">
+                  {contentStatus.keywordTags.slice(0, 5).map((tag, i) => (
+                    <Badge key={i} variant="outline" className="rounded-full text-[8px] px-1.5 py-0 bg-teal-500/8 text-teal-400 border-teal-500/25 font-medium">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {contentStatus.keywordTags.length > 5 && (
+                    <span className="text-[8px] text-muted-foreground self-center">+{contentStatus.keywordTags.length - 5}</span>
+                  )}
+                </div>
               )}
             </div>
           )}
