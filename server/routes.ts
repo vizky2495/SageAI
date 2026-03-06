@@ -751,7 +751,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
         }
       }
 
-      const metricsA = contentA.metrics;
+      const metricsA = contentA.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
       const metricsB = contentB.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
       const aHasMetrics = metricsA.pageviews > 0 || metricsA.downloads > 0 || metricsA.leads > 0 || metricsA.sqos > 0;
       const bHasMetrics = metricsB.pageviews > 0 || metricsB.downloads > 0 || metricsB.leads > 0 || metricsB.sqos > 0;

@@ -414,6 +414,7 @@ function UploadAndSavePanel({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
+  const savingRef = useRef(false);
   const [meta, setMeta] = useState({
     assetName: "",
     contentType: "",
@@ -491,6 +492,39 @@ function UploadAndSavePanel({
       if (meta.product === "" && data.classification?.product) {
         setMeta(prev => ({ ...prev, product: prev.product || data.classification.product }));
       }
+
+      if (!onViewAnalysis) {
+        onAnalyzed(fullResult, false);
+      }
+
+      if (!savedToLibrary && !savingRef.current) {
+        savingRef.current = true;
+        const autoName = meta.assetName.trim() || data.filename?.replace(/\.pdf$/i, "") || file.name.replace(/\.pdf$/i, "");
+        if (autoName) {
+          setMeta(prev => ({ ...prev, assetName: prev.assetName || autoName }));
+          authFetch("/api/content-library/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assetName: autoName,
+              contentType: meta.contentType || data.classification?.contentType || "Document",
+              product: meta.product || data.classification?.product || "General",
+              funnelStage: meta.funnelStage || data.classification?.stage || "UNKNOWN",
+              country: meta.country || "",
+              industry: meta.industry || data.classification?.industry || "",
+              dateCreated: new Date().toISOString().split("T")[0],
+              description: meta.description || "",
+              contentText: data.text?.slice(0, 50000),
+              classification: data.classification,
+              pageCount: data.pageCount,
+              wordCount: data.wordCount,
+              filename: data.filename || file.name,
+            }),
+          }).then(r => { if (r.ok) setSavedToLibrary(true); savingRef.current = false; }).catch(() => { savingRef.current = false; });
+        } else {
+          savingRef.current = false;
+        }
+      }
     } catch {
       setError("Something went wrong during analysis.");
     }
@@ -498,14 +532,16 @@ function UploadAndSavePanel({
   }
 
   async function saveToLibrary() {
-    if (!meta.assetName.trim()) return;
+    if (savingRef.current || savedToLibrary) return;
+    savingRef.current = true;
+    const assetName = meta.assetName.trim() || pdfResult?.filename?.replace(/\.pdf$/i, "") || "Uploaded Content";
     setSaving(true);
     try {
       const res = await authFetch("/api/content-library/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          assetName: meta.assetName.trim(),
+          assetName,
           contentType: meta.contentType || pdfResult?.classification?.contentType || "Document",
           product: meta.product || pdfResult?.classification?.product || "General",
           funnelStage: meta.funnelStage || pdfResult?.classification?.stage || "UNKNOWN",
@@ -529,6 +565,7 @@ function UploadAndSavePanel({
       setError(err.message || "Failed to save to library.");
     }
     setSaving(false);
+    savingRef.current = false;
   }
 
   async function handleAnalyzeAndSave() {
@@ -540,7 +577,7 @@ function UploadAndSavePanel({
   async function handleUseForComparison() {
     if (!pdfResult) return;
     if (!savedToLibrary) {
-      await saveToLibrary();
+      saveToLibrary().catch(() => {});
     }
     onAnalyzed(pdfResult, true);
   }
@@ -709,7 +746,7 @@ function UploadAndSavePanel({
             data-testid="btn-use-for-comparison"
           >
             <ArrowLeftRight className="h-4 w-4 mr-2" />
-            Compare Against Library Asset
+            Use for Comparison
           </Button>
         </motion.div>
       )}
@@ -1989,7 +2026,7 @@ function StandaloneAnalysisView({
             data-testid="btn-compare-from-analysis"
           >
             <ArrowLeftRight className="h-4 w-4 mr-2" />
-            Compare Against Library Asset
+            Use for Comparison
           </Button>
           {onAskChat && (
             <Button
@@ -2452,7 +2489,7 @@ export default function ContentComparison() {
         country: (r as any).country || "",
         industry: r.classification.industry || "",
         text: r.text?.slice(0, 8000),
-        metrics: r.metrics,
+        metrics: r.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 },
       };
     });
 
