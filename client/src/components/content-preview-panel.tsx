@@ -243,7 +243,17 @@ export default function ContentPreviewPanel({
               {content.contentSummary && (
                 <section>
                   <SectionHeader icon={<BookOpen className="h-3.5 w-3.5" />} label="AI Summary" />
-                  <p className="text-sm leading-relaxed text-foreground/90">{content.contentSummary}</p>
+                  {content.contentSummary === "AI analysis unavailable" || content.contentSummary === "No text content available for analysis" ? (
+                    <ReanalyzeSection assetId={asset.contentId} queryClient={queryClient} />
+                  ) : (
+                    <p className="text-sm leading-relaxed text-foreground/90">{content.contentSummary}</p>
+                  )}
+                </section>
+              )}
+              {!content.contentSummary && content.contentStructure && content.contentStructure.wordCount > 50 && (
+                <section>
+                  <SectionHeader icon={<BookOpen className="h-3.5 w-3.5" />} label="AI Summary" />
+                  <ReanalyzeSection assetId={asset.contentId} queryClient={queryClient} />
                 </section>
               )}
 
@@ -515,6 +525,41 @@ function EngagementMetrics({ asset }: { asset: AssetAgg }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function ReanalyzeSection({ assetId, queryClient }: { assetId: string; queryClient: any }) {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const handleReanalyze = useCallback(async () => {
+    setIsAnalyzing(true);
+    try {
+      const res = await authFetch(`/api/content/${encodeURIComponent(assetId)}/reanalyze`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to re-analyze");
+      queryClient.invalidateQueries({ queryKey: [`/api/content/${assetId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tags/summary"] });
+    } catch (err) {
+      console.error("Re-analyze failed:", err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [assetId, queryClient]);
+
+  return (
+    <div className="flex flex-col items-center gap-2 py-3 px-4 rounded-lg border border-dashed border-muted-foreground/20 bg-muted/5" data-testid="reanalyze-section">
+      <p className="text-sm text-muted-foreground">AI analysis was not completed for this content.</p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-1.5 text-xs"
+        onClick={handleReanalyze}
+        disabled={isAnalyzing}
+        data-testid="button-reanalyze"
+      >
+        {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+        {isAnalyzing ? "Analyzing..." : "Run AI Analysis"}
+      </Button>
+    </div>
   );
 }
 

@@ -625,6 +625,46 @@ export function registerContentRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/content/:assetId/reanalyze", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetId } = req.params;
+      const content = await storage.getContentByAssetId(assetId);
+      if (!content || !content.contentText || content.contentText.length < 50) {
+        return res.status(400).json({ message: "No readable content to re-analyze" });
+      }
+      const existingTags = normalizeKeywordTags(content.keywordTags as any);
+      const analysis = await analyzeContentWithAI(content.contentText, content.sourceUrl || undefined);
+      const newTags: StructuredKeywordTags = {
+        ...analysis.keywordTags,
+        user_added_tags: existingTags.user_added_tags,
+      };
+      await storage.upsertContent({
+        assetId,
+        contentText: content.contentText,
+        contentSummary: analysis.summary,
+        extractedTopics: analysis.topics,
+        extractedCta: analysis.cta,
+        contentStructure: analysis.structure,
+        messagingThemes: analysis.messagingThemes,
+        keywordTags: newTags,
+        contentFormat: content.contentFormat,
+        sourceType: content.sourceType,
+        sourceUrl: content.sourceUrl,
+        storedFileBase64: content.storedFileBase64,
+        originalFilename: content.originalFilename,
+        fileSizeBytes: content.fileSizeBytes,
+        dateStored: new Date(),
+        fetchStatus: "success",
+        fetchNotes: null,
+        storedBy: content.storedBy,
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Re-analyze error:", err);
+      res.status(500).json({ message: "Failed to re-analyze content" });
+    }
+  });
+
   app.post("/api/content/regenerate-all-tags", requireAdmin, async (req: Request, res: Response) => {
     try {
       res.setHeader("Content-Type", "text/event-stream");
