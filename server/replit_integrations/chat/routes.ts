@@ -444,6 +444,84 @@ function getDatasetLabel(summary: InsightsSummary): string {
   return `${summary.dataset_info.total_rows} content assets`;
 }
 
+async function buildCampaignPlansSummary(userId: string): Promise<string | null> {
+  try {
+    const plannerConvos = await chatStorage.getAllConversations("planner", userId);
+    if (plannerConvos.length === 0) return null;
+
+    const planSummaries: string[] = [];
+
+    for (const conv of plannerConvos.slice(0, 20)) {
+      const msgs = await chatStorage.getMessagesByConversation(conv.id);
+      if (msgs.length < 2) continue;
+
+      const userMessages = msgs.filter(m => m.role === "user");
+      const assistantMessages = msgs.filter(m => m.role === "assistant");
+      if (userMessages.length === 0 || assistantMessages.length === 0) continue;
+
+      const extract = (label: string): string => {
+        for (const msg of userMessages) {
+          const match = msg.content.match(new RegExp(`- ${label}:\\s*(.+)`, "i"));
+          if (match) return match[1].trim();
+        }
+        return "";
+      };
+
+      const objective = extract("Objective");
+      const product = extract("Product");
+      const market = extract("Target Market") || extract("Market");
+      const funnelStage = extract("Funnel Stage");
+      const contentType = extract("Content Type");
+      const industry = extract("Industry");
+
+      let readinessScore: number | null = null;
+      let channels: string[] = [];
+
+      for (let i = assistantMessages.length - 1; i >= 0; i--) {
+        const msgContent = assistantMessages[i].content;
+        if (readinessScore === null) {
+          const scoreMatch = msgContent.match(/<!-- SCORE:(\d+) -->/);
+          if (scoreMatch) readinessScore = parseInt(scoreMatch[1]);
+        }
+        if (channels.length === 0) {
+          const budgetMatch = msgContent.match(/<!-- BUDGET:([\s\S]*?) -->/);
+          if (budgetMatch) {
+            try {
+              const budgetData = JSON.parse(budgetMatch[1].replace(/\s+/g, " "));
+              if (budgetData.items) {
+                channels = budgetData.items.map((item: { name: string; pct: number }) => `${item.name} (${item.pct}%)`);
+              }
+            } catch {}
+          }
+        }
+        if (readinessScore !== null && channels.length > 0) break;
+      }
+
+      const status = readinessScore !== null ? "Complete" : "Draft";
+
+      let planLine = `Plan: "${conv.title}" [${status}]`;
+      if (objective) planLine += ` | Objective: ${objective}`;
+      if (product) planLine += ` | Product: ${product}`;
+      if (market) planLine += ` | Market: ${market}`;
+      if (funnelStage) planLine += ` | Stage: ${funnelStage}`;
+      if (contentType) planLine += ` | Content Type: ${contentType}`;
+      if (industry) planLine += ` | Industry: ${industry}`;
+      if (readinessScore !== null) planLine += ` | Readiness: ${readinessScore}/100`;
+      if (channels.length > 0) planLine += ` | Channels: ${channels.join(", ")}`;
+
+      planSummaries.push(planLine);
+    }
+
+    if (planSummaries.length === 0) return null;
+
+    return `\n--- CAMPAIGN PLANS (${planSummaries.length} plans from Campaign Planner) ---\n` +
+      planSummaries.join("\n") + "\n";
+  } catch (err) {
+    console.error("Error building campaign plans summary:", err);
+    return null;
+  }
+}
+
 const MAX_CONTEXT_EXCHANGES = 4;
 
 const assetInsightCache = new Map<string, { insight: string; performance: string; timestamp: number }>();
@@ -723,12 +801,23 @@ export function registerChatRoutes(app: Express): void {
       });
 
       let systemPrompt: string;
+      const userId = (req as any).userId as string;
+      const campaignContext = (agentType === "cia" || agentType === "librarian")
+        ? await buildCampaignPlansSummary(userId)
+        : null;
+
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
         systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
+        if (campaignContext) {
+          systemPrompt += `\n\n=== CAMPAIGN PLANNING DATA ===\nThe following campaign plans have been created in the Campaign Planner. You can reference this data when users ask about planned campaigns, strategies, or content allocation.\n${campaignContext}`;
+        }
       } else if (agentType === "librarian") {
         const librarianContext = buildPlannerContext(summary);
         systemPrompt = `${LIBRARIAN_PROMPT}\n\n${librarianContext}`;
+        if (campaignContext) {
+          systemPrompt += `\n${campaignContext}`;
+        }
       } else {
         const plannerContext = buildPlannerContext(summary);
         systemPrompt = `${CAMPAIGN_PLANNER_PROMPT}\n\n${plannerContext}`;

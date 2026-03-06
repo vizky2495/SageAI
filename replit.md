@@ -50,7 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **Runtime**: Node.js with Express 5, written in TypeScript.
 - **API Pattern**: RESTful JSON API (`/api/`) for data ingestion, analytics summaries, conversation management, and AI interaction.
 - **Data Ingestion**: Handles Excel uploads, AI-powered column mapping via Claude Opus, and ingestion of mapped data.
-- **Insights**: Provides structured JSON summaries for chatbot grounding.
+- **Insights**: Provides structured JSON summaries for chatbot grounding. CIA and Librarian agents also receive campaign plan summaries (objective, product, market, channels, readiness scores) from the user's Campaign Planner conversations via `buildCampaignPlansSummary()`, enabling cross-agent awareness of planned campaigns.
 - **Conversations**: CRUD operations for CIA Agent and Campaign Planner conversations, supporting SSE streaming for messages.
 - **Validation**: Zod schemas for data validation.
 - **Development**: Vite dev server integrated as Express middleware for HMR.
