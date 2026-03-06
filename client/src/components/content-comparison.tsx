@@ -925,14 +925,16 @@ function SelectedAssetCard({
 
 function ComparisonResults({
   contentA,
-  contentB,
+  comparisonData,
+  isLoadingVerdict,
 }: {
   contentA: { name: string; stage: string; product: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
-  contentB: PdfResult;
+  comparisonData: FullComparisonResult;
+  isLoadingVerdict?: boolean;
 }) {
-  const bAnalysis = contentB.analysis;
+  const bAnalysis = comparisonData.analysis;
   const aMetrics = contentA.metrics;
-  const bClassification = contentB.classification;
+  const bClassification = comparisonData.classification;
 
   const primaryMetric = bClassification.stage === "BOFU" ? "sqos" : bClassification.stage === "MOFU" ? "leads" : "pageviews";
   const bForecast = bAnalysis?.performanceForecast;
@@ -951,6 +953,25 @@ function ComparisonResults({
       transition={{ delay: 0.1 }}
       className="space-y-4"
     >
+      {(comparisonData.verdict || isLoadingVerdict) && (
+        <Card className="rounded-2xl border border-primary/30 bg-card/80 p-5 backdrop-blur" data-testid="comparison-verdict">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
+            <h3 className="text-sm font-semibold">AI Comparison Verdict</h3>
+          </div>
+          {comparisonData.verdict ? (
+            <p className="text-sm leading-relaxed text-foreground/90" data-testid="text-verdict">{comparisonData.verdict}</p>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Generating AI verdict...
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="comparison-results">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="h-4 w-4 text-primary" />
@@ -965,8 +986,8 @@ function ComparisonResults({
             <thead>
               <tr className="border-b border-border/20 bg-muted/20">
                 <th className="text-left px-4 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Metric</th>
-                <th className="text-right px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">Content A (Actual)</th>
-                <th className="text-right px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">Content B (Estimated)</th>
+                <th className="text-right px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">Baseline (Actual)</th>
+                <th className="text-right px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">New Content (Projected)</th>
                 <th className="text-right px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Delta</th>
               </tr>
             </thead>
@@ -982,9 +1003,9 @@ function ComparisonResults({
                 let bVal = 0;
                 if (bForecast && key === primaryMetric) {
                   bVal = bProjectedMid;
-                } else if (contentB.aggregateBenchmarks) {
+                } else if (comparisonData.aggregateBenchmarks) {
                   const benchKey = key === "avgTime" ? "timeOnPage" : key;
-                  bVal = Math.round((contentB.aggregateBenchmarks as any)[benchKey]?.median || 0);
+                  bVal = Math.round((comparisonData.aggregateBenchmarks as any)[benchKey]?.median || 0);
                 }
                 const delta = aVal > 0 ? Math.round(((bVal - aVal) / aVal) * 100) : 0;
                 const deltaColor = delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-muted-foreground";
@@ -1018,7 +1039,7 @@ function ComparisonResults({
           <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2.5 mb-4">
             <Layers className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-[11px] text-amber-300/80 leading-relaxed">
-              Content A is {contentA.stage} while Content B is {bClassification.stage}. Estimates are based on {bClassification.stage} stage benchmarks.
+              Baseline is {contentA.stage} while new content is {bClassification.stage}. Projections are based on {bClassification.stage} stage benchmarks.
             </p>
           </div>
         )}
@@ -1028,12 +1049,7 @@ function ComparisonResults({
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="analysis-card">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Content B Analysis</h3>
-            {bAnalysis.isFallbackAnalysis && (
-              <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/25 text-[9px] ml-auto">
-                Benchmark-based
-              </Badge>
-            )}
+            <h3 className="text-sm font-semibold">New Content Analysis</h3>
           </div>
 
           <div className="space-y-3">
@@ -1150,12 +1166,12 @@ function ComparisonResults({
         </Card>
       )}
 
-      {contentB.benchmarks.length > 0 && (
+      {comparisonData.benchmarks.length > 0 && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="matching-content-card">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-3.5 w-3.5 text-primary" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Matching Content from Dataset</span>
-            <Badge variant="outline" className="text-[9px] ml-auto">{contentB.benchmarks.length} matches</Badge>
+            <Badge variant="outline" className="text-[9px] ml-auto">{comparisonData.benchmarks.length} matches</Badge>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -1169,7 +1185,7 @@ function ComparisonResults({
                 </tr>
               </thead>
               <tbody>
-                {contentB.benchmarks.map((b, i) => (
+                {comparisonData.benchmarks.map((b, i) => (
                   <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-muted/10 transition-colors">
                     <td className="px-3 py-1.5 max-w-[180px] truncate" title={b.name || b.contentId}>
                       {b.name || b.contentId}
@@ -1190,13 +1206,13 @@ function ComparisonResults({
         </Card>
       )}
 
-      {contentB.aggregateBenchmarks && (
+      {comparisonData.aggregateBenchmarks && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="aggregate-benchmarks">
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="h-3.5 w-3.5 text-primary" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stage Benchmarks</span>
             <Badge variant="outline" className="text-[9px] ml-auto">
-              {contentB.aggregateBenchmarks.sampleSize} of {contentB.aggregateBenchmarks.totalPoolSize} assets
+              {comparisonData.aggregateBenchmarks.sampleSize} of {comparisonData.aggregateBenchmarks.totalPoolSize} assets
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -1207,7 +1223,7 @@ function ComparisonResults({
               { key: "sqos", label: "SQOs" },
               { key: "timeOnPage", label: "Avg Time on Page" },
             ] as const).map(({ key, label }) => {
-              const stats = contentB.aggregateBenchmarks![key];
+              const stats = comparisonData.aggregateBenchmarks![key];
               return (
                 <div key={key} className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">{label}</span>
@@ -1222,7 +1238,7 @@ function ComparisonResults({
             })}
             <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
               <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Avg CTA Count</span>
-              <span className="text-sm font-bold tabular-nums">{contentB.aggregateBenchmarks.avgCtaCount}</span>
+              <span className="text-sm font-bold tabular-nums">{comparisonData.aggregateBenchmarks.avgCtaCount}</span>
             </div>
           </div>
         </Card>
@@ -1231,12 +1247,23 @@ function ComparisonResults({
   );
 }
 
+interface FullComparisonResult {
+  verdict: string;
+  benchmarks: Benchmark[];
+  aggregateBenchmarks: AggregateBenchmarks | null;
+  analysis: Analysis | null;
+  classification: Classification;
+}
+
 export default function ContentComparison() {
   const [approach, setApproach] = useState<ContentApproach | null>(null);
   const [slotA, setSlotA] = useState<SlotAState>(EMPTY_SLOT_A);
   const [slotB, setSlotB] = useState<SlotBState>(EMPTY_SLOT_B);
   const [step, setStep] = useState<"intake" | "baseline" | "results">("intake");
   const [newContentResult, setNewContentResult] = useState<PdfResult | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<FullComparisonResult | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
 
   function handleNewContentReady(result: PdfResult, _savedToLibrary: boolean) {
     setNewContentResult(result);
@@ -1244,9 +1271,94 @@ export default function ContentComparison() {
     setStep("baseline");
   }
 
-  function handleBaselineSelected(asset: AssetPickerItem) {
+  async function handleBaselineSelected(asset: AssetPickerItem) {
     setSlotA({ ...EMPTY_SLOT_A, selectedAsset: asset });
     setStep("results");
+    setComparisonLoading(true);
+    setComparisonError(null);
+    setComparisonResult(null);
+
+    const contentBResult = newContentResult;
+    if (!contentBResult) {
+      setComparisonLoading(false);
+      setComparisonError("No content selected for comparison.");
+      return;
+    }
+
+    const hasFullAnalysis = contentBResult.analysis && contentBResult.benchmarks.length > 0;
+
+    if (hasFullAnalysis) {
+      setComparisonResult({
+        verdict: "",
+        benchmarks: contentBResult.benchmarks,
+        aggregateBenchmarks: contentBResult.aggregateBenchmarks,
+        analysis: contentBResult.analysis,
+        classification: contentBResult.classification,
+      });
+      try {
+        const verdictRes = await authFetch("/api/assets/full-comparison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contentA: {
+              contentId: asset.contentId,
+              name: asset.name || asset.contentId,
+              stage: asset.stage,
+              product: asset.product,
+              type: asset.type,
+              metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
+            },
+            contentB: {
+              name: contentBResult.filename,
+              stage: contentBResult.classification.stage,
+              product: contentBResult.classification.product,
+              contentType: contentBResult.classification.contentType,
+              industry: contentBResult.classification.industry,
+              topic: contentBResult.classification.topic,
+              hasExistingAnalysis: true,
+            },
+          }),
+        });
+        const verdictData = await verdictRes.json();
+        setComparisonResult(prev => prev ? { ...prev, verdict: verdictData.verdict || "" } : prev);
+      } catch {
+        setComparisonResult(prev => prev ? { ...prev, verdict: "Unable to generate AI verdict. The comparison data above is still valid." } : prev);
+      }
+      setComparisonLoading(false);
+      return;
+    }
+
+    try {
+      const res = await authFetch("/api/assets/full-comparison", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentA: {
+            contentId: asset.contentId,
+            name: asset.name || asset.contentId,
+            stage: asset.stage,
+            product: asset.product,
+            type: asset.type,
+            metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
+          },
+          contentB: {
+            name: contentBResult.filename,
+            stage: contentBResult.classification.stage,
+            product: contentBResult.classification.product,
+            contentType: contentBResult.classification.contentType,
+            industry: contentBResult.classification.industry,
+            topic: contentBResult.classification.topic,
+            text: contentBResult.text?.slice(0, 500),
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("Comparison analysis failed");
+      const data = await res.json();
+      setComparisonResult(data);
+    } catch (err: any) {
+      setComparisonError(err.message || "Failed to run comparison analysis.");
+    }
+    setComparisonLoading(false);
   }
 
   function handleReset() {
@@ -1254,6 +1366,9 @@ export default function ContentComparison() {
     setSlotA(EMPTY_SLOT_A);
     setSlotB(EMPTY_SLOT_B);
     setNewContentResult(null);
+    setComparisonResult(null);
+    setComparisonLoading(false);
+    setComparisonError(null);
     setStep("intake");
   }
 
@@ -1275,7 +1390,7 @@ export default function ContentComparison() {
     return null;
   };
 
-  const bothReady = slotA.selectedAsset && slotB.result;
+  const bothReady = slotA.selectedAsset && (comparisonResult || comparisonLoading);
 
   return (
     <div className="space-y-4" data-testid="content-comparison-tool">
@@ -1439,10 +1554,44 @@ export default function ContentComparison() {
         )}
       </motion.div>
 
-      {bothReady && getContentAInfo() && (
+      {step === "results" && comparisonLoading && !comparisonResult && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="rounded-2xl border bg-card/80 p-8 backdrop-blur text-center" data-testid="comparison-loading">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Running AI-Powered Comparison</p>
+                <p className="text-xs text-muted-foreground mt-1">Analyzing content, finding benchmarks, and generating insights...</p>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {step === "results" && comparisonError && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="rounded-2xl border border-destructive/30 bg-card/80 p-5 backdrop-blur" data-testid="comparison-error">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">Comparison Analysis Failed</p>
+                <p className="text-xs text-muted-foreground mt-1">{comparisonError}</p>
+                <Button onClick={() => { if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }} variant="outline" size="sm" className="mt-3 rounded-lg text-xs" data-testid="btn-retry-comparison">
+                  Retry Analysis
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {bothReady && getContentAInfo() && comparisonResult && (
         <ComparisonResults
           contentA={getContentAInfo()!}
-          contentB={slotB.result!}
+          comparisonData={comparisonResult}
+          isLoadingVerdict={comparisonLoading}
         />
       )}
     </div>

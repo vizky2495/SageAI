@@ -658,6 +658,204 @@ No explanation, no markdown, no extra text. Only JSON.`,
     }
   });
 
+  app.post("/api/assets/full-comparison", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { contentA, contentB } = req.body as {
+        contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
+        contentB: { name: string; stage: string; product: string; contentType: string; industry: string; topic: string; text?: string; hasExistingAnalysis?: boolean };
+      };
+
+      if (!contentA || !contentB) {
+        return res.status(400).json({ error: "Both contentA and contentB are required." });
+      }
+
+      const classification = {
+        contentType: contentB.contentType || "Document",
+        stage: contentB.stage || "TOFU",
+        product: contentB.product || "General",
+        industry: contentB.industry || "General",
+        topic: contentB.topic || contentB.name,
+        confidence: 1.0,
+      };
+
+      if (contentB.hasExistingAnalysis) {
+        let verdict = "";
+        try {
+          const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+          const primaryMetric = classification.stage === "BOFU" ? "SQOs" : classification.stage === "MOFU" ? "leads" : "pageviews";
+          const msg = await anthropic.messages.create({
+            model: "claude-sonnet-4-5",
+            max_tokens: 300,
+            system: `You are a senior content strategist for Sage. Compare a baseline content asset (Content A, with real performance data) against a new content asset (Content B). Provide a data-driven comparison verdict in 3-5 sentences. Include: which content has stronger potential, specific metric deltas, and one actionable recommendation.`,
+            messages: [{
+              role: "user",
+              content: `BASELINE (Content A): ${contentA.name} | ${contentA.stage} | Views: ${contentA.metrics.pageviews} | Leads: ${contentA.metrics.leads} | SQOs: ${contentA.metrics.sqos}\n\nNEW CONTENT (Content B): ${contentB.name} | ${classification.stage} | ${classification.contentType} | ${classification.product}\n\nPrimary metric for ${classification.stage} stage: ${primaryMetric}`,
+            }],
+          });
+          verdict = ((msg.content[0] as any).text || "").trim();
+        } catch (verdictErr) {
+          console.error("Verdict-only generation failed:", verdictErr);
+          verdict = `Compare ${contentA.name} (${contentA.metrics.pageviews} views, ${contentA.metrics.leads} leads) against ${contentB.name} to evaluate relative performance potential.`;
+        }
+        return res.json({ verdict });
+      }
+
+      let matchedAssets: any[] = [];
+      let aggregateBenchmarks: any = null;
+
+      try {
+        const allAssets = await storage.getAllAssets();
+        const sameStage = allAssets.filter(a => a.stage === classification.stage);
+        const sameStagePool = sameStage.length >= 5 ? sameStage : allAssets.filter(a => a.stage !== "UNKNOWN");
+
+        const primaryMetricKey: Record<string, string> = { TOFU: "pageviewsSum", MOFU: "uniqueLeads", BOFU: "sqoCount" };
+        const metricKey = primaryMetricKey[classification.stage] || "pageviewsSum";
+
+        const metricValues = sameStagePool.map(a => (a as any)[metricKey] || 0).sort((x: number, y: number) => x - y);
+        const q75Index = Math.floor(metricValues.length * 0.75);
+        const q75Threshold = metricValues.length > 0 ? metricValues[q75Index] : 0;
+        const topPerformers = sameStagePool.filter(a => ((a as any)[metricKey] || 0) >= q75Threshold);
+
+        const pool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
+
+        const classTopicWords: Set<string> = new Set(
+          (classification.topic || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3)
+        );
+        const classProductWords: Set<string> = new Set(
+          (classification.product || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 2)
+        );
+
+        const scored = pool.map(a => {
+          let productScore = 0;
+          if (classification.product !== "General") {
+            const assetProductFields = [a.productFranchise, a.productCategory].filter(Boolean).join(" ").toLowerCase();
+            if (assetProductFields) {
+              for (const pw of classProductWords) {
+                if (assetProductFields.includes(pw)) { productScore = 1; break; }
+              }
+            }
+          }
+
+          let topicScore = 0;
+          if (classTopicWords.size > 0) {
+            const assetWords: Set<string> = new Set(
+              [a.name, a.objective, a.cta, a.campaignName, a.contentId, a.productCategory]
+                .filter(Boolean).join(" ").toLowerCase().split(/[\s_\-]+/).filter(w => w.length > 3)
+            );
+            const overlap = Array.from(classTopicWords).filter(w => assetWords.has(w)).length;
+            topicScore = classTopicWords.size > 0 ? Math.min(overlap / classTopicWords.size, 1) : 0;
+          }
+
+          const relevance = productScore * 0.5 + topicScore * 0.5;
+          return { asset: a, relevance };
+        });
+
+        scored.sort((a, b) => b.relevance - a.relevance);
+        matchedAssets = scored.slice(0, 5).map(s => ({
+          contentId: s.asset.contentId,
+          name: s.asset.name,
+          stage: s.asset.stage,
+          type: s.asset.typecampaignmember,
+          product: s.asset.productFranchise,
+          channel: s.asset.utmChannel,
+          cta: s.asset.cta,
+          pageviews: s.asset.pageviewsSum || 0,
+          downloads: s.asset.downloadsSum || 0,
+          leads: s.asset.uniqueLeads || 0,
+          sqos: s.asset.sqoCount || 0,
+          avgTime: s.asset.timeAvg || 0,
+          relevanceScore: Math.round(s.relevance * 100),
+        }));
+
+        const stats = (arr: number[]) => {
+          if (arr.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
+          const sorted = [...arr].sort((a, b) => a - b);
+          const sum = sorted.reduce((a, b) => a + b, 0);
+          const mean = sum / sorted.length;
+          const mid = Math.floor(sorted.length / 2);
+          const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+          return { min: sorted[0], max: sorted[sorted.length - 1], mean: Math.round(mean * 10) / 10, median };
+        };
+
+        const benchmarkPool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
+        aggregateBenchmarks = {
+          sampleSize: benchmarkPool.length,
+          totalPoolSize: sameStagePool.length,
+          pageviews: stats(benchmarkPool.map(a => a.pageviewsSum || 0)),
+          downloads: stats(benchmarkPool.map(a => a.downloadsSum || 0)),
+          leads: stats(benchmarkPool.map(a => a.uniqueLeads || 0)),
+          sqos: stats(benchmarkPool.map(a => a.sqoCount || 0)),
+          timeOnPage: stats(benchmarkPool.map(a => a.timeAvg || 0)),
+          avgCtaCount: benchmarkPool.length > 0
+            ? Math.round(benchmarkPool.map(a => a.cta ? a.cta.split(/[,;|]/).filter((s: string) => s.trim()).length : 0).reduce((a: number, b: number) => a + b, 0) / benchmarkPool.length * 10) / 10
+            : 0,
+        };
+      } catch (benchErr) {
+        console.error("Full comparison benchmark lookup failed:", benchErr);
+      }
+
+      const analysis = generateFallbackAnalysis(classification, matchedAssets, aggregateBenchmarks, 0, 0);
+
+      let verdict = "";
+      try {
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+        const primaryMetric = classification.stage === "BOFU" ? "SQOs" : classification.stage === "MOFU" ? "leads" : "pageviews";
+        const msg = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 300,
+          system: `You are a senior content strategist for Sage. Compare a baseline content asset (Content A, with real performance data) against a new/candidate content asset (Content B, with projected performance). Provide a data-driven comparison verdict in 3-5 sentences. Include: which content has stronger potential, specific metric deltas, and one actionable recommendation. Use actual numbers from the data provided.`,
+          messages: [{
+            role: "user",
+            content: `BASELINE (Content A):
+Name: ${contentA.name}
+Stage: ${contentA.stage}
+Product: ${contentA.product || "N/A"}
+Type: ${contentA.type || "N/A"}
+Pageviews: ${contentA.metrics.pageviews}
+Downloads: ${contentA.metrics.downloads}
+Leads: ${contentA.metrics.leads}
+SQOs: ${contentA.metrics.sqos}
+Avg Time: ${contentA.metrics.avgTime}s
+
+NEW CONTENT (Content B):
+Name: ${contentB.name}
+Stage: ${classification.stage}
+Type: ${classification.contentType}
+Product: ${classification.product}
+Industry: ${classification.industry}
+
+Stage benchmarks (${classification.stage}):
+${aggregateBenchmarks ? `Median ${primaryMetric}: ${aggregateBenchmarks[primaryMetric === "SQOs" ? "sqos" : primaryMetric].median}, Top performers reach: ${aggregateBenchmarks[primaryMetric === "SQOs" ? "sqos" : primaryMetric].max}` : "No benchmark data available."}
+
+Readiness Score: ${analysis.readinessScore}/100
+Projected ${primaryMetric}: ${analysis.performanceForecast.projectedRange[0]}-${analysis.performanceForecast.projectedRange[1]}`,
+          }],
+        });
+        verdict = ((msg.content[0] as any).text || "").trim();
+      } catch (verdictErr) {
+        console.error("Verdict generation failed:", verdictErr);
+        const primaryMetric = classification.stage === "BOFU" ? "sqos" : classification.stage === "MOFU" ? "leads" : "pageviews";
+        const aVal = contentA.metrics[primaryMetric as keyof typeof contentA.metrics] || 0;
+        const bProjected = Math.round((analysis.performanceForecast.projectedRange[0] + analysis.performanceForecast.projectedRange[1]) / 2);
+        verdict = `Content B (${contentB.name}) has a readiness score of ${analysis.readinessScore}/100 with projected ${primaryMetric} of ${analysis.performanceForecast.projectedRange[0]}-${analysis.performanceForecast.projectedRange[1]}. Content A (${contentA.name}) currently has ${aVal} ${primaryMetric}. ${bProjected > aVal ? "Content B shows potential to outperform the baseline." : "Content A currently leads — Content B needs optimization to close the gap."}`;
+      }
+
+      res.json({
+        verdict,
+        benchmarks: matchedAssets,
+        aggregateBenchmarks,
+        analysis: {
+          ...analysis,
+          isFallbackAnalysis: false,
+        },
+        classification,
+      });
+    } catch (error: any) {
+      console.error("Full comparison error:", error);
+      res.status(500).json({ error: "Comparison analysis failed.", detail: error?.message });
+    }
+  });
+
   app.post("/api/assets/ingest", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body as { rows: any[] };
