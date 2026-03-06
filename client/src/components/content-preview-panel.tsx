@@ -608,10 +608,6 @@ function NotStoredView({
       <Separator />
 
       <div className="flex gap-2" data-testid="preview-panel-actions">
-        <Button variant="outline" size="sm" className="flex-1 gap-1.5" data-testid="button-compare-performance">
-          <GitCompare className="h-3.5 w-3.5" />
-          Compare (performance only)
-        </Button>
         <Button variant="outline" size="sm" className="flex-1 gap-1.5" data-testid="button-ask-ai">
           <Bot className="h-3.5 w-3.5" />
           Ask AI
