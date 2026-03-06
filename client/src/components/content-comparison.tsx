@@ -48,12 +48,13 @@ interface ResonanceRating {
 }
 
 interface ContentOverviewItem {
-  covers: string;
-  writtenFor: string;
-  tone: string;
-  language: string;
-  depth: string;
-  structure: string;
+  summary: string;
+  covers?: string;
+  writtenFor?: string;
+  tone?: string;
+  language?: string;
+  depth?: string;
+  structure?: string;
 }
 
 interface ResonanceDimensions {
@@ -63,10 +64,9 @@ interface ResonanceDimensions {
   productFit: ResonanceRating;
 }
 
-interface TopicRelevanceItem {
+interface KeyTopicItem {
   topic: string;
-  relevance: "Highly relevant" | "Moderately relevant" | "Low relevance";
-  why: string;
+  detail: string;
 }
 
 interface Suggestion {
@@ -96,8 +96,8 @@ interface ComparisonMetadata {
   typeB: string;
   wordCountA: number | null;
   wordCountB: number | null;
-  pageCountA: number | null;
-  pageCountB: number | null;
+  pageCountA?: number | null;
+  pageCountB?: number | null;
   formatA: string;
   formatB: string;
   summaryA: string;
@@ -107,22 +107,18 @@ interface ComparisonMetadata {
   bHasContent?: boolean;
 }
 
-interface WhatThisCoversItem {
-  primaryFocus: string;
-  keyTopics: { topic: string; detail: string; source: string }[];
-  notCovered: string;
-}
-
 interface WhatMakesItWorkItem {
-  factor: string;
-  explanation: string;
-  source: string;
+  point?: string;
+  factor?: string;
+  explanation?: string;
+  source?: string;
 }
 
 interface WhatCouldBeImprovedItem {
-  issue: string;
-  detail: string;
-  source: string;
+  point?: string;
+  issue?: string;
+  detail?: string;
+  source?: string;
 }
 
 interface PdfResult {
@@ -1100,11 +1096,6 @@ function ResonanceBadge({ rating }: { rating: string }) {
   return <Badge className={`${color} border text-[10px] font-semibold`}>{rating}</Badge>;
 }
 
-function RelevanceBadge({ relevance }: { relevance: string }) {
-  const color = relevance.includes("Highly") ? "text-emerald-400" : relevance.includes("Moderately") ? "text-amber-400" : "text-rose-400";
-  return <span className={`text-[10px] font-semibold ${color}`}>{relevance}</span>;
-}
-
 function KeywordTagPills({ tags, type }: { tags: string[]; type: "a" | "b" | "shared" }) {
   if (!tags || tags.length === 0) return null;
   const colorMap = { a: "bg-teal-500/20 text-teal-300 border-teal-500/30", b: "bg-emerald-600/20 text-emerald-300 border-emerald-600/30", shared: "bg-[#00D657]/20 text-[#00D657] border-[#00D657]/40" };
@@ -1137,14 +1128,13 @@ function ComparisonResults({
   const nameB = comparisonData.nameB;
   const overview = comparisonData.contentOverview;
   const resonance = comparisonData.resonanceAssessment;
-  const topics = comparisonData.topicRelevance;
   const shared = comparisonData.sharedAndDifferent;
-  const whatCovers = comparisonData.whatThisCovers;
+  const keyTopics = comparisonData.keyTopics;
   const whatWorks = comparisonData.whatMakesItWork;
   const whatImprove = comparisonData.whatCouldBeImproved;
   const perfDisplay = comparisonData.performanceDisplay || ((mA?.hasData && mB?.hasData) ? "table" : (mA?.hasData || mB?.hasData) ? "inline" : "none");
   const primaryMetric = meta.stageB === "BOFU" ? "sqos" : meta.stageB === "MOFU" ? "leads" : "pageviews";
-  const hasAnalysis = overview || resonance || topics || shared || whatCovers;
+  const hasAnalysis = overview || resonance || shared || keyTopics;
   const tagsA = comparisonData.uniqueTagsA || [];
   const tagsB = comparisonData.uniqueTagsB || [];
   const sharedTagsList = comparisonData.sharedTags || [];
@@ -1154,7 +1144,7 @@ function ComparisonResults({
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-4">
 
-      {overview && (
+      {overview && (overview.a || overview.b) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="content-overview">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="h-4 w-4 text-primary" />
@@ -1162,37 +1152,32 @@ function ComparisonResults({
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, data: overview.a, color: "emerald", tags: tagsA, tagType: "a" as const, metaItems: [
+            {[{ label: nameA, data: overview.a, color: "emerald", tags: tagsA, tagType: "a" as const, hasContent: meta.aHasContent, metaItems: [
               { k: "Stage", v: meta.stageA }, { k: "Product", v: meta.productA }, { k: "Country", v: displayVal(meta.countryA) },
               { k: "Industry", v: displayVal(meta.industryA) }, { k: "Format", v: displayVal(meta.formatA) },
               { k: "Words", v: meta.wordCountA ? `${meta.wordCountA.toLocaleString()}` : "Not specified" },
-            ]}, { label: nameB, data: overview.b, color: "sky", tags: tagsB, tagType: "b" as const, metaItems: [
+            ]}, { label: nameB, data: overview.b, color: "sky", tags: tagsB, tagType: "b" as const, hasContent: meta.bHasContent, metaItems: [
               { k: "Stage", v: meta.stageB }, { k: "Product", v: meta.productB }, { k: "Country", v: displayVal(meta.countryB) },
               { k: "Industry", v: displayVal(meta.industryB) }, { k: "Format", v: displayVal(meta.formatB) },
               { k: "Words", v: meta.wordCountB ? `${meta.wordCountB.toLocaleString()}` : "Not specified" },
-            ]}].map(({ label, data, color, tags, tagType, metaItems }) => (
+            ]}].map(({ label, data, color, tags, tagType, hasContent, metaItems }) => (
               <div key={label} className={`rounded-xl border border-${color}-500/20 bg-${color}-500/5 p-4 space-y-2.5`}>
                 <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
-                {[
-                  { key: "What it covers", val: data.covers },
-                  { key: "Written for", val: data.writtenFor },
-                  { key: "Tone & approach", val: data.tone },
-                  { key: "Language", val: data.language },
-                  { key: "Depth", val: data.depth },
-                  { key: "Structure", val: data.structure },
-                ].map(({ key, val }) => (
-                  <div key={key}>
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{key}</span>
-                    <p className="text-xs text-foreground/85 leading-relaxed mt-0.5">{val}</p>
+                {data?.summary ? (
+                  <p className="text-xs text-foreground/85 leading-relaxed">{data.summary}</p>
+                ) : !hasContent ? (
+                  <p className="text-xs text-amber-400/80 italic">Content not readable — text could not be extracted. Re-upload as text-based PDF or DOCX.</p>
+                ) : null}
+                {tags.length > 0 && (
+                  <div>
+                    <KeywordTagPills tags={tags} type={tagType} />
+                    {sharedTagsList.length > 0 && <div className="mt-1.5"><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
                   </div>
-                ))}
-                <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Keyword Tags</span>
-                  <KeywordTagPills tags={tags} type={tagType} />
-                  {sharedTagsList.length > 0 && <div className="mt-1.5"><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-                </div>
+                )}
+                {!hasContent && tags.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic">Tags: Not available — content not readable</p>
+                )}
                 <div className="pt-2 border-t border-border/20">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Metadata</span>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                     {metaItems.map(({ k, v }) => (
                       <div key={k} className="text-[10px]">
@@ -1208,205 +1193,137 @@ function ComparisonResults({
         </Card>
       )}
 
-      {whatCovers && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="what-this-covers">
-          <div className="flex items-center gap-2 mb-4">
+      {keyTopics && (keyTopics.a?.length || keyTopics.b?.length) ? (
+        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="key-topics">
+          <div className="flex items-center gap-2 mb-3">
             <Layers className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">What This Content Covers</h3>
+            <h3 className="text-sm font-semibold">Key Topics</h3>
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, data: whatCovers.a, color: "emerald" }, { label: nameB, data: whatCovers.b, color: "sky" }].map(({ label, data, color }) => data && (
-              <div key={label} className={`rounded-xl border border-${color}-500/20 bg-${color}-500/5 p-4 space-y-3`}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
-                <div>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">Primary Focus</span>
-                  <p className="text-xs text-foreground/85 leading-relaxed mt-0.5">{data.primaryFocus}</p>
+            {[{ label: nameA, items: keyTopics.a, color: "emerald" }, { label: nameB, items: keyTopics.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
+              <div key={label}>
+                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-2`}>{label}</h4>
+                <div className="space-y-1">
+                  {items.slice(0, 5).map((t, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      <span className="text-primary mt-0.5 shrink-0">-</span>
+                      <span><strong className="text-foreground/90">{t.topic}:</strong> <span className="text-foreground/70">{t.detail}</span></span>
+                    </div>
+                  ))}
                 </div>
-                {data.keyTopics && data.keyTopics.length > 0 && (
-                  <div>
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase block mb-1.5">Key Topics Discussed</span>
-                    <div className="space-y-2">
-                      {data.keyTopics.map((t, i) => (
-                        <div key={i} className="rounded-lg bg-background/40 p-2.5">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-semibold">{t.topic}</span>
-                            <SourceTag type={t.source?.includes("Internal") ? "internal" : "content"} />
-                          </div>
-                          <p className="text-[11px] text-foreground/75 leading-relaxed">{t.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {data.notCovered && (
-                  <div>
-                    <span className="text-[10px] font-semibold text-amber-400 uppercase">What It Does NOT Cover</span>
-                    <p className="text-xs text-foreground/75 leading-relaxed mt-0.5">{data.notCovered}</p>
-                  </div>
-                )}
               </div>
             ))}
           </div>
-          {whatCovers.comparisonInsight && (
-            <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 mt-4">
+          {keyTopics.comparisonInsight && (
+            <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 mt-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Zap className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[10px] font-semibold text-primary uppercase">Comparison Insight</span>
+                <span className="text-[10px] font-semibold text-primary uppercase">Insight</span>
               </div>
-              <p className="text-xs leading-relaxed text-foreground/85">{whatCovers.comparisonInsight}</p>
+              <p className="text-xs leading-relaxed text-foreground/85">{keyTopics.comparisonInsight}</p>
             </div>
           )}
         </Card>
-      )}
+      ) : null}
 
-      {resonance && (
+      {resonance && (resonance.a || resonance.b) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="resonance-assessment">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <Target className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Audience Resonance Assessment</h3>
+            <h3 className="text-sm font-semibold">Audience Resonance</h3>
             <SourceTag type="content" />
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, dims: resonance.a, color: "emerald", suggestedStage: resonance.suggestedStageA, currentStage: meta.stageA },
-              { label: nameB, dims: resonance.b, color: "sky", suggestedStage: resonance.suggestedStageB, currentStage: meta.stageB }].map(({ label, dims, color, suggestedStage, currentStage }) => (
-              <div key={label} className={`rounded-xl border border-${color}-500/20 bg-${color}-500/5 p-4 space-y-3`}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
-                {[
-                  { key: "Country/Region Fit", dim: dims.countryFit },
-                  { key: "Industry Fit", dim: dims.industryFit },
-                  { key: "Funnel Stage Fit", dim: dims.funnelStageFit },
-                  { key: "Product Fit", dim: dims.productFit },
-                ].map(({ key, dim }) => (
-                  <div key={key} className="rounded-lg bg-background/40 p-2.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">{key}</span>
-                      <ResonanceBadge rating={dim.rating} />
-                    </div>
-                    <p className="text-[11px] text-foreground/75 leading-relaxed">{dim.explanation}</p>
-                  </div>
-                ))}
-                {suggestedStage && suggestedStage !== currentStage && (
-                  <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                      Based on content analysis, this may perform better as <strong>{suggestedStage}</strong>. Current tag: {currentStage}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {topics && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="topic-relevance">
-          <div className="flex items-center gap-2 mb-4">
-            <Layers className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Topic Relevance</h3>
-            <SourceTag type="content" />
-          </div>
-          {[{ label: nameA, items: topics.a, color: "emerald" }, { label: nameB, items: topics.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
-            <div key={label} className="mb-4">
-              <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-2`}>{label}</h4>
-              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border/20 bg-muted/20">
-                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Topic</th>
-                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Relevant?</th>
-                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Why</th>
+          <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/20 bg-muted/20">
+                  <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Dimension</th>
+                  {resonance.a && <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>}
+                  {resonance.b && <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/10">
+                {(["countryFit", "industryFit", "funnelStageFit", "productFit"] as const).map((dimKey) => {
+                  const labels: Record<string, string> = { countryFit: "Country/Region", industryFit: "Industry", funnelStageFit: "Funnel Stage", productFit: "Product" };
+                  return (
+                    <tr key={dimKey}>
+                      <td className="px-3 py-2 font-medium text-muted-foreground">{labels[dimKey]}</td>
+                      {resonance.a && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <ResonanceBadge rating={resonance.a[dimKey].rating} />
+                            <span className="text-foreground/70 text-[10px]">{resonance.a[dimKey].explanation}</span>
+                          </div>
+                        </td>
+                      )}
+                      {resonance.b && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <ResonanceBadge rating={resonance.b[dimKey].rating} />
+                            <span className="text-foreground/70 text-[10px]">{resonance.b[dimKey].explanation}</span>
+                          </div>
+                        </td>
+                      )}
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/10">
-                    {items.map((item, i) => (
-                      <tr key={i}>
-                        <td className="px-3 py-2 font-medium">{item.topic}</td>
-                        <td className="px-3 py-2"><RelevanceBadge relevance={item.relevance} /></td>
-                        <td className="px-3 py-2 text-foreground/75">{item.why}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-          {topics.aiInsight && (
-            <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 mt-2">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Zap className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[10px] font-semibold text-primary uppercase">AI Insight</span>
-              </div>
-              <p className="text-xs leading-relaxed text-foreground/85">{topics.aiInsight}</p>
-            </div>
-          )}
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
-      {shared && (
+      {shared && (shared.overlap?.length || shared.divergence?.length || sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="shared-different">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <ArrowLeftRight className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">What's Shared, What's Different</h3>
+            <h3 className="text-sm font-semibold">Shared vs Different</h3>
             <SourceTag type="content" />
           </div>
           {(sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
-            <div className="mb-4 rounded-lg bg-muted/10 border border-border/30 p-3">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase block mb-2">Tag Overlap</span>
-              {sharedTagsList.length > 0 && <div className="mb-2"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-              {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Unique to {nameA}:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
-              {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Unique to {nameB}:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
+            <div className="mb-3 rounded-lg bg-muted/10 border border-border/30 p-3">
+              {sharedTagsList.length > 0 && <div className="mb-1.5"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
+              {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only {nameA}:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
+              {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only {nameB}:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
             </div>
           )}
-          {shared.overlap && shared.overlap.length > 0 && (
-            <div className="mb-4">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Where They Overlap</span>
-              <div className="space-y-1.5">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {shared.overlap && shared.overlap.length > 0 && (
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 block mb-1.5">Overlap</span>
                 {shared.overlap.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2 rounded-lg bg-muted/10 border border-border/30 p-2.5">
-                    <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-foreground/80 leading-relaxed">{item}</p>
-                  </div>
+                  <p key={i} className="text-xs text-foreground/80 leading-relaxed mb-1">- {item}</p>
                 ))}
               </div>
-            </div>
-          )}
-          {shared.divergence && shared.divergence.length > 0 && (
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Where They Diverge</span>
-              <div className="space-y-1.5">
+            )}
+            {shared.divergence && shared.divergence.length > 0 && (
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-sky-400 block mb-1.5">Differences</span>
                 {shared.divergence.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2 rounded-lg bg-muted/10 border border-border/30 p-2.5">
-                    <ArrowLeftRight className="h-3.5 w-3.5 text-sky-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-foreground/80 leading-relaxed">{item}</p>
-                  </div>
+                  <p key={i} className="text-xs text-foreground/80 leading-relaxed mb-1">- {item}</p>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
       )}
 
       {whatWorks && (whatWorks.a?.length || whatWorks.b?.length) ? (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="what-makes-it-work">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">What Makes This Content Work</h3>
-            <SourceTag type="content" />
+            <h3 className="text-sm font-semibold">What Works</h3>
             <SourceTag type="internal" />
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-3">
             {[{ label: nameA, items: whatWorks.a, color: "emerald" }, { label: nameB, items: whatWorks.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
-              <div key={label} className="space-y-2">
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
-                {items.map((item, i) => (
-                  <div key={i} className="rounded-lg border-l-2 border-[#00D657] bg-[#0A3D1F]/50 p-3">
-                    <span className="text-xs font-semibold text-[#00D657]">{item.factor}</span>
-                    <p className="text-[11px] text-foreground/80 leading-relaxed mt-1">{item.explanation}</p>
-                    <SourceTag type={item.source?.includes("Internal") ? "internal" : "content"} />
-                  </div>
-                ))}
+              <div key={label}>
+                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-1.5`}>{label}</h4>
+                {items.slice(0, 3).map((item, i) => {
+                  const text = item.point || (item.factor && item.explanation ? `${item.factor}: ${item.explanation}` : item.factor || item.explanation || "");
+                  return text ? <p key={i} className="text-xs text-foreground/80 leading-relaxed mb-1">- {text}</p> : null;
+                })}
               </div>
             ))}
           </div>
@@ -1415,22 +1332,19 @@ function ComparisonResults({
 
       {whatImprove && (whatImprove.a?.length || whatImprove.b?.length) ? (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="what-could-be-improved">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">What Could Be Improved</h3>
+            <h3 className="text-sm font-semibold">Could Be Improved</h3>
             <SourceTag type="content" />
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-3">
             {[{ label: nameA, items: whatImprove.a, color: "emerald" }, { label: nameB, items: whatImprove.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
-              <div key={label} className="space-y-2">
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
-                {items.map((item, i) => (
-                  <div key={i} className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
-                    <span className="text-xs font-semibold text-amber-400">{item.issue}</span>
-                    <p className="text-[11px] text-foreground/75 leading-relaxed mt-1">{item.detail}</p>
-                    <SourceTag type="content" />
-                  </div>
-                ))}
+              <div key={label}>
+                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-1.5`}>{label}</h4>
+                {items.slice(0, 3).map((item, i) => {
+                  const text = item.point || (item.issue && item.detail ? `${item.issue}: ${item.detail}` : item.issue || item.detail || "");
+                  return text ? <p key={i} className="text-xs text-foreground/75 leading-relaxed mb-1">- {text}</p> : null;
+                })}
               </div>
             ))}
           </div>
@@ -1442,28 +1356,24 @@ function ComparisonResults({
           <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
             <Zap className="h-4 w-4 text-primary" />
           </div>
-          <h3 className="text-sm font-semibold">Verdict & Suggestions</h3>
-          <SourceTag type="content" />
-          <SourceTag type="internal" />
+          <h3 className="text-sm font-semibold">Verdict</h3>
         </div>
         {comparisonData.verdict ? (
-          <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line mb-4" data-testid="text-verdict">{comparisonData.verdict}</div>
+          <p className="text-sm leading-relaxed text-foreground/90 mb-4" data-testid="text-verdict">{comparisonData.verdict}</p>
         ) : isLoadingVerdict ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Analyzing content resonance...
+            Analyzing content...
           </div>
         ) : null}
 
         {comparisonData.suggestions && comparisonData.suggestions.length > 0 && (
-          <div className="space-y-2 mt-3">
-            {comparisonData.suggestions.map((s, i) => (
-              <div key={i} className="rounded-lg bg-primary/5 border border-primary/15 p-3 flex items-start gap-2.5">
-                <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full h-5 w-5 flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                <div className="min-w-0">
-                  <p className="text-xs leading-relaxed">{s.text}</p>
-                  <SourceTag type={s.source?.includes("Internal") ? "internal" : s.source?.includes("Content") ? "content" : "recommendation"} />
-                </div>
+          <div className="space-y-1.5 mt-2">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase block">Suggestions</span>
+            {comparisonData.suggestions.slice(0, 4).map((s, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs">
+                <span className="text-primary font-bold shrink-0">{i + 1}.</span>
+                <p className="text-foreground/80 leading-relaxed">{s.text}</p>
               </div>
             ))}
           </div>
@@ -1472,9 +1382,9 @@ function ComparisonResults({
 
       {perfDisplay === "table" && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="performance-comparison">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Performance Comparison</h3>
+            <h3 className="text-sm font-semibold">Performance</h3>
             <SourceTag type="internal" />
           </div>
           <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
@@ -1521,9 +1431,9 @@ function ComparisonResults({
 
       {perfDisplay === "inline" && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="performance-inline">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-2">
             <BarChart3 className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Performance Data</h3>
+            <h3 className="text-sm font-semibold">Performance</h3>
             <SourceTag type="internal" />
           </div>
           <p className="text-xs text-foreground/85 leading-relaxed">
@@ -1565,11 +1475,10 @@ function ComparisonResults({
 interface FullComparisonResult {
   nameA: string;
   nameB: string;
-  contentOverview: { a: ContentOverviewItem; b: ContentOverviewItem } | null;
-  resonanceAssessment: { a: ResonanceDimensions; b: ResonanceDimensions; suggestedStageA?: string | null; suggestedStageB?: string | null } | null;
-  topicRelevance: { a: TopicRelevanceItem[]; b: TopicRelevanceItem[]; aiInsight: string } | null;
-  sharedAndDifferent: { overlap: string[]; divergence: string[]; sharedTags?: string[]; uniqueTagsA?: string[]; uniqueTagsB?: string[] } | null;
-  whatThisCovers: { a: WhatThisCoversItem; b: WhatThisCoversItem; comparisonInsight: string } | null;
+  contentOverview: { a: ContentOverviewItem | null; b: ContentOverviewItem | null } | null;
+  resonanceAssessment: { a: ResonanceDimensions | null; b: ResonanceDimensions | null; suggestedStageA?: string | null; suggestedStageB?: string | null } | null;
+  sharedAndDifferent: { overlap: string[]; divergence: string[] } | null;
+  keyTopics: { a: KeyTopicItem[] | null; b: KeyTopicItem[] | null; comparisonInsight: string } | null;
   whatMakesItWork: { a: WhatMakesItWorkItem[] | null; b: WhatMakesItWorkItem[] | null } | null;
   whatCouldBeImproved: { a: WhatCouldBeImprovedItem[] | null; b: WhatCouldBeImprovedItem[] | null } | null;
   keywordTagsA: string[];

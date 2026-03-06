@@ -27,11 +27,10 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 interface FullComparisonResult {
   nameA: string;
   nameB: string;
-  contentOverview: { a: any; b: any } | null;
-  resonanceAssessment: { a: any; b: any; suggestedStageA?: string | null; suggestedStageB?: string | null } | null;
-  topicRelevance: { a: any[]; b: any[]; aiInsight: string } | null;
-  sharedAndDifferent: { overlap: string[]; divergence: string[]; sharedTags?: string[]; uniqueTagsA?: string[]; uniqueTagsB?: string[] } | null;
-  whatThisCovers?: { a: any; b: any; comparisonInsight: string } | null;
+  contentOverview: { a: { summary: string } | null; b: { summary: string } | null } | null;
+  resonanceAssessment: { a: any | null; b: any | null; suggestedStageA?: string | null; suggestedStageB?: string | null } | null;
+  sharedAndDifferent: { overlap: string[]; divergence: string[] } | null;
+  keyTopics?: { a: { topic: string; detail: string }[] | null; b: { topic: string; detail: string }[] | null; comparisonInsight: string } | null;
   whatMakesItWork?: { a: any[] | null; b: any[] | null } | null;
   whatCouldBeImproved?: { a: any[] | null; b: any[] | null } | null;
   keywordTagsA?: string[];
@@ -49,7 +48,7 @@ interface FullComparisonResult {
     stageA: string; stageB: string; productA: string; productB: string;
     countryA: string; countryB: string; industryA: string; industryB: string;
     typeA: string; typeB: string; wordCountA: number | null; wordCountB: number | null;
-    pageCountA: number | null; pageCountB: number | null; formatA: string; formatB: string;
+    formatA: string; formatB: string;
     summaryA: string; summaryB: string; bothHaveContent: boolean;
     aHasContent?: boolean; bHasContent?: boolean;
   };
@@ -195,31 +194,6 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     y += tagH + 2;
   }
 
-  function drawCalloutBox(title: string, text: string, srcLabel?: string) {
-    checkPage(18);
-    const lines = doc.splitTextToSize(text, CONTENT_W - 10);
-    const boxH = Math.max(12, lines.length * 3.2 + 10);
-    checkPage(boxH + 4);
-    setFill(SAGE.calloutBg);
-    doc.rect(MARGIN, y - 2, CONTENT_W, boxH, "F");
-    setFill(SAGE.green);
-    doc.rect(MARGIN, y - 2, 1.5, boxH, "F");
-    setColor(SAGE.green);
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "bold");
-    doc.text(title, MARGIN + 5, y + 2);
-    setColor(SAGE.bodyText);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    let ty = y + 6;
-    for (const line of lines) {
-      doc.text(line, MARGIN + 5, ty);
-      ty += 3.2;
-    }
-    y += boxH + 3;
-    if (srcLabel) sourceTag(srcLabel);
-  }
-
   // === COVER PAGE ===
   newPage();
   try {
@@ -266,21 +240,15 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sourceTag("Source: Content Analysis");
     y += 2;
 
-    const overviewFields = ["covers", "writtenFor", "tone", "language", "depth", "structure"] as const;
-    const labels: Record<string, string> = { covers: "What it covers", writtenFor: "Written for", tone: "Tone & approach", language: "Language", depth: "Depth", structure: "Structure" };
-
     [{ name: data.nameA, ov: data.contentOverview!.a, tags: data.uniqueTagsA || [], tagColor: SAGE.tagTeal },
      { name: data.nameB, ov: data.contentOverview!.b, tags: data.uniqueTagsB || [], tagColor: SAGE.tagJade }].forEach(({ name, ov, tags, tagColor }) => {
       if (!ov) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
-      for (const field of overviewFields) {
-        if (ov[field]) {
-          wrappedText(`${labels[field]}:`, SAGE.muted, 7, CONTENT_W, true);
-          wrappedText(ov[field], SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
-          y += 1.5;
-        }
+      if (ov.summary) {
+        wrappedText(ov.summary, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+        y += 1.5;
       }
       if (tags.length > 0) {
         y += 1;
@@ -294,7 +262,6 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared tags: ");
     }
 
-    // Metadata table
     const meta = data.metadata;
     y += 2;
     checkPage(30);
@@ -304,7 +271,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     drawTableRow(["", data.nameA, data.nameB], metaWidths, true, false);
     const metaRows = [
       ["Format", dv(meta.formatA), dv(meta.formatB)],
-      ["Word Count", meta.wordCountA?.toLocaleString() || "Not specified", meta.wordCountB?.toLocaleString() || "Not specified"],
+      ["Word Count", meta.wordCountA?.toLocaleString() || "N/A", meta.wordCountB?.toLocaleString() || "N/A"],
       ["Country/Region", dv(meta.countryA), dv(meta.countryB)],
       ["Funnel Stage", meta.stageA, meta.stageB],
       ["Product", dv(meta.productA), dv(meta.productB)],
@@ -313,128 +280,103 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     metaRows.forEach((row, i) => drawTableRow(row, metaWidths, false, i % 2 === 0));
   }
 
-  // === WHAT THIS CONTENT COVERS ===
-  const wtc = data.whatThisCovers;
-  if (wtc && (wtc.a || wtc.b)) {
+  // === KEY TOPICS ===
+  const kt = data.keyTopics;
+  if (kt && (kt.a?.length || kt.b?.length)) {
     newPage();
-    sectionTitle("What This Content Covers");
+    sectionTitle("Key Topics");
     sourceTag("Source: Content Analysis");
     y += 2;
 
-    [{ name: data.nameA, item: wtc.a }, { name: data.nameB, item: wtc.b }].forEach(({ name, item }) => {
-      if (!item) return;
+    [{ name: data.nameA, items: kt.a }, { name: data.nameB, items: kt.b }].forEach(({ name, items }) => {
+      if (!items?.length) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
-
-      if (item.primaryFocus) {
-        wrappedText("Primary Focus:", SAGE.muted, 7, CONTENT_W, true);
-        wrappedText(item.primaryFocus, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
-        y += 2;
-      }
-
-      if (item.keyTopics?.length) {
-        wrappedText("Key Topics Discussed:", SAGE.muted, 7, CONTENT_W, true);
-        y += 1;
-        for (const t of item.keyTopics) {
-          checkPage(12);
-          wrappedText(t.topic, SAGE.white, 7.5, CONTENT_W - 4, true, 4);
-          wrappedText(t.detail, SAGE.bodyText, 7, CONTENT_W - 8, false, 6);
-          y += 2;
-        }
-      }
-
-      if (item.notCovered) {
+      for (const t of items.slice(0, 5)) {
         checkPage(10);
-        wrappedText("What It Does NOT Cover:", SAGE.sourceAmber, 7, CONTENT_W, true);
-        wrappedText(item.notCovered, SAGE.bodyText, 7, CONTENT_W - 4, false, 2);
-        y += 2;
+        wrappedText(`${t.topic}: ${t.detail}`, SAGE.bodyText, 7.5, CONTENT_W - 6, false, 4);
+        y += 1.5;
       }
-      y += 4;
+      y += 3;
     });
 
-    if (wtc.comparisonInsight) {
+    if (kt.comparisonInsight) {
       checkPage(14);
       wrappedText("Comparison Insight", SAGE.green, 9, CONTENT_W, true);
       y += 1;
-      wrappedText(wtc.comparisonInsight, SAGE.bodyText, 8, CONTENT_W);
+      wrappedText(kt.comparisonInsight, SAGE.bodyText, 8, CONTENT_W);
       y += 2;
-      sourceTag("Source: Content Analysis");
     }
   }
 
   // === AUDIENCE RESONANCE ASSESSMENT ===
-  if (data.resonanceAssessment) {
+  if (data.resonanceAssessment && (data.resonanceAssessment.a || data.resonanceAssessment.b)) {
     newPage();
-    sectionTitle("Audience Resonance Assessment");
+    sectionTitle("Audience Resonance");
     sourceTag("Source: Content Analysis");
     y += 2;
 
     const dims = [
-      { key: "countryFit", label: "Country/Region Fit" },
-      { key: "industryFit", label: "Industry Fit" },
-      { key: "funnelStageFit", label: "Funnel Stage Fit" },
-      { key: "productFit", label: "Product Fit" },
+      { key: "countryFit", label: "Country/Region" },
+      { key: "industryFit", label: "Industry" },
+      { key: "funnelStageFit", label: "Funnel Stage" },
+      { key: "productFit", label: "Product" },
     ] as const;
 
-    const meta = data.metadata;
-    [{ name: data.nameA, assessment: data.resonanceAssessment.a, suggested: data.resonanceAssessment.suggestedStageA, current: meta.stageA },
-     { name: data.nameB, assessment: data.resonanceAssessment.b, suggested: data.resonanceAssessment.suggestedStageB, current: meta.stageB }].forEach(({ name, assessment, suggested, current }) => {
-      if (!assessment) return;
-      checkPage(10);
+    const resWidths = data.resonanceAssessment.a && data.resonanceAssessment.b
+      ? [35, 15, 55, 15, 50]
+      : [35, 15, 120];
+
+    if (data.resonanceAssessment.a && data.resonanceAssessment.b) {
+      drawTableRow(["Dimension", "Rating", data.nameA, "Rating", data.nameB], resWidths, true, false);
+      for (let i = 0; i < dims.length; i++) {
+        const dimKey = dims[i].key;
+        const dA = data.resonanceAssessment.a[dimKey];
+        const dB = data.resonanceAssessment.b[dimKey];
+        drawTableRow([
+          dims[i].label,
+          dA?.rating || "N/A",
+          dA?.explanation || "",
+          dB?.rating || "N/A",
+          dB?.explanation || "",
+        ], resWidths, false, i % 2 === 0);
+      }
+    } else {
+      const assessment = data.resonanceAssessment.a || data.resonanceAssessment.b;
+      const name = data.resonanceAssessment.a ? data.nameA : data.nameB;
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
-
-      for (const dim of dims) {
-        const d = assessment[dim.key];
-        if (!d) continue;
-        checkPage(14);
-        const ratingColor = d.rating === "Strong" ? SAGE.green : d.rating === "Moderate" ? SAGE.sourceAmber : "#EF4444";
-        wrappedText(`${dim.label}:`, SAGE.white, 8, CONTENT_W - 30, true);
-        const savedY = y;
-        y = savedY - 3.6;
-        setColor(ratingColor);
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "bold");
-        doc.text(d.rating, PAGE_W - MARGIN, y, { align: "right" });
-        y = savedY;
-        wrappedText(d.explanation, SAGE.bodyText, 7, CONTENT_W - 4, false, 2);
-        y += 2;
+      drawTableRow(["Dimension", "Rating", "Explanation"], resWidths, true, false);
+      for (let i = 0; i < dims.length; i++) {
+        const d = assessment[dims[i].key];
+        drawTableRow([dims[i].label, d?.rating || "N/A", d?.explanation || ""], resWidths, false, i % 2 === 0);
       }
-
-      if (suggested && suggested !== current) {
-        checkPage(8);
-        wrappedText(`Note: Based on content analysis, this may perform better as ${suggested}. Current tag: ${current}`, SAGE.sourceAmber, 7, CONTENT_W - 4, false, 2);
-        y += 2;
-      }
-      y += 4;
-    });
+    }
   }
 
   // === WHAT'S SHARED, WHAT'S DIFFERENT ===
-  const hasTagData = (data.sharedTags?.length || data.uniqueTagsA?.length || data.uniqueTagsB?.length || data.sharedAndDifferent?.sharedTags?.length || data.sharedAndDifferent?.uniqueTagsA?.length || data.sharedAndDifferent?.uniqueTagsB?.length);
+  const hasTagData = (data.sharedTags?.length || data.uniqueTagsA?.length || data.uniqueTagsB?.length);
   if (data.sharedAndDifferent && (data.sharedAndDifferent.overlap?.length || data.sharedAndDifferent.divergence?.length || hasTagData)) {
     newPage();
-    sectionTitle("What's Shared, What's Different");
+    sectionTitle("Shared vs Different");
     sourceTag("Source: Content Analysis");
     y += 2;
 
-    const sTags = data.sharedTags || data.sharedAndDifferent.sharedTags || [];
-    const uTagsA = data.uniqueTagsA || data.sharedAndDifferent.uniqueTagsA || [];
-    const uTagsB = data.uniqueTagsB || data.sharedAndDifferent.uniqueTagsB || [];
+    const sTags = data.sharedTags || [];
+    const uTagsA = data.uniqueTagsA || [];
+    const uTagsB = data.uniqueTagsB || [];
 
     if (sTags.length > 0 || uTagsA.length > 0 || uTagsB.length > 0) {
-      wrappedText("Tag Overlap", SAGE.green, 9, CONTENT_W, true);
-      y += 1;
       if (sTags.length) drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared: ");
-      if (uTagsA.length) drawTags(uTagsA, SAGE.tagTeal, "", `Unique to ${data.nameA}: `);
-      if (uTagsB.length) drawTags(uTagsB, SAGE.tagJade, "", `Unique to ${data.nameB}: `);
-      y += 3;
+      if (uTagsA.length) drawTags(uTagsA, SAGE.tagTeal, "", `Only ${data.nameA}: `);
+      if (uTagsB.length) drawTags(uTagsB, SAGE.tagJade, "", `Only ${data.nameB}: `);
+      y += 2;
     }
 
     if (data.sharedAndDifferent.overlap?.length) {
-      wrappedText("Where They Overlap", SAGE.green, 9, CONTENT_W, true);
-      y += 2;
+      wrappedText("Overlap", SAGE.green, 9, CONTENT_W, true);
+      y += 1;
       data.sharedAndDifferent.overlap.forEach(item => {
         checkPage(8);
         wrappedText(`- ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
@@ -444,8 +386,8 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     }
 
     if (data.sharedAndDifferent.divergence?.length) {
-      wrappedText("Where They Diverge", SAGE.green, 9, CONTENT_W, true);
-      y += 2;
+      wrappedText("Differences", SAGE.green, 9, CONTENT_W, true);
+      y += 1;
       data.sharedAndDifferent.divergence.forEach(item => {
         checkPage(8);
         wrappedText(`- ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
@@ -454,12 +396,11 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     }
   }
 
-  // === WHAT MAKES THIS CONTENT WORK ===
+  // === WHAT WORKS / COULD BE IMPROVED ===
   const wmw = data.whatMakesItWork;
   if (wmw && (wmw.a?.length || wmw.b?.length)) {
     newPage();
-    sectionTitle("What Makes This Content Work");
-    sourceTag("Source: Content Analysis + Internal Data");
+    sectionTitle("What Works");
     y += 2;
 
     [{ name: data.nameA, items: wmw.a }, { name: data.nameB, items: wmw.b }].forEach(({ name, items }) => {
@@ -467,20 +408,21 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
-
-      for (const item of items) {
-        drawCalloutBox(item.factor, item.explanation, `Source: ${item.source || "Content Analysis + Internal Data"}`);
+      for (const item of items.slice(0, 3)) {
+        const text = item.point || (item.factor && item.explanation ? `${item.factor}: ${item.explanation}` : item.factor || item.explanation || "");
+        if (!text) continue;
+        checkPage(8);
+        wrappedText(`- ${text}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+        y += 1.5;
       }
       y += 3;
     });
   }
 
-  // === WHAT COULD BE IMPROVED ===
   const wci = data.whatCouldBeImproved;
   if (wci && (wci.a?.length || wci.b?.length)) {
     checkPage(40);
-    sectionTitle("What Could Be Improved");
-    sourceTag("Source: Content Analysis");
+    sectionTitle("Could Be Improved");
     y += 2;
 
     [{ name: data.nameA, items: wci.a }, { name: data.nameB, items: wci.b }].forEach(({ name, items }) => {
@@ -488,70 +430,35 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
-
-      for (const item of items) {
-        checkPage(14);
-        wrappedText(item.issue, SAGE.sourceAmber, 8, CONTENT_W, true);
-        wrappedText(item.detail, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
-        y += 1;
-        sourceTag(`Source: ${item.source || "Content Analysis"}`);
-        y += 1;
+      for (const item of items.slice(0, 3)) {
+        const text = item.point || (item.issue && item.detail ? `${item.issue}: ${item.detail}` : item.issue || item.detail || "");
+        if (!text) continue;
+        checkPage(8);
+        wrappedText(`- ${text}`, SAGE.sourceAmber, 7.5, CONTENT_W - 4, false, 2);
+        y += 1.5;
       }
       y += 3;
     });
   }
 
-  // === TOPIC RELEVANCE ===
-  if (data.topicRelevance && (data.topicRelevance.a?.length || data.topicRelevance.b?.length)) {
-    newPage();
-    sectionTitle("Topic Relevance");
-    sourceTag("Source: Content Analysis");
-    y += 2;
-
-    const topicWidths = [45, 30, 85];
-    [{ name: data.nameA, items: data.topicRelevance.a }, { name: data.nameB, items: data.topicRelevance.b }].forEach(({ name, items }) => {
-      if (!items?.length) return;
-      checkPage(10);
-      wrappedText(name, SAGE.green, 9, CONTENT_W, true);
-      y += 2;
-      drawTableRow(["Topic", "Relevant?", "Why"], topicWidths, true, false);
-      items.forEach((item: any, i: number) => {
-        drawTableRow([item.topic || "", item.relevance || "", item.why || ""], topicWidths, false, i % 2 === 0);
-      });
-      y += 5;
-    });
-
-    if (data.topicRelevance.aiInsight) {
-      checkPage(14);
-      wrappedText("AI Insight", SAGE.green, 9, CONTENT_W, true);
-      y += 1;
-      wrappedText(data.topicRelevance.aiInsight, SAGE.bodyText, 8, CONTENT_W);
-      y += 3;
-    }
-  }
-
   // === VERDICT & SUGGESTIONS ===
   if (data.verdict || data.suggestions?.length) {
     newPage();
-    sectionTitle("Verdict & Suggestions");
+    sectionTitle("Verdict");
     y += 2;
 
     if (data.verdict) {
       wrappedText(data.verdict, SAGE.bodyText, 9, CONTENT_W);
-      y += 2;
-      sourceTag("Source: Content Analysis + Internal Data");
       y += 4;
     }
 
     if (data.suggestions?.length) {
-      wrappedText("Actionable Suggestions", SAGE.green, 10, CONTENT_W, true);
+      wrappedText("Suggestions", SAGE.green, 10, CONTENT_W, true);
       y += 2;
-      data.suggestions.forEach((s, i) => {
-        checkPage(12);
+      data.suggestions.slice(0, 4).forEach((s, i) => {
+        checkPage(10);
         wrappedText(`${i + 1}. ${s.text}`, SAGE.bodyText, 8, CONTENT_W - 4, false, 2);
-        const srcType = s.source?.includes("Internal") ? "Internal Data" : s.source?.includes("Content") ? "Content Analysis" : "AI Recommendation";
-        sourceTag(`Source: ${srcType}`, MARGIN + 4);
-        y += 1;
+        y += 2;
       });
     }
   }
@@ -561,7 +468,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
   if (perfDisplay === "table") {
     newPage();
-    sectionTitle("Performance Comparison");
+    sectionTitle("Performance");
     sourceTag("Source: Internal Data");
     y += 2;
 
@@ -590,7 +497,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     });
   } else if (perfDisplay === "inline") {
     checkPage(20);
-    sectionTitle("Performance Data");
+    sectionTitle("Performance");
     sourceTag("Source: Internal Data");
     y += 2;
     const summary = data.performanceInlineSummary || `Performance data available for ${data.metricsA.hasData ? data.nameA : data.nameB} only.`;

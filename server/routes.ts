@@ -762,93 +762,80 @@ No explanation, no markdown, no extra text. Only JSON.`,
     ${bHasMetrics ? '"b": [{ "factor": "factor name", "explanation": "connect content characteristics to engagement data — why does this work?", "source": "Content Analysis + Internal Data" }]' : '"b": null'}
   },` : '';
 
+          const aReadable = !!aTextForAnalysis;
+          const bReadable = !!bTextForAnalysis;
+
           const analysisMsg = await anthropic.messages.create({
             model: "claude-sonnet-4-5",
-            max_tokens: 8000,
-            system: `You are a senior content strategist evaluating which of two content assets will resonate better with the target audience. You evaluate content through four resonance dimensions: Country/Region fit, Industry fit, Funnel Stage fit, and Product fit. Be specific and cite evidence from the actual content. Do NOT fabricate performance numbers or readiness scores.
+            max_tokens: 4000,
+            system: `You are a senior content strategist producing a CONCISE comparison report. Be brief and scannable — a busy campaign planner should understand this in 5 minutes.
 
-IMPORTANT RULES:
-- Read the FULL content text provided for each asset. Your analysis must reference specific details FROM the content.
-- Generate 8-15 specific keyword tags per content piece. Tags must be SPECIFIC (e.g. "Year-End Payroll", "CRA Reporting") not generic (e.g. "Accounting", "Business"). Each tag 1-3 words max.
-- For "whatThisCovers": explain what the content actually SAYS about each topic, not just list topics. Include what it does NOT cover.
-- For "whatMakesItWork": ONLY include if the asset has real engagement data. Connect content characteristics to performance data.
-- For "whatCouldBeImproved": ONLY include specific gaps you actually found in the content. Never generate generic improvement advice.
-- Source tags must be used: "Content Analysis" for insights from reading the content, "Internal Data" for engagement metrics, "AI Recommendation" for suggestions.
+CRITICAL HONESTY RULES:
+- ONLY analyze content you were given FULL TEXT for. Content A readable: ${aReadable}. Content B readable: ${bReadable}.
+- If content text was NOT provided for an asset, you MUST NOT generate tags, summaries, topic analysis, resonance ratings, or improvement suggestions for it. Instead set those fields to null.
+- NEVER guess tags from titles, filenames, or metadata. Tags come ONLY from reading actual content text.
+- NEVER write speculative summaries like "Based on the title, this likely covers..." — if you didn't read it, say nothing.
 
-Return ONLY valid JSON with this exact structure:
+CONCISENESS RULES:
+- contentOverview.summary: 3-4 sentences max combining what it covers, audience, tone, and structure. NOT separate fields.
+- keyTopics: 4-5 bullet items max, one sentence each. Not paragraphs.
+- resonance explanations: 1 sentence each. Example: "Moderate — no Canada-specific regulations referenced despite Canadian market tag."
+- sharedAndDifferent: 3-4 bullet points each for overlap and divergence. Not paragraphs.
+- whatMakesItWork: 2-3 bullet points max, one line each connecting content to metrics. Only for assets with engagement data AND readable content.
+- whatCouldBeImproved: 2-3 bullet points max. Only for readable content where you found specific gaps.
+- verdict: 1 paragraph max. The key conclusion only.
+- suggestions: Maximum 4 items, 1-2 sentences each.
+
+Return ONLY valid JSON:
 {
   "contentOverview": {
-    "a": { "covers": "what the content covers in plain language", "writtenFor": "who the target audience is", "tone": "the tone and approach", "language": "the language used", "depth": "word count and level of detail", "structure": "how it is organized" },
-    "b": { "covers": "...", "writtenFor": "...", "tone": "...", "language": "...", "depth": "...", "structure": "..." }
+    "a": ${aReadable ? '{ "summary": "3-4 sentence overview combining coverage, audience, tone, structure" }' : 'null'},
+    "b": ${bReadable ? '{ "summary": "3-4 sentence overview" }' : 'null'}
   },
-  "keywordTagsA": ["Specific Tag 1", "Specific Tag 2", ...],
-  "keywordTagsB": ["Specific Tag 1", "Specific Tag 2", ...],
-  "whatThisCovers": {
-    "a": {
-      "primaryFocus": "This content is primarily about [main topic]. It walks the reader through [what it explains].",
-      "keyTopics": [
-        { "topic": "topic name", "detail": "What the content says about this topic, including specific details, examples, or guidance provided. Covered in [depth level].", "source": "Content Analysis" }
-      ],
-      "notCovered": "Notable gaps: topics you'd expect given the product/stage/audience that are missing."
-    },
-    "b": { "primaryFocus": "...", "keyTopics": [...], "notCovered": "..." },
-    "comparisonInsight": "Content A talks about [themes] while Content B talks about [themes]. The overlap is in [shared areas]. The key difference is... For [target audience], Content [A/B]'s approach is more likely to resonate because [reason]."
+  "keywordTagsA": ${aReadable ? '["Specific Tag 1", "Specific Tag 2", "...8-15 tags from READING the content"]' : '[]'},
+  "keywordTagsB": ${bReadable ? '["Specific Tag 1", "Specific Tag 2", "...8-15 tags"]' : '[]'},
+  "keyTopics": {
+    "a": ${aReadable ? '[{ "topic": "topic name", "detail": "one sentence on what content says about this" }]' : 'null'},
+    "b": ${bReadable ? '[{ "topic": "topic name", "detail": "one sentence" }]' : 'null'},
+    "comparisonInsight": ${aReadable && bReadable ? '"1-2 sentences on how they differ"' : aReadable ? '"Analysis based on Content A only. Content B could not be read."' : '"Analysis based on Content B only. Content A could not be read."'}
   },
   "resonanceAssessment": {
-    "a": {
-      "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences" },
-      "industryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences" },
-      "funnelStageFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences" },
-      "productFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences" }
-    },
-    "b": { "countryFit": {...}, "industryFit": {...}, "funnelStageFit": {...}, "productFit": {...} },
-    "suggestedStageA": "TOFU|MOFU|BOFU or null if stage matches",
-    "suggestedStageB": "TOFU|MOFU|BOFU or null if stage matches"
+    "a": ${aReadable ? '{ "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" }, "industryFit": { "rating": "...", "explanation": "1 sentence" }, "funnelStageFit": { "rating": "...", "explanation": "1 sentence" }, "productFit": { "rating": "...", "explanation": "1 sentence" } }' : 'null'},
+    "b": ${bReadable ? '{ "countryFit": { "rating": "...", "explanation": "1 sentence" }, "industryFit": {...}, "funnelStageFit": {...}, "productFit": {...} }' : 'null'},
+    "suggestedStageA": "TOFU|MOFU|BOFU or null",
+    "suggestedStageB": "TOFU|MOFU|BOFU or null"
   },
-  "topicRelevance": {
-    "a": [{ "topic": "topic name", "relevance": "Highly relevant|Moderately relevant|Low relevance", "why": "brief explanation" }],
-    "b": [{ "topic": "topic name", "relevance": "...", "why": "..." }],
-    "aiInsight": "2-3 sentences comparing topic approaches"
-  },
-  "sharedAndDifferent": {
-    "overlap": ["shared element 1", ...],
-    "divergence": ["difference 1", ...],
-    "sharedTags": ["tags that appear in both"],
-    "uniqueTagsA": ["tags unique to A"],
-    "uniqueTagsB": ["tags unique to B"]
-  },${whatMakesItWorkInstruction}
+  "sharedAndDifferent": ${aReadable && bReadable ? '{ "overlap": ["3-4 short bullet points"], "divergence": ["3-4 short bullet points"] }' : 'null'},${(aHasMetrics && aReadable) || (bHasMetrics && bReadable) ? `
+  "whatMakesItWork": {
+    ${aHasMetrics && aReadable ? '"a": [{ "point": "one line connecting content characteristic to metric" }],' : '"a": null,'}
+    ${bHasMetrics && bReadable ? '"b": [{ "point": "one line connecting content characteristic to metric" }]' : '"b": null'}
+  },` : ''}
   "whatCouldBeImproved": {
-    "a": [{ "issue": "issue name", "detail": "specific gap with actionable fix", "source": "Content Analysis" }],
-    "b": [{ "issue": "issue name", "detail": "...", "source": "Content Analysis" }]
+    "a": ${aReadable ? '[{ "point": "specific gap found — one line" }]' : 'null'},
+    "b": ${bReadable ? '[{ "point": "specific gap found — one line" }]' : 'null'}
   },
-  "verdict": "A substantive verdict (2-3 paragraphs) stating which content resonates better with the target audience and why. Reference engagement data where provided. Acknowledge different purposes. Explain WHY one approach works better for this specific audience. Based ONLY on actual content and real data.",
-  "suggestions": [
-    { "text": "specific actionable suggestion grounded in analysis", "source": "AI Recommendation|Content Analysis|Internal Data" }
-  ]
+  "verdict": "1 paragraph: which resonates better and why. ${!aReadable || !bReadable ? 'Acknowledge that only one content was readable.' : 'Based on actual content and real data only.'}",
+  "suggestions": [{ "text": "1-2 sentence actionable suggestion", "source": "AI Recommendation|Content Analysis|Internal Data" }]
 }`,
             messages: [{
               role: "user",
               content: `CONTENT A — "${nameA}":
 Tagged Stage: ${stageA} | Product: ${productA} | Country/Region: ${countryA || "Not specified"} | Industry: ${industryA || "Not specified"} | Format: ${contentAStored?.contentFormat || typeA}
 ${aSummary ? `Summary: ${aSummary}` : ""}
-Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages, ${aStructure.sectionCount || "?"} sections
-Headings: ${(aStructure.headings || []).join("; ") || "none"}
-Existing keyword tags: ${aKeywordTags.join(", ") || "none"}
+Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages
 Engagement data: ${engagementBlockA}
 
-${aTextForAnalysis ? `Full content text (first 12000 chars):\n${aTextForAnalysis.slice(0, 12000)}` : "Content text not available — analyze based on metadata only."}
+${aTextForAnalysis ? `FULL CONTENT TEXT:\n${aTextForAnalysis.slice(0, 12000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}
 
 ---
 
 CONTENT B — "${nameB}":
 Tagged Stage: ${stageB} | Product: ${productB} | Country/Region: ${countryB || "Not specified"} | Industry: ${industryB || "Not specified"} | Format: ${contentBStored?.contentFormat || typeB}
 ${bSummary ? `Summary: ${bSummary}` : ""}
-Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages, ${bStructure.sectionCount || "?"} sections
-Headings: ${(bStructure.headings || []).join("; ") || "none"}
-Existing keyword tags: ${bKeywordTags.join(", ") || "none"}
+Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages
 Engagement data: ${engagementBlockB}
 
-${bTextForAnalysis ? `Full content text (first 12000 chars):\n${bTextForAnalysis.slice(0, 12000)}` : "Content text not available — analyze based on metadata only."}`,
+${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}`,
             }],
           });
           const analysisText = ((analysisMsg.content[0] as any).text || "").trim();
@@ -863,30 +850,43 @@ ${bTextForAnalysis ? `Full content text (first 12000 chars):\n${bTextForAnalysis
 
       const contentOverview = resonanceAnalysis?.contentOverview || null;
       const resonanceAssessment = resonanceAnalysis?.resonanceAssessment || null;
-      const topicRelevance = resonanceAnalysis?.topicRelevance || null;
       const sharedAndDifferent = resonanceAnalysis?.sharedAndDifferent || null;
-      const whatThisCovers = resonanceAnalysis?.whatThisCovers || null;
+      const keyTopics = resonanceAnalysis?.keyTopics || null;
       const whatMakesItWork = resonanceAnalysis?.whatMakesItWork || null;
       const whatCouldBeImproved = resonanceAnalysis?.whatCouldBeImproved || null;
 
-      const finalKeywordTagsA: string[] = resonanceAnalysis?.keywordTagsA || aKeywordTags;
-      const finalKeywordTagsB: string[] = resonanceAnalysis?.keywordTagsB || bKeywordTags;
-      const sharedTags = sharedAndDifferent?.sharedTags || finalKeywordTagsA.filter((t: string) => finalKeywordTagsB.some((bt: string) => bt.toLowerCase() === t.toLowerCase()));
-      const uniqueTagsA = sharedAndDifferent?.uniqueTagsA || finalKeywordTagsA.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
-      const uniqueTagsB = sharedAndDifferent?.uniqueTagsB || finalKeywordTagsB.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
+      const aReadable = !!aTextForAnalysis;
+      const bReadable = !!bTextForAnalysis;
+
+      let finalKeywordTagsA: string[] = resonanceAnalysis?.keywordTagsA || [];
+      let finalKeywordTagsB: string[] = resonanceAnalysis?.keywordTagsB || [];
+      if (!aReadable) finalKeywordTagsA = [];
+      if (!bReadable) finalKeywordTagsB = [];
+
+      const sharedTags = finalKeywordTagsA.filter((t: string) => finalKeywordTagsB.some((bt: string) => bt.toLowerCase() === t.toLowerCase()));
+      const uniqueTagsA = finalKeywordTagsA.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
+      const uniqueTagsB = finalKeywordTagsB.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
 
       let verdict = resonanceAnalysis?.verdict || "";
       let suggestions = resonanceAnalysis?.suggestions || [];
 
       if (!verdict) {
-        const parts = [`${nameA} (${stageA}) vs ${nameB} (${stageB}).`];
-        if (aHasMetrics) parts.push(`${nameA} has ${metricsA.pageviews} pageviews, ${metricsA.leads} leads, ${metricsA.sqos} SQOs. [Source: Internal Data]`);
-        else parts.push(`${nameA} has no engagement data yet.`);
-        if (bHasMetrics) parts.push(`${nameB} has ${metricsB.pageviews} pageviews, ${metricsB.leads} leads, ${metricsB.sqos} SQOs. [Source: Internal Data]`);
-        else parts.push(`${nameB} has no engagement data yet.`);
-        if (!bothHaveContent) parts.push("Upload content for both assets to get a full resonance analysis with keyword tags, topic breakdowns, and content insights. [Source: Content Analysis]");
-        verdict = parts.join(" ");
+        if (!aReadable && !bReadable) {
+          verdict = "Neither content could be analyzed — text could not be extracted from either file. Upload readable files (text-based PDF or DOCX) to enable comparison.";
+        } else if (!aReadable || !bReadable) {
+          const readable = aReadable ? nameA : nameB;
+          const unreadable = aReadable ? nameB : nameA;
+          verdict = `This analysis covers ${readable} only. ${unreadable} could not be analyzed because the text could not be extracted. Re-upload ${unreadable} as a text-based PDF or DOCX to enable full comparison.`;
+        }
       }
+
+      if (!aReadable && !bReadable && suggestions.length === 0) {
+        suggestions = [{ text: "Re-upload both content files as text-based PDFs or DOCX to enable analysis.", source: "AI Recommendation" }];
+      } else if ((!aReadable || !bReadable) && suggestions.length > 0) {
+        const unreadable = !aReadable ? nameA : nameB;
+        suggestions.push({ text: `Re-upload ${unreadable} as a text-based PDF or DOCX to enable full analysis.`, source: "AI Recommendation" });
+      }
+      suggestions = suggestions.slice(0, 4);
 
       const performanceDisplay = (aHasMetrics && bHasMetrics) ? "table" : (aHasMetrics || bHasMetrics) ? "inline" : "none";
       let performanceInlineSummary: string | null = null;
@@ -894,7 +894,7 @@ ${bTextForAnalysis ? `Full content text (first 12000 chars):\n${bTextForAnalysis
         const hasM = aHasMetrics ? metricsA : metricsB;
         const hasName = aHasMetrics ? nameA : nameB;
         const noName = aHasMetrics ? nameB : nameA;
-        performanceInlineSummary = `Performance data available for ${hasName} only: ${hasM.pageviews} pageviews, ${hasM.leads} leads, ${hasM.sqos} SQOs, ${hasM.avgTime}s avg time. ${noName} has no engagement history yet. [Source: Internal Data]`;
+        performanceInlineSummary = `${hasName}: ${hasM.pageviews} pageviews, ${hasM.leads} leads, ${hasM.sqos} SQOs, ${hasM.avgTime}s avg time. ${noName} has no engagement data.`;
       }
 
       res.json({
@@ -902,9 +902,8 @@ ${bTextForAnalysis ? `Full content text (first 12000 chars):\n${bTextForAnalysis
         nameB,
         contentOverview,
         resonanceAssessment,
-        topicRelevance,
         sharedAndDifferent,
-        whatThisCovers,
+        keyTopics,
         whatMakesItWork,
         whatCouldBeImproved,
         keywordTagsA: finalKeywordTagsA,
@@ -922,8 +921,6 @@ ${bTextForAnalysis ? `Full content text (first 12000 chars):\n${bTextForAnalysis
           stageA, stageB, productA, productB, countryA, countryB, industryA, industryB, typeA, typeB,
           wordCountA: aStructure.wordCount || null,
           wordCountB: bStructure.wordCount || null,
-          pageCountA: aStructure.pageCount || null,
-          pageCountB: bStructure.pageCount || null,
           formatA: contentAStored?.contentFormat || typeA,
           formatB: contentBStored?.contentFormat || typeB,
           summaryA: aSummary,

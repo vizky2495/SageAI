@@ -1,0 +1,94 @@
+You're absolutely right on both points. The report is too long — 11 pages when the user just wants to quickly understand the comparison. And Content B's tags are fabricated — the AI made up tags like "Sage Payroll", "Payroll Management", "Visit Matters" from the title and metadata, not from actually reading the content. That's dishonest.
+
+Prompt for Replit:
+
+Fix these two critical issues in the Content Comparison Report and add them to the existing comparison prompt:
+
+FIX 1: THE REPORT IS TOO LONG — MAKE IT CONCISE AND SCANNABLE
+
+The current report is 11 pages. A campaign planner or content manager does not have time to read 11 pages to understand a comparison. The report should be a maximum of 3-4 pages (excluding cover page) that can be scanned in 5 minutes.
+
+Rules for conciseness:
+
+Content Overview: 3-4 sentences per content piece maximum. Not full paragraphs on tone, language, depth, and structure separately — combine into one tight summary.
+"What This Content Covers" section: remove entirely as a separate section. Merge the key topics into the Content Overview as a bullet list of 4-5 main topics. Do not write a paragraph per topic — just list them with one line each.
+Audience Resonance: 1 sentence per dimension per content piece. Not a paragraph. Example: "Country fit: Moderate — no Canada-specific regulations referenced despite Canadian market tag." That's it.
+"What's Shared, What's Different": 3-4 bullet points for each. Not paragraphs.
+"What Makes This Content Work": 2-3 bullet points with one line each connecting a content characteristic to a metric. Not a paragraph per factor.
+"What Could Be Improved": 2-3 bullet points maximum. Not 5+ detailed improvement essays.
+Verdict: 1 paragraph maximum — the key conclusion. Not 4-5 paragraphs.
+Suggestions: Maximum 4 suggestions, 1-2 sentences each. Not 8 suggestions with detailed explanations.
+Performance Data: 1 line inline summary if one-sided. Table only if both have data.
+Target structure (3-4 pages total after cover):
+
+Page 1 (Cover): Title, names, date, branding
+
+Page 2 (Overview + Tags + Resonance):
+
+Two side-by-side content summaries (3-4 sentences each)
+Keyword tags as pills below each summary
+Resonance ratings in a compact table: 4 rows (country, industry, stage, product) × 2 columns (Content A, Content B) with rating + one-line explanation
+Page 3 (Analysis):
+
+Key topics as a compact comparison (bullet lists, not paragraphs)
+Shared vs Different as bullet points
+What works / What could improve as bullet points (only for content that was actually read)
+Page 4 (Verdict + Actions):
+
+Verdict: 1 clear paragraph
+Suggestions: 3-4 numbered items, concise
+Performance summary: inline text, not a table (if one-sided)
+If there is less information (e.g., one content not readable), the report should be 2-3 pages. Never pad it.
+
+The same conciseness rules apply to the on-screen comparison UI — what's shown on screen should be scannable, not a wall of text.
+
+FIX 2: NEVER GENERATE TAGS, ANALYSIS, OR CLAIMS FOR CONTENT THAT WAS NOT READ
+
+The current report generates tags for Content B like "Sage Payroll", "Payroll Management", "Visit Matters", "Payroll Accuracy", "Employee Management" — but the AI never read Content B. These tags were invented from the title and metadata. This is dishonest and misleading.
+
+Strict rules:
+
+Tags: ONLY generate keyword tags from content the AI actually read (content_text is populated and non-empty). If the AI did not read the content, show: "Tags: Not available — content text could not be extracted" with NO tags generated. Never guess tags from the title, filename, or metadata.
+Content summaries: ONLY write "What it covers", "Written for", "Tone & approach" from content the AI actually read. If the AI did not read the content, show: "Content summary not available — text could not be extracted from the uploaded file." Do NOT write speculative summaries like "Based on title, this likely covers..." or "Cannot determine but probably addresses..."
+Resonance assessment: For content the AI did not read, do NOT rate country fit, industry fit, funnel stage fit, or product fit based on metadata alone. Show: "Resonance assessment requires readable content. Re-upload this file as a text-based PDF or DOCX."
+Topic relevance: For content the AI did not read, do NOT create a topic table with guessed topics like "Sage Payroll Capabilities — Highly relevant" or "Payroll Compliance — Moderately relevant". These are fabricated. Show: "Topic analysis not available — content not readable."
+"What Makes This Content Work" / "What Could Be Improved": ONLY for content the AI actually read AND has engagement data. Never for content that wasn't read.
+Suggestions: Only suggest improvements for content the AI actually read. For unreadable content, the only valid suggestion is: "Re-upload this content in a text-based format to enable analysis."
+Comparison insights: When one content is readable and the other is not, say so directly: "This analysis is based on Content A only. Content B could not be analyzed because the text could not be extracted. Re-upload Content B as a text-based PDF or DOCX to enable full comparison." Do NOT write speculative comparisons like "Content B likely addresses..." or "Based on BOFU tagging, Content B probably..."
+The principle: if the AI didn't read it, the AI doesn't talk about it. No speculation. No inference from titles or metadata. Only facts from content that was actually read, or an honest statement that the content could not be read.
+
+HOW THE REPORT SHOULD HANDLE ONE-SIDED ANALYSIS:
+
+When Content A was read but Content B was not:
+
+Title the report: "Content Analysis: [Content A name]" with a subtitle: "Comparison with [Content B name] pending — content not readable"
+Focus the entire report on Content A — give the user full value from the content that WAS readable
+For Content B, show one clear block at the top:
+"Content B: [name]"
+"Status: File uploaded but text could not be extracted"
+"Tags: Not available"
+"Analysis: Not available — re-upload as text-based PDF or DOCX"
+That's it. No speculation. No guessed tags. No assumed topics.
+The verdict should acknowledge: "This analysis covers Content A only. A full comparison requires readable content for both assets."
+Suggestions should focus on Content A improvements + one suggestion to fix Content B upload
+When neither content was read:
+
+Show engagement data comparison only (if both have data)
+Or show: "Neither content could be analyzed. Upload readable files to enable comparison."
+Report should be 1-2 pages maximum
+COMBINED: WHAT THE COMPARISON REPORT SHOULD BE
+
+A short (3-4 pages max), honest, scannable report that:
+
+Only contains analysis from content the AI actually read
+Never fabricates tags, topics, summaries, or assessments for unreadable content
+Uses bullet points and compact tables instead of long paragraphs
+Can be scanned in 5 minutes by a busy campaign planner
+Provides clear, actionable insights for the content that was analyzed
+Honestly states when analysis is incomplete and what the user needs to do to fix it
+Follows Sage brand template styling
+Has dynamic page count driven by available content, not a fixed template
+These two fixes are non-negotiable. A long report gets ignored. Fabricated analysis destroys trust. The report should be short, honest, and only say what it actually knows.
+
+
+
