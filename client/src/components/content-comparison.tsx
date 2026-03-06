@@ -874,9 +874,11 @@ function ManualEntryPanel({
 function SelectedAssetCard({
   asset,
   onClear,
+  hasContent,
 }: {
   asset: AssetPickerItem;
   onClear: () => void;
+  hasContent?: boolean;
 }) {
   return (
     <div className="rounded-xl bg-muted/10 border border-border/30 p-4 space-y-3">
@@ -919,6 +921,12 @@ function SelectedAssetCard({
         <MetricPill label="SQOs" value={asset.sqos} />
         <MetricPill label="Avg Time" value={asset.avgTime} />
       </div>
+
+      {hasContent === false && (
+        <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2 text-[11px] text-muted-foreground" data-testid="text-content-not-uploaded">
+          Content not uploaded for this asset. Performance comparison is available. Upload the content file in the Content Library to also compare topics, messaging, CTA quality, and structure.
+        </div>
+      )}
     </div>
   );
 }
@@ -1264,6 +1272,7 @@ export default function ContentComparison() {
   const [comparisonResult, setComparisonResult] = useState<FullComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [baselineHasContent, setBaselineHasContent] = useState<boolean | undefined>(undefined);
 
   function handleNewContentReady(result: PdfResult, _savedToLibrary: boolean) {
     setNewContentResult(result);
@@ -1277,6 +1286,14 @@ export default function ContentComparison() {
     setComparisonLoading(true);
     setComparisonError(null);
     setComparisonResult(null);
+    setBaselineHasContent(undefined);
+    authFetch("/api/content/status")
+      .then(r => r.json())
+      .then((statusMap: Record<string, { fetchStatus: string }>) => {
+        const entry = statusMap[asset.contentId];
+        setBaselineHasContent(entry ? entry.fetchStatus === "success" : false);
+      })
+      .catch(() => setBaselineHasContent(undefined));
 
     const contentBResult = newContentResult;
     if (!contentBResult) {
@@ -1531,7 +1548,7 @@ export default function ContentComparison() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Baseline (Content A)</span>
-                <SelectedAssetCard asset={slotA.selectedAsset} onClear={() => { setSlotA(EMPTY_SLOT_A); setStep("baseline"); }} />
+                <SelectedAssetCard asset={slotA.selectedAsset} onClear={() => { setSlotA(EMPTY_SLOT_A); setStep("baseline"); setBaselineHasContent(undefined); }} hasContent={baselineHasContent} />
               </div>
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">New Content (Content B)</span>

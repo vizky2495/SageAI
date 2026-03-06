@@ -36,6 +36,8 @@ interface GreetingStats {
   totalLeads?: number;
   totalPageviews?: number;
   topPerformer?: { contentId: string; sqos: number; stage: string } | null;
+  contentCoverage?: Record<string, { total: number; withContent: number }>;
+  totalWithContent?: number;
 }
 
 interface PageChatProps {
@@ -249,9 +251,15 @@ function getGreetingMessage(agent: string, stats: GreetingStats | null): { title
   const total = stats.totalAssets || 0;
 
   if (agent === "librarian") {
+    const withContent = stats.totalWithContent || 0;
+    const coverageNote = withContent > 0 && total > 0
+      ? ` ${formatNum(withContent)} of ${formatNum(total)} have content uploaded for deeper analysis.`
+      : total > 0
+        ? ` Upload content for your top performers so I can give you deeper analysis.`
+        : "";
     return {
       title: "Content Librarian",
-      message: `I've analyzed your ${formatNum(tofu)} TOFU and ${formatNum(mofu)} MOFU assets. Want to know which ones are actually performing?`,
+      message: `I've analyzed your ${formatNum(tofu)} TOFU and ${formatNum(mofu)} MOFU assets.${coverageNote} Want to know which ones are actually performing?`,
       actions: [{ label: "Show top performers", prompt: "Show me the top performing content assets by SQO conversion." }, { label: "Open chat", prompt: "" }],
     };
   }

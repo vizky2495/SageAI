@@ -1667,6 +1667,11 @@ Respond with ONLY valid JSON in this exact format:
         totalAssets += s.count;
       }
       const topPerformer = summary.top_content?.[0] || null;
+      const contentCoverage = await storage.getContentCoverage();
+      let totalWithContent = 0;
+      for (const stage of Object.values(contentCoverage)) {
+        totalWithContent += stage.withContent;
+      }
       res.json({
         hasData: true,
         totalAssets,
@@ -1675,6 +1680,8 @@ Respond with ONLY valid JSON in this exact format:
         totalLeads: summary.metric_totals.leads,
         totalPageviews: summary.metric_totals.pageviews,
         topPerformer: topPerformer ? { contentId: topPerformer.contentId, sqos: topPerformer.sqos, stage: topPerformer.stage } : null,
+        contentCoverage,
+        totalWithContent,
       });
     } catch (err: any) {
       console.error("Greeting stats error:", err);

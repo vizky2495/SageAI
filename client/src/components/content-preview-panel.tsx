@@ -25,8 +25,6 @@ import {
   BarChart3,
   ChevronDown,
   ChevronRight,
-  GitCompare,
-  Bot,
   Clock,
   Eye,
   Users,
@@ -604,9 +602,6 @@ function NotStoredView({
       <AssetDetails asset={asset} stage={stage} />
 
       <EngagementMetrics asset={asset} />
-
-      <Separator />
-
     </div>
   );
 }
