@@ -533,6 +533,49 @@ async function buildCampaignPlansSummary(userId: string): Promise<string | null>
 
 const MAX_CONTEXT_EXCHANGES = 4;
 
+async function buildContentLibraryContext(): Promise<string | null> {
+  try {
+    const allContent = await storage.getAllStoredContentAnalysis();
+    if (allContent.length === 0) return null;
+
+    let ctx = `\n\n=== CONTENT LIBRARY: UPLOADED & ANALYZED CONTENT ===\n`;
+    ctx += `Total assets with content uploaded: ${allContent.length}\n`;
+    ctx += `Use this data to answer questions about content quality, topics, CTAs, messaging themes, structure, and keyword tags.\n\n`;
+
+    const analyzed = allContent.filter(c => c.contentSummary || c.extractedTopics?.length || c.extractedCta);
+    const displayList = analyzed.length > 0 ? analyzed : allContent;
+    const capped = displayList.slice(0, 50);
+    if (capped.length < displayList.length) {
+      ctx += `(Showing ${capped.length} of ${displayList.length} assets with uploaded content)\n\n`;
+    }
+
+    for (const c of capped) {
+      const topicTags = (c.keywordTags.topic_tags || []).join(", ");
+      const audienceTags = (c.keywordTags.audience_tags || []).join(", ");
+      const intentTags = (c.keywordTags.intent_tags || []).join(", ");
+      const userTags = (c.keywordTags.user_added_tags || []).join(", ");
+      ctx += `--- ${c.assetId} ---\n`;
+      ctx += `Format: ${c.contentFormat || "unknown"} | Source: ${c.sourceType === "url_fetched" ? "URL fetched" : c.sourceType === "file_uploaded" ? (c.originalFilename || "Uploaded file") : c.sourceType}\n`;
+      const summary = c.contentSummary && c.contentSummary.length > 300 ? c.contentSummary.slice(0, 300) + "..." : c.contentSummary;
+      if (summary) ctx += `Summary: ${summary}\n`;
+      if (c.extractedTopics?.length) ctx += `Topics: ${c.extractedTopics.join(", ")}\n`;
+      if (c.extractedCta) ctx += `CTA: "${c.extractedCta.text}" (${c.extractedCta.type}, strength: ${c.extractedCta.strength})\n`;
+      if (c.messagingThemes?.length) ctx += `Messaging Themes: ${c.messagingThemes.join(", ")}\n`;
+      if (c.contentStructure) ctx += `Structure: ${c.contentStructure.wordCount} words, ${c.contentStructure.sectionCount} sections, ${c.contentStructure.pageCount} pages\n`;
+      if (topicTags) ctx += `Topic Tags: ${topicTags}\n`;
+      if (audienceTags) ctx += `Audience Tags: ${audienceTags}\n`;
+      if (intentTags) ctx += `Intent Tags: ${intentTags}\n`;
+      if (userTags) ctx += `Custom Tags: ${userTags}\n`;
+      ctx += `\n`;
+    }
+
+    return ctx;
+  } catch (err) {
+    console.error("Content library context error:", err);
+    return null;
+  }
+}
+
 async function buildContentStorageContext(userMessage: string): Promise<string | null> {
   try {
     const assetIdPatterns = userMessage.match(/[A-Z]{2}_[A-Z]+_[A-Z0-9_]+/g) || [];
@@ -855,6 +898,10 @@ export function registerChatRoutes(app: Express): void {
         ? await buildContentStorageContext(content)
         : null;
 
+      const contentLibraryCtx = (agentType === "librarian")
+        ? await buildContentLibraryContext()
+        : null;
+
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
         systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
@@ -867,6 +914,9 @@ export function registerChatRoutes(app: Express): void {
       } else if (agentType === "librarian") {
         const librarianContext = buildPlannerContext(summary);
         systemPrompt = `${LIBRARIAN_PROMPT}\n\n${librarianContext}`;
+        if (contentLibraryCtx) {
+          systemPrompt += contentLibraryCtx;
+        }
         if (campaignContext) {
           systemPrompt += `\n${campaignContext}`;
         }
@@ -885,7 +935,7 @@ export function registerChatRoutes(app: Express): void {
       let fullResponse = "";
       let retryAttempt = false;
 
-      const tokenLimit = agentType === "planner" ? 4096 : 1500;
+      const tokenLimit = agentType === "planner" ? 4096 : agentType === "librarian" ? 2500 : 1500;
 
       const runStream = async () => {
         const stream = anthropic.messages.stream({

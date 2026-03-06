@@ -57,6 +57,7 @@ export interface IStorage {
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
   getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags }>>;
+  getAllStoredContentAnalysis(): Promise<Array<{ assetId: string; fetchStatus: string; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; messagingThemes: string[] | null; contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null; contentFormat: string | null; sourceType: string; originalFilename: string | null; keywordTags: import("@shared/schema").StructuredKeywordTags }>>;
   getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }>;
   updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
   deleteContent(assetId: string): Promise<void>;
@@ -299,6 +300,38 @@ export class DatabaseStorage implements IStorage {
       };
     }
     return map;
+  }
+
+  async getAllStoredContentAnalysis(): Promise<Array<{ assetId: string; fetchStatus: string; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; messagingThemes: string[] | null; contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null; contentFormat: string | null; sourceType: string; originalFilename: string | null; keywordTags: StructuredKeywordTags }>> {
+    const rows = await db
+      .select({
+        assetId: contentStored.assetId,
+        fetchStatus: contentStored.fetchStatus,
+        contentSummary: contentStored.contentSummary,
+        extractedTopics: contentStored.extractedTopics,
+        extractedCta: contentStored.extractedCta,
+        messagingThemes: contentStored.messagingThemes,
+        contentStructure: contentStored.contentStructure,
+        contentFormat: contentStored.contentFormat,
+        sourceType: contentStored.sourceType,
+        originalFilename: contentStored.originalFilename,
+        keywordTags: contentStored.keywordTags,
+      })
+      .from(contentStored)
+      .where(sql`${contentStored.fetchStatus} != 'not_stored'`);
+    return rows.map(r => ({
+      assetId: r.assetId,
+      fetchStatus: r.fetchStatus,
+      contentSummary: r.contentSummary,
+      extractedTopics: r.extractedTopics as string[] | null,
+      extractedCta: r.extractedCta as { text: string; type: string; strength: string; location: string } | null,
+      messagingThemes: r.messagingThemes as string[] | null,
+      contentStructure: r.contentStructure as { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null,
+      contentFormat: r.contentFormat,
+      sourceType: r.sourceType,
+      originalFilename: r.originalFilename,
+      keywordTags: normalizeKeywordTags(r.keywordTags as any),
+    }));
   }
 
   async getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }> {

@@ -57,7 +57,7 @@ Organized into `client/`, `server/`, `shared/`, and `attached_assets/` directori
     -   CIA Agent for data-grounded answers.
     -   Campaign Planner for generating campaign strategies.
     -   Content Comparison for resonance analysis.
-    -   Content Librarian for classification, comparison, and recommendations.
+    -   Content Librarian for classification, comparison, and recommendations. Has full access to all uploaded content analysis (summaries, topics, CTAs, messaging themes, structure, keyword tags) via `buildContentLibraryContext()`. Capped at 50 assets with truncated summaries for prompt stability.
     -   Supports image attachments for vision-based analysis.
     -   Uses Replit AI integrations for API access.
 -   **Google Fonts**: DM Sans, Geist, Geist Mono.
