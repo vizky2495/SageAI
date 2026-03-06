@@ -33,6 +33,10 @@ import {
   ExternalLink,
   Rocket,
   ShieldAlert,
+  Plus,
+  Trophy,
+  Crown,
+  Medal,
 } from "lucide-react";
 
 interface Classification {
@@ -313,11 +317,64 @@ const COUNTRIES = ["US", "UK", "Canada", "Germany", "France", "Australia", "Indi
 
 type ContentApproach = "upload" | "existing" | "manual";
 
-const CONTENT_APPROACHES: { value: ContentApproach; label: string; icon: typeof Upload }[] = [
-  { value: "upload", label: "Upload a new PDF — analyze and add to library", icon: Upload },
-  { value: "existing", label: "Select existing content from your library", icon: Library },
-  { value: "manual", label: "Enter content details manually", icon: PenLine },
-];
+type SlotSource = "upload" | "library" | "manual";
+
+interface ContentSlot {
+  id: number;
+  source: SlotSource | null;
+  pdfResult: PdfResult | null;
+  libraryAsset: AssetPickerItem | null;
+  label: string;
+  filled: boolean;
+  expanded: boolean;
+}
+
+const EMPTY_CONTENT_SLOT = (id: number): ContentSlot => ({
+  id,
+  source: null,
+  pdfResult: null,
+  libraryAsset: null,
+  label: `Content ${id}`,
+  filled: false,
+  expanded: false,
+});
+
+interface MultiContentItem {
+  name: string;
+  summary: string;
+  resonance: ResonanceDimensions | null;
+  keyTopics: KeyTopicItem[] | null;
+  whatWorks: WhatMakesItWorkItem[] | null;
+  improvements: WhatCouldBeImprovedItem[] | null;
+  keywordTags: string[];
+  detectedMetadata?: { country?: string; product?: string; industry?: string } | null;
+}
+
+interface MultiRanking {
+  name: string;
+  score: number;
+  reason: string;
+}
+
+interface MultiComparisonResult {
+  contents: MultiContentItem[];
+  crossAnalysis: {
+    sharedThemes: string[];
+    differentiators: string[];
+    contentGaps: string[];
+  };
+  rankings: {
+    overall: MultiRanking[];
+    bestForLeads?: string;
+    bestForEngagement?: string;
+    bestForConversion?: string;
+  };
+  verdict: string;
+  suggestions: Suggestion[];
+  contentNames: string[];
+  contentMetrics: { name: string; metrics: MetricsWithData }[];
+  contentMetadata: { name: string; stage: string; product: string; type: string; country: string; industry: string }[];
+}
 
 function formatNum(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
@@ -1951,106 +2008,531 @@ function StandaloneAnalysisView({
   );
 }
 
+function FilledSlotCard({
+  slot,
+  index,
+  onClear,
+}: {
+  slot: ContentSlot;
+  index: number;
+  onClear: () => void;
+}) {
+  const name = slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label;
+  const stage = slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage || "";
+  const type = slot.pdfResult?.classification?.contentType || slot.libraryAsset?.type || "";
+  const product = slot.pdfResult?.classification?.product || slot.libraryAsset?.product || "";
+  const hasAnalysis = slot.source === "upload" && slot.pdfResult && !slot.pdfResult.isFallback;
+
+  return (
+    <div className="rounded-xl bg-muted/10 border border-emerald-500/20 p-3 flex items-center gap-3" data-testid={`filled-slot-${index}`}>
+      <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+        {slot.source === "upload" ? <FileText className="h-4 w-4 text-emerald-400" /> :
+         slot.source === "library" ? <Database className="h-4 w-4 text-emerald-400" /> :
+         <PenLine className="h-4 w-4 text-emerald-400" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold truncate">{name}</p>
+        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+          {type && <span>{type}</span>}
+          {stage && (
+            <>
+              <span>·</span>
+              <Badge className={`${stageBadgeColors[stage] || "bg-muted"} border text-[9px]`}>{stage}</Badge>
+            </>
+          )}
+          {product && (
+            <>
+              <span>·</span>
+              <span className="truncate">{product}</span>
+            </>
+          )}
+          {hasAnalysis && (
+            <>
+              <span>·</span>
+              <span className="text-emerald-400">Analyzed</span>
+            </>
+          )}
+        </div>
+      </div>
+      <button onClick={onClear} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted/50 transition-colors shrink-0" data-testid={`btn-clear-slot-${index}`}>
+        <X className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+    </div>
+  );
+}
+
+function SlotSourcePicker({
+  slotIndex,
+  onSelectSource,
+}: {
+  slotIndex: number;
+  onSelectSource: (source: SlotSource) => void;
+}) {
+  return (
+    <div className="flex gap-2" data-testid={`slot-source-picker-${slotIndex}`}>
+      <button
+        onClick={() => onSelectSource("upload")}
+        className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-border/30 bg-muted/20 text-muted-foreground hover:border-primary/30 hover:text-primary transition-all"
+        data-testid={`btn-slot-upload-${slotIndex}`}
+      >
+        <Upload className="h-3.5 w-3.5" />
+        Upload PDF
+      </button>
+      <button
+        onClick={() => onSelectSource("library")}
+        className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-border/30 bg-muted/20 text-muted-foreground hover:border-primary/30 hover:text-primary transition-all"
+        data-testid={`btn-slot-library-${slotIndex}`}
+      >
+        <Library className="h-3.5 w-3.5" />
+        From Library
+      </button>
+      <button
+        onClick={() => onSelectSource("manual")}
+        className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-border/30 bg-muted/20 text-muted-foreground hover:border-primary/30 hover:text-primary transition-all"
+        data-testid={`btn-slot-manual-${slotIndex}`}
+      >
+        <PenLine className="h-3.5 w-3.5" />
+        Manual
+      </button>
+    </div>
+  );
+}
+
+function MultiComparisonResults({
+  data,
+  onPlanCampaign,
+}: {
+  data: MultiComparisonResult;
+  onPlanCampaign: () => void;
+}) {
+  const contentCount = data.contents.length;
+  const rankColors = ["text-amber-400", "text-gray-300", "text-amber-600", "text-muted-foreground", "text-muted-foreground"];
+  const rankIcons = [Crown, Medal, Medal, null, null];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-4"
+      data-testid="multi-comparison-results"
+    >
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur space-y-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Trophy className="h-5 w-5 text-primary" />
+          <h3 className="text-base font-semibold">Overall Rankings</h3>
+          <span className="text-xs text-muted-foreground ml-auto">{contentCount} pieces compared</span>
+        </div>
+
+        <div className="space-y-2">
+          {data.rankings.overall.map((r, i) => {
+            const RankIcon = rankIcons[i];
+            return (
+              <div key={i} className={`rounded-xl border ${i === 0 ? "border-amber-500/30 bg-amber-500/5" : "border-border/20 bg-muted/10"} p-3 flex items-center gap-3`} data-testid={`ranking-${i}`}>
+                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${i === 0 ? "bg-amber-500/15" : "bg-muted/30"} ${rankColors[i]}`}>
+                  {RankIcon ? <RankIcon className="h-4 w-4" /> : `#${i + 1}`}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-semibold">{r.name}</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{r.reason}</p>
+                </div>
+                <div className="shrink-0">
+                  <span className={`text-lg font-bold tabular-nums ${i === 0 ? "text-amber-400" : "text-foreground/70"}`}>{r.score}</span>
+                  <span className="text-[10px] text-muted-foreground">/100</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {(data.rankings.bestForLeads || data.rankings.bestForEngagement || data.rankings.bestForConversion) && (
+          <div className="flex flex-wrap gap-2">
+            {data.rankings.bestForLeads && (
+              <Badge className="bg-sky-500/15 text-sky-400 border-sky-500/30 border text-[10px]">
+                Best for Leads: {data.rankings.bestForLeads}
+              </Badge>
+            )}
+            {data.rankings.bestForEngagement && (
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 border text-[10px]">
+                Best for Engagement: {data.rankings.bestForEngagement}
+              </Badge>
+            )}
+            {data.rankings.bestForConversion && (
+              <Badge className="bg-violet-500/15 text-violet-400 border-violet-500/30 border text-[10px]">
+                Best for Conversion: {data.rankings.bestForConversion}
+              </Badge>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <div className={`grid gap-3 ${contentCount === 2 ? "sm:grid-cols-2" : contentCount === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+        {data.contents.map((item, i) => (
+          <Card key={i} className="rounded-2xl border bg-card/80 p-4 backdrop-blur space-y-3" data-testid={`content-card-${i}`}>
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center text-[11px] font-bold text-primary">{i + 1}</div>
+              <h4 className="text-sm font-semibold truncate flex-1">{item.name}</h4>
+              {data.contentMetadata[i] && (
+                <Badge className={`${stageBadgeColors[data.contentMetadata[i].stage] || "bg-muted"} border text-[9px] shrink-0`}>
+                  {data.contentMetadata[i].stage}
+                </Badge>
+              )}
+            </div>
+
+            {item.summary && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3">{item.summary}</p>
+            )}
+
+            {item.resonance && (
+              <div className="space-y-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Resonance</span>
+                <div className="grid grid-cols-2 gap-1">
+                  {(["countryFit", "industryFit", "funnelStageFit", "productFit"] as const).map(dim => {
+                    const r = item.resonance?.[dim];
+                    if (!r) return null;
+                    const dimLabel = dim.replace("Fit", "").replace("funnelStage", "Stage");
+                    return (
+                      <div key={dim} className="flex items-center gap-1 text-[10px]">
+                        <span className="text-muted-foreground capitalize">{dimLabel}:</span>
+                        <ResonanceBadge rating={r.rating} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {item.keyTopics && item.keyTopics.length > 0 && (
+              <div>
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Key Topics</span>
+                <div className="space-y-1">
+                  {item.keyTopics.slice(0, 3).map((t: any, j: number) => (
+                    <div key={j} className="text-[10px] text-muted-foreground">
+                      {typeof t === "string" ? (
+                        <span className="font-medium text-foreground/80">{t}</span>
+                      ) : (
+                        <><span className="font-medium text-foreground/80">{t.topic}</span>{t.detail ? ` — ${t.detail}` : ""}</>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {item.keywordTags && item.keywordTags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {item.keywordTags.slice(0, 6).map((tag, j) => (
+                  <span key={j} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border bg-teal-500/15 text-teal-300 border-teal-500/25">{tag}</span>
+                ))}
+                {item.keywordTags.length > 6 && <span className="text-[9px] text-muted-foreground">+{item.keywordTags.length - 6}</span>}
+              </div>
+            )}
+
+            {data.contentMetrics[i]?.metrics.hasData && (
+              <div className="grid grid-cols-3 gap-1">
+                <MetricPill label="Views" value={data.contentMetrics[i].metrics.pageviews} />
+                <MetricPill label="Leads" value={data.contentMetrics[i].metrics.leads} />
+                <MetricPill label="SQOs" value={data.contentMetrics[i].metrics.sqos} />
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Layers className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Cross-Content Analysis</h3>
+        </div>
+
+        {data.crossAnalysis.sharedThemes.length > 0 && (
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 block mb-1.5">Shared Themes</span>
+            <ul className="space-y-1">
+              {data.crossAnalysis.sharedThemes.map((t, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                  <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {data.crossAnalysis.differentiators.length > 0 && (
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-sky-400 block mb-1.5">Key Differentiators</span>
+            <ul className="space-y-1">
+              {data.crossAnalysis.differentiators.map((d, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                  <Target className="h-3.5 w-3.5 text-sky-400 shrink-0 mt-0.5" />
+                  {d}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {data.crossAnalysis.contentGaps.length > 0 && (
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400 block mb-1.5">Content Gaps</span>
+            <ul className="space-y-1">
+              {data.crossAnalysis.contentGaps.map((g, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  {g}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Lightbulb className="h-4 w-4 text-amber-400" />
+          <h3 className="text-sm font-semibold">Verdict & Recommendations</h3>
+        </div>
+        <p className="text-xs text-foreground/85 leading-relaxed">{data.verdict}</p>
+        {data.suggestions.length > 0 && (
+          <div className="space-y-1.5 pt-2 border-t border-border/20">
+            {data.suggestions.map((s, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs">
+                <Zap className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-foreground/80">{s.text}</span>
+                  <span className="text-[9px] text-muted-foreground/60 ml-2">[{s.source}]</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {data.contentMetrics.some(cm => cm.metrics.hasData) && (
+        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Performance Comparison</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" data-testid="multi-perf-table">
+              <thead>
+                <tr className="border-b border-border/20">
+                  <th className="text-left px-3 py-2 text-muted-foreground font-medium">Content</th>
+                  <th className="text-right px-2 py-2 text-muted-foreground font-medium">Views</th>
+                  <th className="text-right px-2 py-2 text-muted-foreground font-medium">Downloads</th>
+                  <th className="text-right px-2 py-2 text-muted-foreground font-medium">Leads</th>
+                  <th className="text-right px-2 py-2 text-muted-foreground font-medium">SQOs</th>
+                  <th className="text-right px-2 py-2 text-muted-foreground font-medium">Avg Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.contentMetrics.map((cm, i) => (
+                  <tr key={i} className="border-b border-border/10 last:border-0">
+                    <td className="px-3 py-2 font-medium max-w-[180px] truncate">{cm.name}</td>
+                    <td className="text-right px-2 py-2 tabular-nums">{cm.metrics.hasData ? formatNum(cm.metrics.pageviews) : "—"}</td>
+                    <td className="text-right px-2 py-2 tabular-nums">{cm.metrics.hasData ? formatNum(cm.metrics.downloads) : "—"}</td>
+                    <td className="text-right px-2 py-2 tabular-nums">{cm.metrics.hasData ? formatNum(cm.metrics.leads) : "—"}</td>
+                    <td className="text-right px-2 py-2 tabular-nums">{cm.metrics.hasData ? formatNum(cm.metrics.sqos) : "—"}</td>
+                    <td className="text-right px-2 py-2 tabular-nums">{cm.metrics.hasData ? `${cm.metrics.avgTime}s` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <div className="flex gap-3" data-testid="multi-comparison-actions">
+        <Button onClick={onPlanCampaign} className="flex-1 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold" data-testid="btn-plan-campaign-multi">
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Plan Campaign With Top Content &rarr;
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ContentComparison() {
-  const [approach, setApproach] = useState<ContentApproach | null>(null);
-  const [slotA, setSlotA] = useState<SlotAState>(EMPTY_SLOT_A);
-  const [slotB, setSlotB] = useState<SlotBState>(EMPTY_SLOT_B);
-  const [step, setStep] = useState<"intake" | "standalone" | "baseline" | "results">("intake");
-  const [newContentResult, setNewContentResult] = useState<PdfResult | null>(null);
+  const [slots, setSlots] = useState<ContentSlot[]>([EMPTY_CONTENT_SLOT(1), EMPTY_CONTENT_SLOT(2)]);
+  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
+  const [activeSource, setActiveSource] = useState<SlotSource | null>(null);
+  const [step, setStep] = useState<"intake" | "standalone" | "results">("intake");
+  const [standaloneResult, setStandaloneResult] = useState<PdfResult | null>(null);
   const [comparisonResult, setComparisonResult] = useState<FullComparisonResult | null>(null);
+  const [multiResult, setMultiResult] = useState<MultiComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
-  const [contentStatusMap, setContentStatusMap] = useState<Record<string, ContentInfo>>({});
   const [showCampaignModal, setShowCampaignModal] = useState(false);
 
-  function refreshContentStatus() {
-    authFetch("/api/content/status")
-      .then(r => r.json())
-      .then((map: Record<string, ContentInfo>) => setContentStatusMap(map))
-      .catch(() => {});
+  const filledSlots = slots.filter(s => s.filled);
+  const canCompare = filledSlots.length >= 2;
+  const canAddSlot = slots.length < 5;
+
+  function updateSlot(index: number, update: Partial<ContentSlot>) {
+    setSlots(prev => prev.map((s, i) => i === index ? { ...s, ...update } : s));
   }
 
-  function handleNewContentReady(result: PdfResult, _savedToLibrary: boolean) {
-    setNewContentResult(result);
-    setSlotB({ ...EMPTY_SLOT_B, result });
-    setStep("baseline");
+  function clearSlot(index: number) {
+    setSlots(prev => prev.map((s, i) => i === index ? EMPTY_CONTENT_SLOT(s.id) : s));
+    if (activeSlotIndex === index) {
+      setActiveSlotIndex(null);
+      setActiveSource(null);
+    }
+  }
+
+  function addSlot() {
+    if (slots.length >= 5) return;
+    const newId = Math.max(...slots.map(s => s.id)) + 1;
+    setSlots(prev => [...prev, EMPTY_CONTENT_SLOT(newId)]);
+  }
+
+  function removeSlot(index: number) {
+    if (slots.length <= 2) return;
+    setSlots(prev => prev.filter((_, i) => i !== index));
+    if (activeSlotIndex === index) {
+      setActiveSlotIndex(null);
+      setActiveSource(null);
+    } else if (activeSlotIndex !== null && activeSlotIndex > index) {
+      setActiveSlotIndex(prev => prev !== null ? prev - 1 : null);
+    }
+  }
+
+  function handleSlotFilled(index: number, result: PdfResult | null, asset: AssetPickerItem | null, source: SlotSource) {
+    updateSlot(index, {
+      source,
+      pdfResult: result,
+      libraryAsset: asset,
+      label: result?.filename || asset?.name || `Content ${slots[index].id}`,
+      filled: true,
+      expanded: false,
+    });
+    setActiveSlotIndex(null);
+    setActiveSource(null);
   }
 
   function handleViewStandaloneAnalysis(result: PdfResult) {
-    setNewContentResult(result);
-    setSlotB({ ...EMPTY_SLOT_B, result });
+    setStandaloneResult(result);
     setStep("standalone");
   }
 
   function handleMoveToComparison() {
-    setStep("baseline");
+    setStep("intake");
   }
 
-  async function handleBaselineSelected(asset: AssetPickerItem) {
-    setSlotA({ ...EMPTY_SLOT_A, selectedAsset: asset });
+  async function handleRunComparison() {
+    if (!canCompare) return;
     setStep("results");
     setComparisonLoading(true);
     setComparisonError(null);
     setComparisonResult(null);
-    refreshContentStatus();
+    setMultiResult(null);
 
-    const contentBResult = newContentResult;
-    if (!contentBResult) {
-      setComparisonLoading(false);
-      setComparisonError("No content selected for comparison.");
-      return;
-    }
+    const pieces = filledSlots.map(slot => {
+      if (slot.libraryAsset) {
+        const a = slot.libraryAsset;
+        return {
+          name: a.name || a.contentId,
+          contentId: a.contentId,
+          stage: a.stage,
+          product: a.product || "General",
+          type: a.type || "Document",
+          country: a.country || "",
+          industry: a.industry || "",
+          metrics: { pageviews: a.pageviews, downloads: a.downloads, leads: a.leads, sqos: a.sqos, avgTime: a.avgTime },
+        };
+      }
+      const r = slot.pdfResult!;
+      return {
+        name: r.filename,
+        contentId: r.contentId || r.filename,
+        stage: r.classification.stage,
+        product: r.classification.product || "General",
+        type: r.classification.contentType || "Document",
+        country: (r as any).country || "",
+        industry: r.classification.industry || "",
+        text: r.text?.slice(0, 8000),
+        metrics: r.metrics,
+      };
+    });
 
-    try {
-      const res = await authFetch("/api/assets/full-comparison", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contentA: {
-            contentId: asset.contentId,
-            name: asset.name || asset.contentId,
-            stage: asset.stage,
-            product: asset.product,
-            type: asset.type,
-            country: asset.country,
-            industry: asset.industry,
-            metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
+    if (pieces.length === 2) {
+      try {
+        const res = await authFetch("/api/assets/full-comparison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contentA: { ...pieces[0], contentType: pieces[0].type },
+            contentB: { ...pieces[1], contentType: pieces[1].type, topic: pieces[1].name },
+          }),
+        });
+        if (!res.ok) throw new Error("Comparison analysis failed");
+        const data = await res.json();
+        setComparisonResult(data);
+      } catch (err: any) {
+        setComparisonError(err.message || "Failed to run comparison analysis.");
+      }
+    } else {
+      try {
+        const res = await authFetch("/api/assets/multi-comparison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: pieces }),
+        });
+        if (!res.ok) throw new Error("Multi-content comparison failed");
+        const raw = await res.json();
+        const details = raw.contentDetails || [];
+        const mapped: MultiComparisonResult = {
+          contents: raw.contents || [],
+          crossAnalysis: raw.crossAnalysis || { sharedThemes: [], differentiators: [], contentGaps: [] },
+          rankings: {
+            overall: raw.rankings?.overall || [],
+            bestForLeads: raw.rankings?.byMetric?.bestForLeads || raw.rankings?.bestForLeads,
+            bestForEngagement: raw.rankings?.byMetric?.bestForEngagement || raw.rankings?.bestForEngagement,
+            bestForConversion: raw.rankings?.byMetric?.bestForConversion || raw.rankings?.bestForConversion,
           },
-          contentB: {
-            name: contentBResult.filename,
-            contentId: contentBResult.contentId || contentBResult.filename,
-            stage: contentBResult.classification.stage,
-            product: contentBResult.classification.product,
-            contentType: contentBResult.classification.contentType,
-            industry: contentBResult.classification.industry,
-            country: (contentBResult as any).country || "",
-            topic: contentBResult.classification.topic,
-            text: contentBResult.text?.slice(0, 6000),
-            metrics: contentBResult.metrics,
-          },
-        }),
-      });
-      if (!res.ok) throw new Error("Comparison analysis failed");
-      const data = await res.json();
-      setComparisonResult(data);
-    } catch (err: any) {
-      setComparisonError(err.message || "Failed to run comparison analysis.");
+          verdict: raw.verdict || "",
+          suggestions: raw.suggestions || [],
+          contentNames: details.map((d: any) => d.name),
+          contentMetrics: details.map((d: any) => ({
+            name: d.name,
+            metrics: {
+              pageviews: d.metrics?.pageviews || 0,
+              downloads: d.metrics?.downloads || 0,
+              leads: d.metrics?.leads || 0,
+              sqos: d.metrics?.sqos || 0,
+              avgTime: d.metrics?.avgTime || 0,
+              hasData: d.hasMetrics || false,
+            },
+          })),
+          contentMetadata: details.map((d: any) => ({
+            name: d.name,
+            stage: d.stage || "",
+            product: d.product || "",
+            type: d.contentType || "",
+            country: d.country || "",
+            industry: d.industry || "",
+          })),
+        };
+        setMultiResult(mapped);
+      } catch (err: any) {
+        setComparisonError(err.message || "Failed to run multi-content comparison.");
+      }
     }
     setComparisonLoading(false);
   }
 
   function handleReset() {
-    setApproach(null);
-    setSlotA(EMPTY_SLOT_A);
-    setSlotB(EMPTY_SLOT_B);
-    setNewContentResult(null);
+    setSlots([EMPTY_CONTENT_SLOT(1), EMPTY_CONTENT_SLOT(2)]);
+    setActiveSlotIndex(null);
+    setActiveSource(null);
+    setStandaloneResult(null);
     setComparisonResult(null);
+    setMultiResult(null);
     setComparisonLoading(false);
     setComparisonError(null);
     setStep("intake");
   }
-
-  const bothReady = slotA.selectedAsset && (comparisonResult || comparisonLoading);
 
   async function handleDownloadPdf(data: FullComparisonResult) {
     const { generateComparisonPdf } = await import("@/lib/comparison-pdf");
@@ -2072,7 +2554,7 @@ export default function ContentComparison() {
           <div>
             <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
             {step !== "standalone" && (
-              <p className="text-xs text-muted-foreground">Upload or select content to compare against your library's top performers</p>
+              <p className="text-xs text-muted-foreground">Add 2–5 content pieces to compare — upload, pick from library, or enter manually</p>
             )}
           </div>
           {step !== "intake" && (
@@ -2083,181 +2565,149 @@ export default function ContentComparison() {
         </div>
 
         {step === "intake" && (
-          <>
-            <div className="mb-3">
-              <span className="text-xs font-medium text-muted-foreground mb-1.5 block">Content Approach</span>
-              <div className="flex flex-col gap-1.5">
-                {CONTENT_APPROACHES.map(a => {
-                  const Icon = a.icon;
-                  return (
+          <div className="space-y-3">
+            {slots.map((slot, index) => (
+              <div key={slot.id} className="space-y-2" data-testid={`slot-container-${index}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Content {index + 1}</span>
+                  {slots.length > 2 && !slot.filled && (
                     <button
-                      key={a.value}
-                      type="button"
-                      onClick={() => setApproach(a.value)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition-all text-left ${
-                        approach === a.value
-                          ? "bg-primary/10 text-primary border-primary/30"
-                          : "bg-muted/20 border-border/30 text-muted-foreground hover:border-primary/30"
-                      }`}
-                      data-testid={`radio-approach-${a.value}`}
+                      onClick={() => removeSlot(index)}
+                      className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors ml-auto"
+                      data-testid={`btn-remove-slot-${index}`}
                     >
-                      <div className={`h-3 w-3 rounded-full border-2 flex items-center justify-center ${approach === a.value ? "border-primary" : "border-border/60"}`}>
-                        {approach === a.value && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                      </div>
-                      <Icon className="h-3.5 w-3.5" />
-                      {a.label}
+                      Remove
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <AnimatePresence mode="wait">
-              {approach === "upload" && (
-                <motion.div key="upload" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                  <UploadAndSavePanel onAnalyzed={handleNewContentReady} onViewAnalysis={handleViewStandaloneAnalysis} />
-                </motion.div>
-              )}
-              {approach === "existing" && (
-                <motion.div key="existing" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                  <div className="space-y-3">
-                    <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-2.5 mb-2">
-                      <div className="text-[11px] text-blue-400">Select the content you want to evaluate. You'll then pick a baseline asset to compare it against.</div>
-                    </div>
-                    <LibraryPickerPanel onSelect={(asset) => {
-                      const manualResult: PdfResult = {
-                        filename: asset.name || asset.contentId,
-                        pageCount: 0,
-                        wordCount: 0,
-                        text: "",
-                        classification: {
-                          contentType: asset.type || "Document",
-                          stage: asset.stage,
-                          product: asset.product || "General",
-                          industry: "General",
-                          topic: asset.name || asset.contentId,
-                          confidence: 1.0,
-                        },
-                        isFallback: true,
-                        contentId: asset.contentId,
-                        metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
-                      };
-                      handleNewContentReady(manualResult, false);
-                    }} />
-                  </div>
-                </motion.div>
-              )}
-              {approach === "manual" && (
-                <motion.div key="manual" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                  <ManualEntryPanel onSubmit={handleNewContentReady} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
-
-        {step === "baseline" && newContentResult && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center gap-3">
-              <CircleCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium text-emerald-400">Content ready: </span>
-                <span className="text-sm">{newContentResult.filename}</span>
-                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-                  <span>{newContentResult.classification.contentType}</span>
-                  <span>·</span>
-                  <Badge className={`${stageBadgeColors[newContentResult.classification.stage] || "bg-muted"} border text-[9px]`}>
-                    {newContentResult.classification.stage}
-                  </Badge>
-                  {newContentResult.classification.product && (
-                    <>
-                      <span>·</span>
-                      <span>{newContentResult.classification.product}</span>
-                    </>
                   )}
                 </div>
-              </div>
-            </div>
 
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Database className="h-4 w-4 text-primary" />
-                <span className="text-sm font-semibold">Select baseline content to compare against</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Choose an existing asset from your library as the performance benchmark.
-              </p>
-              <BaselineAssetBrowser onSelect={handleBaselineSelected} />
-            </div>
-          </motion.div>
-        )}
+                {slot.filled ? (
+                  <FilledSlotCard slot={slot} index={index} onClear={() => clearSlot(index)} />
+                ) : activeSlotIndex === index ? (
+                  <div className="rounded-xl border border-primary/20 bg-muted/5 p-3 space-y-3">
+                    {!activeSource && <SlotSourcePicker slotIndex={index} onSelectSource={(src) => setActiveSource(src)} />}
 
-        {step === "results" && slotA.selectedAsset && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Baseline (Content A)</span>
-                <SelectedAssetCard
-                  asset={slotA.selectedAsset}
-                  onClear={() => { setSlotA(EMPTY_SLOT_A); setStep("baseline"); }}
-                  contentInfo={contentStatusMap[slotA.selectedAsset.contentId] || null}
-                  onUploadComplete={() => { refreshContentStatus(); if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }}
-                />
-              </div>
-              <div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">New Content (Content B)</span>
-                {newContentResult?.isFallback && newContentResult?.classification ? (
-                  <SelectedAssetCard
-                    asset={{
-                      id: "",
-                      contentId: newContentResult.contentId || newContentResult.filename,
-                      name: newContentResult.filename,
-                      stage: newContentResult.classification.stage,
-                      product: newContentResult.classification.product || null,
-                      channel: null,
-                      cta: null,
-                      type: newContentResult.classification.contentType || null,
-                      url: null,
-                      pageviews: newContentResult.metrics?.pageviews || 0,
-                      downloads: newContentResult.metrics?.downloads || 0,
-                      leads: newContentResult.metrics?.leads || 0,
-                      sqos: newContentResult.metrics?.sqos || 0,
-                      avgTime: newContentResult.metrics?.avgTime || 0,
-                      country: (newContentResult as any).country || "",
-                      industry: "",
-                    }}
-                    onClear={() => { setStep("intake"); handleReset(); }}
-                    contentInfo={contentStatusMap[newContentResult.contentId || newContentResult.filename] || null}
-                    onUploadComplete={() => { refreshContentStatus(); if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }}
-                  />
-                ) : (
-                  <div className="rounded-xl bg-muted/10 border border-border/30 p-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-primary shrink-0" />
-                      <span className="text-sm font-medium truncate">{newContentResult?.filename}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>{newContentResult?.classification.contentType}</span>
-                      <Badge className={`${stageBadgeColors[newContentResult?.classification.stage || ""] || "bg-muted"} border text-[9px]`}>
-                        {newContentResult?.classification.stage}
-                      </Badge>
-                      {newContentResult?.classification.product && <span>{newContentResult.classification.product}</span>}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[11px] font-medium text-emerald-400">Content analyzed</span>
-                    </div>
+                    <AnimatePresence mode="wait">
+                      {activeSource === "upload" && (
+                        <motion.div key="upload" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15 }}>
+                          <UploadAndSavePanel
+                            onAnalyzed={(result) => handleSlotFilled(index, result, null, "upload")}
+                            onViewAnalysis={filledSlots.length === 0 ? handleViewStandaloneAnalysis : undefined}
+                          />
+                        </motion.div>
+                      )}
+                      {activeSource === "library" && (
+                        <motion.div key="library" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15 }}>
+                          <LibraryPickerPanel onSelect={(asset) => {
+                            const manualResult: PdfResult = {
+                              filename: asset.name || asset.contentId,
+                              pageCount: 0,
+                              wordCount: 0,
+                              text: "",
+                              classification: {
+                                contentType: asset.type || "Document",
+                                stage: asset.stage,
+                                product: asset.product || "General",
+                                industry: "General",
+                                topic: asset.name || asset.contentId,
+                                confidence: 1.0,
+                              },
+                              isFallback: true,
+                              contentId: asset.contentId,
+                              metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
+                            };
+                            handleSlotFilled(index, manualResult, asset, "library");
+                          }} />
+                        </motion.div>
+                      )}
+                      {activeSource === "manual" && (
+                        <motion.div key="manual" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.15 }}>
+                          <ManualEntryPanel onSubmit={(result) => handleSlotFilled(index, result, null, "manual")} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {activeSource && (
+                      <button
+                        onClick={() => setActiveSource(null)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid={`btn-back-source-${index}`}
+                      >
+                        ← Change approach
+                      </button>
+                    )}
                   </div>
+                ) : (
+                  <button
+                    onClick={() => { setActiveSlotIndex(index); setActiveSource(null); }}
+                    className="w-full rounded-xl border-2 border-dashed border-border/30 bg-muted/5 p-4 text-center hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer"
+                    data-testid={`btn-expand-slot-${index}`}
+                  >
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                      <Plus className="h-4 w-4" />
+                      <span>Add content — Upload PDF, select from library, or enter manually</span>
+                    </div>
+                  </button>
                 )}
               </div>
+            ))}
+
+            {canAddSlot && (
+              <button
+                onClick={addSlot}
+                className="w-full rounded-lg border border-dashed border-border/30 bg-transparent py-2 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+                data-testid="btn-add-content-slot"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Content ({slots.length}/5)
+              </button>
+            )}
+
+            <Button
+              onClick={handleRunComparison}
+              disabled={!canCompare || comparisonLoading}
+              className="w-full rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="btn-run-comparison"
+            >
+              {comparisonLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                  Compare {filledSlots.length > 0 ? `${filledSlots.length} Content Pieces` : "Selected Content"}
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {step === "results" && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+            <div className={`grid gap-2 ${filledSlots.length === 2 ? "sm:grid-cols-2" : filledSlots.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+              {filledSlots.map((slot, i) => (
+                <div key={slot.id} className="rounded-xl bg-muted/10 border border-border/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{i + 1}</div>
+                    <span className="text-xs font-medium truncate">{slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label}</span>
+                    {(slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage) && (
+                      <Badge className={`${stageBadgeColors[slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage || ""] || "bg-muted"} border text-[9px] shrink-0 ml-auto`}>
+                        {slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </motion.div>
         )}
       </motion.div>
 
-      {step === "standalone" && newContentResult && (
+      {step === "standalone" && standaloneResult && (
         <StandaloneAnalysisView
-          result={newContentResult}
+          result={standaloneResult}
           onCompare={handleMoveToComparison}
           onAskChat={(prompt) => {
             window.dispatchEvent(new CustomEvent("open-full-chat", { detail: { prompt } }));
@@ -2265,7 +2715,7 @@ export default function ContentComparison() {
         />
       )}
 
-      {step === "results" && comparisonLoading && !comparisonResult && (
+      {step === "results" && comparisonLoading && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="rounded-2xl border bg-card/80 p-8 backdrop-blur text-center" data-testid="comparison-loading">
             <div className="flex flex-col items-center gap-3">
@@ -2274,7 +2724,7 @@ export default function ContentComparison() {
               </div>
               <div>
                 <p className="text-sm font-semibold">Running AI-Powered Comparison</p>
-                <p className="text-xs text-muted-foreground mt-1">Analyzing content, finding benchmarks, and generating insights...</p>
+                <p className="text-xs text-muted-foreground mt-1">Analyzing {filledSlots.length} content pieces, finding benchmarks, and generating insights...</p>
               </div>
             </div>
           </Card>
@@ -2289,7 +2739,7 @@ export default function ContentComparison() {
               <div>
                 <p className="text-sm font-semibold text-destructive">Comparison Analysis Failed</p>
                 <p className="text-xs text-muted-foreground mt-1">{comparisonError}</p>
-                <Button onClick={() => { if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }} variant="outline" size="sm" className="mt-3 rounded-lg text-xs" data-testid="btn-retry-comparison">
+                <Button onClick={handleRunComparison} variant="outline" size="sm" className="mt-3 rounded-lg text-xs" data-testid="btn-retry-comparison">
                   Retry Analysis
                 </Button>
               </div>
@@ -2298,7 +2748,7 @@ export default function ContentComparison() {
         </motion.div>
       )}
 
-      {bothReady && comparisonResult && (
+      {step === "results" && comparisonResult && (
         <ComparisonResults
           comparisonData={comparisonResult}
           isLoadingVerdict={comparisonLoading}
@@ -2307,9 +2757,23 @@ export default function ContentComparison() {
         />
       )}
 
+      {step === "results" && multiResult && (
+        <MultiComparisonResults
+          data={multiResult}
+          onPlanCampaign={() => setShowCampaignModal(true)}
+        />
+      )}
+
       {showCampaignModal && comparisonResult && (
         <CampaignContextModal
           data={comparisonResult}
+          onClose={() => setShowCampaignModal(false)}
+        />
+      )}
+
+      {showCampaignModal && multiResult && !comparisonResult && (
+        <MultiCampaignContextModal
+          data={multiResult}
           onClose={() => setShowCampaignModal(false)}
         />
       )}
@@ -2498,6 +2962,153 @@ function CampaignContextModal({ data, onClose }: { data: FullComparisonResult; o
             {!includeA && !includeB ? "Select at least one asset" : "Build Campaign Plan \u2192"}
           </Button>
           <Button onClick={onClose} variant="outline" className="rounded-xl" data-testid="btn-cancel-campaign">
+            Cancel
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function MultiCampaignContextModal({ data, onClose }: { data: MultiComparisonResult; onClose: () => void }) {
+  const [, navigate] = useLocation();
+  const [objective, setObjective] = useState("Lead Generation");
+  const [product, setProduct] = useState(data.contentMetadata[0]?.product || "");
+  const [country, setCountry] = useState(data.contentMetadata[0]?.country || "");
+  const [industry, setIndustry] = useState(data.contentMetadata[0]?.industry || "");
+  const [funnelStage, setFunnelStage] = useState(data.contentMetadata[0]?.stage || "TOFU");
+  const [contentType, setContentType] = useState(data.contentMetadata[0]?.type || "");
+  const [timeline, setTimeline] = useState("");
+  const [budget, setBudget] = useState("");
+  const [selectedContents, setSelectedContents] = useState<boolean[]>(data.contentNames.map(() => true));
+  const [contextNotes, setContextNotes] = useState(() => {
+    const parts: string[] = [];
+    if (data.verdict) parts.push(`Multi-content comparison verdict: ${data.verdict}`);
+    if (data.rankings.overall.length > 0) parts.push(`Top ranked: ${data.rankings.overall[0].name} (score: ${data.rankings.overall[0].score}/100)`);
+    if (data.suggestions.length) parts.push(`Key suggestions:\n${data.suggestions.slice(0, 3).map((s, i) => `${i + 1}. ${s.text}`).join("\n")}`);
+    return parts.join("\n\n");
+  });
+
+  function handleBuild() {
+    const selectedAssets = data.contentNames
+      .filter((_, i) => selectedContents[i])
+      .map((name, i) => {
+        const meta = data.contentMetadata.find(m => m.name === name);
+        return { name, stage: meta?.stage || "", product: meta?.product || "", format: meta?.type || "", summary: "" };
+      });
+
+    const context = {
+      fromComparison: true,
+      selectedAssets,
+      objective,
+      product,
+      country,
+      industry,
+      funnelStage,
+      contentType,
+      timeline,
+      budget,
+      contextNotes,
+      verdict: data.verdict,
+      suggestions: data.suggestions,
+    };
+    sessionStorage.setItem("cia-campaign-context", JSON.stringify(context));
+    navigate("/campaign-planner");
+  }
+
+  const selectClass = "w-full h-9 rounded-lg bg-muted/20 border border-border/40 text-xs px-3 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20";
+  const labelClass = "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 block";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="multi-campaign-context-modal">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-primary/30 bg-card/95 backdrop-blur-xl p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Review Campaign Context</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 rounded-lg" data-testid="btn-close-multi-campaign-modal"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-5">Based on your multi-content comparison. Select which content to include and review before building the campaign plan.</p>
+
+        <div className="space-y-5">
+          <div>
+            <span className={labelClass}>Content Pieces</span>
+            <div className="space-y-2">
+              {data.contentNames.map((name, i) => {
+                const meta = data.contentMetadata[i];
+                const rank = data.rankings.overall.find(r => r.name === name);
+                return (
+                  <label key={i} className="flex items-center gap-3 rounded-xl border border-border/30 bg-muted/10 p-3 cursor-pointer hover:border-primary/30 transition-colors" data-testid={`check-include-multi-${i}`}>
+                    <input type="checkbox" checked={selectedContents[i]} onChange={e => setSelectedContents(prev => prev.map((v, j) => j === i ? e.target.checked : v))} className="accent-[#00D657] h-4 w-4" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-semibold block truncate">{name}</span>
+                      <span className="text-[10px] text-muted-foreground">{meta?.type} | {meta?.stage} | {meta?.product}</span>
+                    </div>
+                    {rank && <span className="text-[10px] text-muted-foreground shrink-0">Score: {rank.score}/100</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <span className={labelClass}>Campaign Parameters</span>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Objective</label>
+                <select value={objective} onChange={e => setObjective(e.target.value)} className={selectClass} data-testid="select-multi-campaign-objective">
+                  <option value="Brand Awareness">Brand Awareness</option>
+                  <option value="Lead Generation">Lead Generation</option>
+                  <option value="Conversion">Conversion</option>
+                  <option value="Retention">Retention</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Product</label>
+                <input type="text" value={product} onChange={e => setProduct(e.target.value)} className={selectClass} data-testid="input-multi-campaign-product" />
+              </div>
+              <div>
+                <label className={labelClass}>Country/Region</label>
+                <input type="text" value={country} onChange={e => setCountry(e.target.value)} className={selectClass} data-testid="input-multi-campaign-country" />
+              </div>
+              <div>
+                <label className={labelClass}>Industry</label>
+                <input type="text" value={industry} onChange={e => setIndustry(e.target.value)} className={selectClass} data-testid="input-multi-campaign-industry" />
+              </div>
+              <div>
+                <label className={labelClass}>Funnel Stage</label>
+                <div className="flex gap-1">
+                  {["TOFU", "MOFU", "BOFU"].map(s => (
+                    <button key={s} onClick={() => setFunnelStage(s)} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${funnelStage === s ? "bg-primary/15 text-primary border border-primary/30" : "text-muted-foreground hover:bg-muted/30 border border-border/30"}`} data-testid={`btn-multi-campaign-stage-${s.toLowerCase()}`}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Timeline</label>
+                <select value={timeline} onChange={e => setTimeline(e.target.value)} className={selectClass} data-testid="select-multi-campaign-timeline">
+                  <option value="">Not specified</option>
+                  <option value="4 weeks">4 weeks</option>
+                  <option value="8 weeks">8 weeks</option>
+                  <option value="12 weeks">12 weeks</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <span className={labelClass}>Comparison Insights</span>
+            <textarea value={contextNotes} onChange={e => setContextNotes(e.target.value)} rows={4} className="w-full rounded-lg bg-muted/20 border border-border/40 text-xs p-3 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 resize-y" data-testid="textarea-multi-campaign-insights" />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6 pt-4 border-t border-border/20">
+          <Button onClick={handleBuild} disabled={selectedContents.every(v => !v)} className="flex-1 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold disabled:opacity-40" data-testid="btn-build-multi-campaign">
+            <Rocket className="h-4 w-4 mr-2" />
+            Build Campaign Plan →
+          </Button>
+          <Button onClick={onClose} variant="outline" className="rounded-xl" data-testid="btn-cancel-multi-campaign">
             Cancel
           </Button>
         </div>

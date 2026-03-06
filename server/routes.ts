@@ -1097,6 +1097,249 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
     }
   });
 
+  app.post("/api/assets/multi-comparison", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { contents } = req.body as {
+        contents: Array<{
+          name: string;
+          contentId?: string;
+          stage: string;
+          product?: string;
+          type?: string;
+          contentType?: string;
+          country?: string;
+          industry?: string;
+          text?: string;
+          metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number };
+        }>;
+      };
+
+      if (!Array.isArray(contents) || contents.length < 2 || contents.length > 5) {
+        return res.status(400).json({ error: "Between 2 and 5 content pieces are required." });
+      }
+
+      function toReadableNameMulti(raw: string): string {
+        if (!raw || raw.length < 5) return raw;
+        const parts = raw.split("_");
+        if (parts.length < 4) return raw;
+        const regionMap: Record<string, string> = { US: "US", UK: "UK", CA: "Canada", CAEN: "English Canada", CAFR: "French Canada", DE: "Germany", FR: "France", AU: "Australia", ZA: "South Africa" };
+        const stageMap: Record<string, string> = { TOFU: "TOFU", MOFU: "MOFU", BOFU: "BOFU" };
+        let region = "", stage = "";
+        const chunks: string[] = [];
+        for (const p of parts.slice(2)) {
+          if (regionMap[p]) { region = regionMap[p]; continue; }
+          if (stageMap[p]) { stage = stageMap[p]; continue; }
+          if (/^[A-Z]{2,4}$/.test(p) && p.length <= 4) continue;
+          if (/^\d{4}/.test(p)) { chunks.push(p.replace(/^\d+/, "")); continue; }
+          chunks.push(p);
+        }
+        const name = chunks.join(" ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").replace(/\|/g, ", ").trim();
+        if (!name) return raw;
+        const suffix = [region, stage].filter(Boolean).join(", ");
+        return suffix ? `${name} (${suffix})` : name;
+      }
+
+      const enrichedContents = await Promise.all(contents.map(async (c, idx) => {
+        const readableName = toReadableNameMulti(c.name);
+        const stage = c.stage || "TOFU";
+        const product = c.product || "General";
+        const contentType = c.type || c.contentType || "Document";
+        const country = c.country || "";
+        const industry = c.industry || "";
+        const metrics = c.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
+        const hasMetrics = metrics.pageviews > 0 || metrics.downloads > 0 || metrics.leads > 0 || metrics.sqos > 0;
+
+        let storedContent: any = null;
+        if (c.contentId) {
+          try {
+            storedContent = await storage.getContentByAssetId(c.contentId);
+          } catch (e) {
+            console.error(`Failed to fetch content for ${c.contentId}:`, e);
+          }
+        }
+
+        const textForAnalysis = storedContent?.contentText || c.text || "";
+        const summary = storedContent?.contentSummary && storedContent.contentSummary !== "AI analysis unavailable" ? storedContent.contentSummary : "";
+        const structure = storedContent?.contentStructure || {};
+        const tags = normalizeKeywordTags(storedContent?.keywordTags as any);
+        const format = storedContent?.contentFormat || contentType;
+
+        return {
+          index: idx,
+          label: `Content ${String.fromCharCode(65 + idx)}`,
+          name: readableName,
+          contentId: c.contentId || `manual-${idx}`,
+          stage,
+          product,
+          contentType,
+          country,
+          industry,
+          metrics,
+          hasMetrics,
+          textForAnalysis,
+          readable: !!textForAnalysis,
+          summary,
+          structure,
+          tags,
+          format,
+        };
+      }));
+
+      const readableContents = enrichedContents.filter(c => c.readable);
+      const contentCount = enrichedContents.length;
+
+      const contentBlocks = enrichedContents.map(c => {
+        const engagementBlock = c.hasMetrics
+          ? `Pageviews: ${c.metrics.pageviews}, Downloads: ${c.metrics.downloads}, Leads: ${c.metrics.leads}, SQOs: ${c.metrics.sqos}, Avg Time: ${c.metrics.avgTime}s`
+          : "No engagement data available";
+
+        return `${c.label} — "${c.name}":
+Tagged Stage: ${c.stage} | Product: ${c.product} | Country/Region: ${c.country || "Not specified"} | Industry: ${c.industry || "Not specified"} | Format: ${c.format}
+${c.summary ? `Summary: ${c.summary}` : ""}
+Structure: ${c.structure.wordCount || "?"} words, ${c.structure.pageCount || "?"} pages
+Engagement data: ${engagementBlock}
+
+${c.textForAnalysis ? `FULL CONTENT TEXT:\n${c.textForAnalysis.slice(0, 8000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}`;
+      }).join("\n\n---\n\n");
+
+      const contentsJsonSchema = enrichedContents.map(c => {
+        if (!c.readable) {
+          return `{ "name": "${c.name}", "summary": null, "resonance": null, "keyTopics": null, "whatWorks": null, "improvements": null, "keywordTags": [] }`;
+        }
+        return `{ "name": "${c.name}", "summary": "3-4 sentence overview", "resonance": { "countryFit": "Strong|Moderate|Weak", "industryFit": "Strong|Moderate|Weak", "funnelStageFit": "Strong|Moderate|Weak", "productFit": "Strong|Moderate|Weak" }, "keyTopics": ["topic1", "topic2"], "whatWorks": ["strength1", "strength2"], "improvements": ["gap1", "gap2"], "keywordTags": ["tag1", "tag2", "...8-15 tags"] }`;
+      }).join(",\n    ");
+
+      let multiAnalysis: any = null;
+
+      try {
+        const anthropic = new Anthropic({
+          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY!,
+          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+        });
+
+        const analysisMsg = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 6000,
+          system: `You are a senior content strategist producing a multi-content comparison report for ${contentCount} content pieces. Be concise and scannable.
+
+CRITICAL HONESTY RULES:
+- ONLY analyze content you were given FULL TEXT for. Each content's readability is noted.
+- If content text was NOT provided, set that content's analysis fields to null.
+- NEVER guess from titles or filenames alone.
+
+CONCISENESS RULES:
+- Summaries: 3-4 sentences max.
+- Key topics: 3-5 items max per content.
+- Resonance ratings: use Strong/Moderate/Weak only.
+- Cross analysis items: 3-5 bullet points each.
+- Rankings: score 0-100 with 1-sentence reason.
+- Verdict: 1-2 paragraphs max.
+- Suggestions: max 5 items, 1-2 sentences each.
+
+SUGGESTION RULES — CRITICAL:
+- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, or writing NEW content.
+- Suggestions must focus on: improving existing content, better deployment, metadata corrections, re-positioning, or which content to prioritize.
+
+Return ONLY valid JSON matching this schema:
+{
+  "contents": [
+    ${contentsJsonSchema}
+  ],
+  "crossAnalysis": {
+    "sharedThemes": ["theme shared across multiple contents"],
+    "differentiators": ["what makes each content unique"],
+    "contentGaps": ["topics or angles missing across the set"]
+  },
+  "rankings": {
+    "overall": [{ "name": "content name", "score": 85, "reason": "1-sentence reason" }],
+    "byMetric": {
+      "bestForLeads": "content name or null",
+      "bestForEngagement": "content name or null",
+      "bestForConversion": "content name or null"
+    }
+  },
+  "verdict": "1-2 paragraphs: which content resonates best overall and why, key takeaways for the content set",
+  "suggestions": [{ "text": "actionable suggestion", "source": "AI Recommendation|Content Analysis|Internal Data" }]
+}`,
+          messages: [{
+            role: "user",
+            content: `Compare these ${contentCount} content pieces:\n\n${contentBlocks}`,
+          }],
+        });
+
+        const analysisText = ((analysisMsg.content[0] as any).text || "").trim();
+        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          multiAnalysis = JSON.parse(jsonMatch[0]);
+        }
+      } catch (analysisErr) {
+        console.error("Multi-comparison AI analysis failed:", analysisErr);
+      }
+
+      if (!multiAnalysis) {
+        multiAnalysis = {
+          contents: enrichedContents.map(c => ({
+            name: c.name,
+            summary: c.readable ? c.summary || "Content available but AI analysis failed." : null,
+            resonance: null,
+            keyTopics: null,
+            whatWorks: null,
+            improvements: null,
+            keywordTags: flattenKeywordTags(c.tags),
+          })),
+          crossAnalysis: { sharedThemes: [], differentiators: [], contentGaps: [] },
+          rankings: {
+            overall: enrichedContents.map(c => ({ name: c.name, score: 0, reason: "AI analysis unavailable" })),
+            byMetric: { bestForLeads: null, bestForEngagement: null, bestForConversion: null },
+          },
+          verdict: "AI analysis was unavailable. Please try again.",
+          suggestions: [{ text: "Retry the comparison when AI services are available.", source: "AI Recommendation" }],
+        };
+      }
+
+      const createContentPatterns = [
+        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate)\b/i,
+        /\b(create|develop|build|write|produce|draft|generate|launch)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic)\b/i,
+        /\b(develop|create|produce|write)\b\s+(a|an|the)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article)/i,
+      ];
+      if (multiAnalysis.suggestions) {
+        multiAnalysis.suggestions = multiAnalysis.suggestions.filter((s: any) => !createContentPatterns.some(rx => rx.test(s.text)));
+        multiAnalysis.suggestions = multiAnalysis.suggestions.slice(0, 5);
+      }
+
+      const contentDetails = enrichedContents.map(c => ({
+        name: c.name,
+        contentId: c.contentId,
+        stage: c.stage,
+        product: c.product,
+        contentType: c.contentType,
+        country: c.country,
+        industry: c.industry,
+        format: c.format,
+        hasMetrics: c.hasMetrics,
+        hasContent: c.readable,
+        metrics: c.metrics,
+        wordCount: c.structure.wordCount || null,
+        pageCount: c.structure.pageCount || null,
+        summary: c.summary,
+        tags: c.tags,
+      }));
+
+      res.json({
+        contentCount,
+        contentDetails,
+        contents: multiAnalysis.contents || [],
+        crossAnalysis: multiAnalysis.crossAnalysis || { sharedThemes: [], differentiators: [], contentGaps: [] },
+        rankings: multiAnalysis.rankings || { overall: [], byMetric: { bestForLeads: null, bestForEngagement: null, bestForConversion: null } },
+        verdict: multiAnalysis.verdict || "",
+        suggestions: multiAnalysis.suggestions || [],
+      });
+    } catch (error: any) {
+      console.error("Multi-comparison error:", error);
+      res.status(500).json({ error: "Multi-comparison analysis failed.", detail: error?.message });
+    }
+  });
+
   app.post("/api/assets/ingest", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body as { rows: any[] };
