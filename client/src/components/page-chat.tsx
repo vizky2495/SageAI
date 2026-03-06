@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2, GripHorizontal, MessageSquare, ArrowRight, ChevronDown, Sparkles } from "lucide-react";
+import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2, MessageSquare, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { authFetch } from "@/lib/queryClient";
@@ -28,11 +28,14 @@ interface PendingFile {
   dataUrl: string;
 }
 
-interface SearchResult {
-  type: "asset" | "action" | "ask";
-  label: string;
-  sublabel?: string;
-  action: () => void;
+interface GreetingStats {
+  hasData: boolean;
+  totalAssets?: number;
+  stageCounts?: Record<string, number>;
+  totalSqos?: number;
+  totalLeads?: number;
+  totalPageviews?: number;
+  topPerformer?: { contentId: string; sqos: number; stage: string } | null;
 }
 
 interface PageChatProps {
@@ -203,40 +206,69 @@ function getFileIcon(type: string) {
   return <File className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
+function formatNum(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return String(n);
+}
+
 const STARTERS = [
-  { label: "Evaluate a content asset", action: "upload" as const, prompt: "I'd like to evaluate a content asset's performance — show me the top performers.", icon: Upload },
-  { label: "Find best content for a campaign", action: "prefill" as const, prompt: "Find the best performing content for ", icon: Search },
-  { label: "Compare two content pieces", action: "send" as const, prompt: "I want to compare two content assets side-by-side. Can you help me analyze their performance?", icon: BarChart3 },
-  { label: "Show content gaps in my library", action: "send" as const, prompt: "Analyze our content library and show me where we have gaps across funnel stages, products, and content types.", icon: Layers },
+  { label: "Top performers", action: "send" as const, prompt: "Show me the top performing content assets across all funnel stages.", icon: BarChart3 },
+  { label: "Content gaps", action: "send" as const, prompt: "Analyze our content library and show me where we have gaps across funnel stages, products, and content types.", icon: Layers },
+  { label: "Compare assets", action: "send" as const, prompt: "I want to compare two content assets side-by-side. Can you help me analyze their performance?", icon: Search },
+  { label: "Evaluate content", action: "upload" as const, prompt: "I'd like to evaluate a content asset's performance — show me the top performers.", icon: Upload },
 ];
 
-function buildSmartActions(sendFn: (text: string) => void): { pattern: RegExp; results: (q: string) => SearchResult[] }[] {
-  return [
-    {
-      pattern: /^(compare|vs|versus)/i,
-      results: () => [{ type: "action", label: "Compare two content assets", sublabel: "Ask AI to run a side-by-side comparison", action: () => sendFn("Compare two content assets side-by-side. Show me the top performers and their key differences.") }],
-    },
-    {
-      pattern: /^(gap|missing|coverage)/i,
-      results: () => [{ type: "action", label: "Run content gap analysis", sublabel: "Find missing content across stages and products", action: () => sendFn("Analyze our content library and show me where we have gaps across funnel stages, products, and content types.") }],
-    },
-    {
-      pattern: /^(top|best|highest|winner)/i,
-      results: () => [
-        { type: "action", label: "Top 5 performers overall", sublabel: "By combined SQOs and engagement", action: () => sendFn("Show me the top 5 best performing content assets by combined SQOs and engagement.") },
-        { type: "action", label: "Top 5 by SQO conversion", sublabel: "Highest lead-to-opportunity rate", action: () => sendFn("What are the top 5 content assets by SQO conversion rate?") },
-        { type: "action", label: "Top 5 by engagement time", sublabel: "Longest average time on page", action: () => sendFn("What are the top 5 content assets with the longest average time on page?") },
-      ],
-    },
-    {
-      pattern: /^(plan|campaign)/i,
-      results: () => [{ type: "action", label: "Open Campaign Planner", sublabel: "Build an AI-powered campaign strategy", action: () => { window.location.href = "/campaign-planner"; } }],
-    },
-    {
-      pattern: /^(evaluate|upload)/i,
-      results: () => [{ type: "action", label: "Evaluate content performance", sublabel: "Analyze a content asset against your library", action: () => sendFn("I'd like to evaluate a content asset's performance — show me the top performers and how my content compares.") }],
-    },
-  ];
+function getGreetingMessage(agent: string, stats: GreetingStats | null): { title: string; message: string; actions: { label: string; prompt: string }[] } {
+  if (!stats?.hasData) {
+    if (agent === "librarian") {
+      return {
+        title: "Content Librarian",
+        message: "Welcome! Upload your marketing data and I'll analyze every asset in your library.",
+        actions: [{ label: "Get started", prompt: "How do I get started with content analysis?" }, { label: "Open chat", prompt: "" }],
+      };
+    }
+    if (agent === "planner") {
+      return {
+        title: "Campaign Strategist",
+        message: "Ready to plan your next campaign? I'll help you build a data-driven strategy.",
+        actions: [{ label: "Start planning", prompt: "Help me plan a new campaign." }, { label: "Open chat", prompt: "" }],
+      };
+    }
+    return {
+      title: "Performance Analyst",
+      message: "Upload your content data and I'll surface the insights you're missing.",
+      actions: [{ label: "Show insights", prompt: "What insights can you provide?" }, { label: "Open chat", prompt: "" }],
+    };
+  }
+
+  const tofu = stats.stageCounts?.["TOFU"] || 0;
+  const mofu = stats.stageCounts?.["MOFU"] || 0;
+  const bofu = stats.stageCounts?.["BOFU"] || 0;
+  const sqos = stats.totalSqos || 0;
+  const total = stats.totalAssets || 0;
+
+  if (agent === "librarian") {
+    return {
+      title: "Content Librarian",
+      message: `I've analyzed your ${formatNum(tofu)} TOFU and ${formatNum(mofu)} MOFU assets. Want to know which ones are actually performing?`,
+      actions: [{ label: "Show top performers", prompt: "Show me the top performing content assets by SQO conversion." }, { label: "Open chat", prompt: "" }],
+    };
+  }
+
+  if (agent === "planner") {
+    return {
+      title: "Campaign Strategist",
+      message: `Ready to plan your next campaign? With ${formatNum(total)} assets generating ${formatNum(sqos)} SQOs, I'll find the best content and tell you exactly how to use it.`,
+      actions: [{ label: "Start planning", prompt: "Help me plan a new campaign using our best performing content." }, { label: "Open chat", prompt: "" }],
+    };
+  }
+
+  return {
+    title: "Performance Analyst",
+    message: `Your content generated ${formatNum(sqos)} SQOs across ${formatNum(total)} assets. I can spot the trends you're missing.`,
+    actions: [{ label: "Show insights", prompt: "Show me the key performance trends and insights across my content." }, { label: "Open chat", prompt: "" }],
+  };
 }
 
 export default function PageChat({
@@ -247,7 +279,7 @@ export default function PageChat({
   fallbackSuggestions,
   pageContext,
 }: PageChatProps) {
-  type ChatMode = "closed" | "spotlight" | "fullchat";
+  type ChatMode = "closed" | "banner" | "chat";
   const [mode, setMode] = useState<ChatMode>("closed");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -257,103 +289,119 @@ export default function PageChat({
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
-  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  const [spotlightAnswerExpanded, setSpotlightAnswerExpanded] = useState(false);
-  const [windowHeight, setWindowHeight] = useState(() => {
-    const saved = localStorage.getItem('cia-chat-height');
-    return saved ? parseFloat(saved) : 45;
-  });
-  const [hoverChatBtn, setHoverChatBtn] = useState(false);
-  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
-  const [hoverTrigger, setHoverTrigger] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [greetingStats, setGreetingStats] = useState<GreetingStats | null>(null);
+  const [pillPulse, setPillPulse] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const spotlightInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isDragging = useRef(false);
-  const isResizing = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
   const { user } = useAuth();
+
+  const bannerSessionKey = `cia-banner-shown-${agent}`;
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
   useEffect(() => { scrollToBottom(); }, [msgs, streamingContent, scrollToBottom]);
-  useEffect(() => { fetchConversations(); if (agent === "cia") fetchSuggestions(); }, []);
-  useEffect(() => { localStorage.setItem('cia-chat-height', String(windowHeight)); }, [windowHeight]);
+  useEffect(() => { fetchConversations(); }, []);
 
   useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (isDragging.current) {
-        const x = Math.max(0, Math.min(window.innerWidth - 200, e.clientX - dragOffset.current.x));
-        const y = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.current.y));
-        setWindowPos({ x, y });
-      }
-      if (isResizing.current) {
-        const h = (window.innerHeight - e.clientY) / window.innerHeight * 100;
-        const minVh = Math.max(15, (200 / window.innerHeight) * 100);
-        setWindowHeight(Math.max(minVh, Math.min(80, h)));
-      }
-    }
-    function onMouseUp() {
-      isDragging.current = false;
-      isResizing.current = false;
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    }
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
+    authFetch("/api/greeting-stats")
+      .then(r => r.json())
+      .then(d => setGreetingStats(d))
+      .catch(() => setGreetingStats({ hasData: false }));
   }, []);
 
-  const smartActions = buildSmartActions((text: string) => {
-    setShowSearchResults(false);
-    setInput("");
-    setSpotlightAnswerExpanded(true);
-    ensureConversationAndSend(text);
-  });
+  useEffect(() => {
+    const alreadyShown = sessionStorage.getItem(bannerSessionKey);
+    if (alreadyShown) {
+      setBannerDismissed(true);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!sessionStorage.getItem(bannerSessionKey)) {
+        setMode("banner");
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [bannerSessionKey]);
 
   useEffect(() => {
-    if (input.trim().length < 2) { setSearchResults([]); setShowSearchResults(false); return; }
-    const q = input.trim().toLowerCase();
-    const isQuestion = /^(what|why|how|which|show|find|list|where|when|who|tell|give|analyze|compare)\b/i.test(q);
-    const results: SearchResult[] = [];
+    if (mode !== "banner") return;
+    const autoHide = setTimeout(() => {
+      dismissBanner();
+    }, 10000);
+    return () => clearTimeout(autoHide);
+  }, [mode]);
 
-    for (const sa of smartActions) {
-      if (sa.pattern.test(q)) {
-        results.push(...sa.results(q));
-      }
-    }
+  useEffect(() => {
+    if (mode !== "closed" || !bannerDismissed) return;
+    const interval = setInterval(() => {
+      setPillPulse(true);
+      setTimeout(() => setPillPulse(false), 1500);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [mode, bannerDismissed]);
 
-    if (isQuestion || q.length > 5) {
-      results.unshift({ type: "ask", label: `Ask AI: "${input.trim()}"`, sublabel: "Get an instant answer", action: () => handleSpotlightSend() });
-    }
-
-    setSearchResults(results);
-    setShowSearchResults(results.length > 0);
-  }, [input]);
-
-  async function fetchSuggestions() {
-    try {
-      const res = await authFetch("/api/chat/suggestions");
-      const data = await res.json();
-      if (data.suggestions?.length > 0) setDynamicSuggestions(data.suggestions);
-    } catch { setDynamicSuggestions([]); }
+  function dismissBanner() {
+    setMode("closed");
+    setBannerDismissed(true);
+    sessionStorage.setItem(bannerSessionKey, "true");
   }
 
-  const allSuggestions = [...new Set([
-    ...fallbackSuggestions,
-    ...(agent === "cia" ? dynamicSuggestions : []),
-    "Which content has the highest SQO conversion?",
-    "Show me aging content that needs a refresh",
-    "What are the top performers this quarter?",
-  ])].slice(0, 6);
+  function openChat() {
+    dismissBanner();
+    setMode("chat");
+    setTimeout(() => chatInputRef.current?.focus(), 200);
+  }
+
+  function closeChat() {
+    setMode("closed");
+    setIsFullscreen(false);
+    setShowHistory(false);
+    setInput("");
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        if (mode === "chat") closeChat();
+        else openChat();
+      }
+      if (e.key === "Escape" && mode === "chat") closeChat();
+      if (e.key === "Escape" && mode === "banner") dismissBanner();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+
+  useEffect(() => {
+    function handleOpenFullChat(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.asset) {
+        const context = `Asking about: ${detail.asset.contentId} — ${detail.stage || "Unknown"} — ${detail.asset.productFranchise || "N/A"}`;
+        openChat();
+        if (detail.messages?.length > 0) {
+          const existing = detail.messages.map((m: { id: number; role: string; content: string }) => ({
+            ...m,
+            createdAt: new Date().toISOString(),
+          }));
+          setMsgs(existing);
+          setInput("");
+        } else {
+          setInput(context);
+        }
+      }
+    }
+    window.addEventListener("open-full-chat", handleOpenFullChat);
+    return () => window.removeEventListener("open-full-chat", handleOpenFullChat);
+  }, []);
 
   async function fetchConversations() {
     try {
@@ -370,7 +418,7 @@ export default function PageChat({
       setActiveConv(data);
       setMsgs(data.messages || []);
       setShowHistory(false);
-      setMode("fullchat");
+      setMode("chat");
     } catch (e) { console.error("Failed to open conversation", e); }
   }
 
@@ -493,27 +541,6 @@ export default function PageChat({
     }
   }
 
-  function handleSpotlightSend() {
-    if (!input.trim() || isStreaming) return;
-    setSpotlightAnswerExpanded(true);
-    setShowSearchResults(false);
-    ensureConversationAndSend(input.trim());
-  }
-
-  function handleSpotlightKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (showSearchResults && searchResults.length > 0 && searchResults[0].type === "ask") {
-        searchResults[0].action();
-      } else if (input.trim()) {
-        handleSpotlightSend();
-      }
-    }
-    if (e.key === "Escape") {
-      closeAll();
-    }
-  }
-
   function handleChatKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -522,110 +549,35 @@ export default function PageChat({
     }
   }
 
-  function escalateToFullChat() {
-    setMode("fullchat");
-    setSpotlightAnswerExpanded(false);
-    setShowSearchResults(false);
-    setTimeout(() => chatInputRef.current?.focus(), 200);
-  }
-
-  function closeAll() {
-    setMode("closed");
-    setIsFullscreen(false);
-    setShowHistory(false);
-    setSpotlightAnswerExpanded(false);
-    setShowSearchResults(false);
-    setWindowPos(null);
-    setInput("");
-  }
-
-  function openSpotlight() {
-    setMode("spotlight");
-    setTimeout(() => spotlightInputRef.current?.focus(), 150);
-  }
-
-  function openFullChat() {
-    setMode("fullchat");
-    setSpotlightAnswerExpanded(false);
-    setShowSearchResults(false);
-    setTimeout(() => chatInputRef.current?.focus(), 200);
-  }
-
   function handleStarterClick(s: typeof STARTERS[0]) {
     if (s.action === "upload") {
       setInput(s.prompt);
       setTimeout(() => fileInputRef.current?.click(), 200);
     } else if (s.action === "prefill") {
       setInput(s.prompt);
-      if (mode === "spotlight") setTimeout(() => spotlightInputRef.current?.focus(), 100);
-      else setTimeout(() => chatInputRef.current?.focus(), 100);
+      setTimeout(() => chatInputRef.current?.focus(), 100);
     } else {
       ensureConversationAndSend(s.prompt);
     }
   }
 
-  function handleDragStart(e: React.MouseEvent) {
-    if (isFullscreen) return;
-    const el = (e.currentTarget as HTMLElement).closest("[data-chat-window]") as HTMLElement;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    isDragging.current = true;
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "grabbing";
-    if (!windowPos) setWindowPos({ x: rect.left, y: rect.top });
+  function handleBannerAction(prompt: string) {
+    if (!prompt) {
+      openChat();
+      return;
+    }
+    openChat();
+    setTimeout(() => ensureConversationAndSend(prompt), 300);
   }
 
-  function handleResizeStart(e: React.MouseEvent) {
-    if (isFullscreen) return;
-    e.preventDefault();
-    e.stopPropagation();
-    isResizing.current = true;
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "ns-resize";
-  }
+  const greeting = getGreetingMessage(agent, greetingStats);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (mode !== "closed") closeAll();
-        else openSpotlight();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
-        e.preventDefault();
-        if (mode === "fullchat") closeAll();
-        else openFullChat();
-      }
-      if (e.key === "Escape" && mode !== "closed") closeAll();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode]);
-
-  useEffect(() => {
-    function handleOpenFullChat(e: Event) {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.asset) {
-        const context = `Asking about: ${detail.asset.contentId} — ${detail.stage || "Unknown"} — ${detail.asset.productFranchise || "N/A"}`;
-        setInput("");
-        setMode("fullchat");
-        if (detail.messages?.length > 0) {
-          const existing = detail.messages.map((m: { id: number; role: string; content: string }) => ({
-            ...m,
-            createdAt: new Date().toISOString(),
-          }));
-          setMsgs(existing);
-        }
-        setTimeout(() => chatInputRef.current?.focus(), 200);
-      }
-    }
-    window.addEventListener("open-full-chat", handleOpenFullChat);
-    return () => window.removeEventListener("open-full-chat", handleOpenFullChat);
-  }, []);
-
-  const totalMsgCount = msgs.length + (streamingContent ? 1 : 0);
-  const shouldSuggestFullChat = mode === "spotlight" && totalMsgCount >= 3 && !isStreaming;
+  const allSuggestions = [...new Set([
+    ...fallbackSuggestions,
+    "Which content has the highest SQO conversion?",
+    "Show me aging content that needs a refresh",
+    "What are the top performers this quarter?",
+  ])].slice(0, 4);
 
   const renderMessage = (msg: Message, idx: number) => {
     const prevMsg = idx > 0 ? msgs[idx - 1] : null;
@@ -753,368 +705,198 @@ export default function PageChat({
           <Send className="h-4 w-4" />
         </button>
       </div>
+      <div className="flex items-center justify-between mt-1.5 px-1">
+        <span className="text-[10px] text-muted-foreground/30">Drop a file to evaluate it against your library</span>
+        <kbd className="text-[10px] text-muted-foreground/20 font-mono">⌘J</kbd>
+      </div>
     </div>
   );
 
-  const fullChatWindowStyle = isFullscreen ? {} : windowPos ? { left: windowPos.x, top: windowPos.y, transform: "none", height: `${windowHeight}vh` } : { height: `${windowHeight}vh` };
-  const fullChatWindowClass = isFullscreen
-    ? "fixed z-50 flex flex-col overflow-hidden border border-[#00D657]/20 shadow-2xl inset-0"
-    : windowPos
-      ? "fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl w-[95vw] sm:w-[700px]"
-      : "fixed z-50 flex flex-col overflow-hidden rounded-t-2xl border border-[#00D657]/20 shadow-2xl bottom-0 left-0 right-0";
-
   return (
     <>
-      <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.csv" multiple className="hidden" onChange={handleFileSelect} data-testid={`input-file-global-${agent}`} />
-
-      {!(mode === "fullchat" && isFullscreen) && (
-        <div className="fixed bottom-6 right-6 z-[55] flex flex-col items-center gap-3" data-testid={`floating-buttons-${agent}`}>
-          {mode === "closed" && (
-            <div
-              className="group relative"
-              onMouseEnter={() => setHoverTrigger(true)}
-              onMouseLeave={() => setHoverTrigger(false)}
-              data-testid={`ai-trigger-${agent}`}
-            >
-              <motion.button
-                onClick={openSpotlight}
-                className="relative h-12 w-12 rounded-full flex items-center justify-center border border-[#00D657]/30 shadow-lg"
-                style={{ background: "rgba(10, 20, 15, 0.85)", backdropFilter: "blur(24px)" }}
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.95 }}
-                data-testid={`btn-ai-trigger-${agent}`}
-              >
-                <motion.div
-                  className="absolute inset-0 rounded-full border-2 border-[#00D657]/30"
-                  animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                />
-                <span className="text-sm font-bold text-[#00D657]">AI</span>
-              </motion.button>
-              <AnimatePresence>
-                {hoverTrigger && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="absolute right-14 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border border-[#00D657]/20"
-                    style={{ background: "rgba(10, 20, 15, 0.9)", backdropFilter: "blur(16px)" }}
-                  >
-                    <span className="text-white/70">Spotlight </span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[#00D657] text-[10px] font-mono ml-0.5">⌘K</kbd>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-
-          <div
-            className="group/chat relative"
-            onMouseEnter={() => setHoverChatBtn(true)}
-            onMouseLeave={() => setHoverChatBtn(false)}
-          >
-            <motion.button
-              onClick={mode === "fullchat" ? closeAll : openFullChat}
-              className="relative h-12 w-12 rounded-full flex items-center justify-center border border-[#00D657]/30 shadow-lg"
-              style={{ background: "rgba(10, 20, 15, 0.85)", backdropFilter: "blur(24px)" }}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-              data-testid={`btn-chat-trigger-${agent}`}
-            >
-              {mode === "fullchat" ? (
-                <Minimize2 className="h-4.5 w-4.5 text-[#00D657]" />
-              ) : (
-                <MessageSquare className="h-4.5 w-4.5 text-[#00D657]" />
-              )}
-            </motion.button>
-            <AnimatePresence>
-              {hoverChatBtn && (
-                <motion.div
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  className="absolute right-14 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border border-[#00D657]/20"
-                  style={{ background: "rgba(10, 20, 15, 0.9)", backdropFilter: "blur(16px)" }}
-                >
-                  <span className="text-white/70">{mode === "fullchat" ? "Close chat" : "Open chat"} </span>
-                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[#00D657] text-[10px] font-mono ml-0.5">⌘J</kbd>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      )}
+      <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.xlsx,.csv" multiple className="hidden" onChange={handleFileSelect} data-testid={`input-file-global-${agent}`} />
 
       <AnimatePresence>
-        {mode === "spotlight" && (
+        {mode === "banner" && !bannerDismissed && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="fixed inset-0 z-40"
-              style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
-              onClick={closeAll}
-              data-testid={`spotlight-overlay-${agent}`}
-            />
-
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 500, damping: 35 }}
-              className="fixed z-50 left-1/2 -translate-x-1/2 w-[90vw] sm:w-[640px]"
-              style={{ top: "20%" }}
-              onClick={(e) => e.stopPropagation()}
-              data-testid={`spotlight-${agent}`}
+          <div className="fixed inset-0 z-[54]" onClick={dismissBanner} data-testid={`banner-backdrop-${agent}`} />
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            className="fixed bottom-6 right-6 z-[55] w-[320px]"
+            data-testid={`welcome-banner-${agent}`}
+          >
+            <div
+              className="rounded-2xl border border-[#00D657]/20 p-4 shadow-2xl"
+              style={{ background: "rgba(10, 20, 15, 0.88)", backdropFilter: "blur(24px)" }}
             >
-              <div className="rounded-2xl border border-[#00D657]/20 shadow-2xl overflow-hidden" style={{ background: "rgba(10, 20, 15, 0.92)", backdropFilter: "blur(30px)" }}>
-                <div className="flex items-center gap-3 px-4 h-14 border-b border-[#00D657]/10">
-                  <button
-                    onClick={openFullChat}
-                    className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity"
-                    title="Open full chat"
-                    data-testid={`btn-spotlight-agent-${agent}`}
-                  >
-                    <div className="h-7 w-7 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
-                      <Sparkles className="h-3.5 w-3.5 text-black" />
-                    </div>
-                    <span className="text-xs font-medium text-white/50 hidden sm:inline">{agentName}</span>
-                  </button>
-                  <input
-                    ref={spotlightInputRef}
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleSpotlightKeyDown}
-                    placeholder={placeholder}
-                    className="flex-1 bg-transparent border-none outline-none text-base text-white placeholder:text-white/30"
-                    data-testid={`input-spotlight-${agent}`}
-                    autoFocus
+              <button
+                onClick={dismissBanner}
+                className="absolute top-3 right-3 p-1 rounded-lg hover:bg-white/10 transition-colors text-white/40 hover:text-white"
+                data-testid={`btn-dismiss-banner-${agent}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="relative shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-[#00D657] flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-black">CIA</span>
+                  </div>
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-[#00D657]/40"
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={openFullChat} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Open full chat" data-testid={`btn-spotlight-openchat-${agent}`}>
-                      <MessageSquare className="h-4 w-4 text-white/40" />
-                    </button>
-                    <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" data-testid={`btn-spotlight-attach-${agent}`}>
-                      <Paperclip className="h-4 w-4 text-white/40" />
-                    </button>
-                    <button
-                      onClick={handleSpotlightSend}
-                      disabled={!input.trim() || isStreaming}
-                      className="h-8 w-8 rounded-full bg-[#00D657] hover:bg-[#00C04E] text-black flex items-center justify-center disabled:opacity-40 transition-colors"
-                      data-testid={`btn-spotlight-send-${agent}`}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                    </button>
-                    <kbd className="text-[10px] text-white/20 font-mono hidden sm:inline">ESC</kbd>
-                  </div>
                 </div>
-
-                <AnimatePresence>
-                  {showSearchResults && searchResults.length > 0 && !spotlightAnswerExpanded && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                      <div className="p-2 max-h-[300px] overflow-y-auto">
-                        {searchResults.map((r, i) => (
-                          <button
-                            key={i}
-                            onClick={r.action}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-white/5 transition-colors group"
-                            data-testid={`search-result-${i}`}
-                          >
-                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${r.type === "ask" ? "bg-[#00D657]/15" : r.type === "asset" ? "bg-blue-500/15" : "bg-white/5"}`}>
-                              {r.type === "ask" ? <Sparkles className="h-4 w-4 text-[#00D657]" /> : r.type === "asset" ? <FileText className="h-4 w-4 text-blue-400" /> : <Search className="h-4 w-4 text-white/40" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm text-white truncate">{r.label}</div>
-                              {r.sublabel && <div className="text-xs text-white/40 truncate">{r.sublabel}</div>}
-                            </div>
-                            <ArrowRight className="h-3.5 w-3.5 text-white/20 group-hover:text-[#00D657] transition-colors shrink-0" />
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                  {spotlightAnswerExpanded && (msgs.length > 0 || streamingContent || isStreaming) && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                      <div ref={scrollRef} className="max-h-[50vh] overflow-y-auto p-4 space-y-3 scrollbar-thin">
-                        {msgs.map(renderMessage)}
-                        {renderStreaming}
-                      </div>
-
-                      {shouldSuggestFullChat && (
-                        <div className="px-4 py-2 border-t border-[#00D657]/10">
-                          <button
-                            onClick={escalateToFullChat}
-                            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium text-[#00D657] hover:bg-[#00D657]/10 transition-colors"
-                            data-testid={`btn-escalate-${agent}`}
-                          >
-                            <MessageSquare className="h-3.5 w-3.5" />
-                            This looks like a deeper conversation. Continue in full chat?
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 px-4 py-2 border-t border-[#00D657]/10">
-                        <button
-                          onClick={escalateToFullChat}
-                          className="flex items-center gap-1.5 text-xs text-white/50 hover:text-[#00D657] transition-colors"
-                          data-testid={`btn-open-fullchat-${agent}`}
-                        >
-                          <Maximize2 className="h-3 w-3" />
-                          Open in full chat
-                        </button>
-                        <div className="flex-1" />
-                        <button
-                          onClick={createConversation}
-                          className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors"
-                          data-testid={`btn-spotlight-new-${agent}`}
-                        >
-                          <Plus className="h-3 w-3" />
-                          New
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {!spotlightAnswerExpanded && !showSearchResults && msgs.length === 0 && (
-                  <div className="p-4">
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {STARTERS.map((s) => {
-                        const Icon = s.icon;
-                        return (
-                          <button key={s.label} onClick={() => handleStarterClick(s)} className="flex items-center gap-2.5 rounded-xl border border-white/5 bg-white/[0.03] p-2.5 text-left hover:bg-white/[0.06] hover:border-[#00D657]/20 transition-all group" data-testid={`starter-${s.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}>
-                            <div className="h-7 w-7 rounded-lg bg-[#00D657]/10 flex items-center justify-center group-hover:bg-[#00D657]/20 transition-colors shrink-0">
-                              <Icon className="h-3.5 w-3.5 text-[#00D657]" />
-                            </div>
-                            <span className="text-xs font-medium text-white/70 leading-tight">{s.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="space-y-1">
-                      {allSuggestions.map((q) => (
-                        <button
-                          key={q}
-                          onClick={() => { setInput(q); setTimeout(() => spotlightInputRef.current?.focus(), 50); }}
-                          className="w-full text-left text-xs rounded-lg px-3 py-1.5 hover:bg-white/5 transition text-white/40 hover:text-white/70"
-                          data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <span className="text-sm font-semibold text-white">{greeting.title}</span>
               </div>
-            </motion.div>
+
+              <p className="text-sm text-white/70 leading-relaxed mb-4">{greeting.message}</p>
+
+              <div className="flex gap-2">
+                {greeting.actions.map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleBannerAction(action.prompt)}
+                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
+                      i === 0
+                        ? "bg-[#00D657] text-black hover:bg-[#00C04E]"
+                        : "border border-[#00D657]/30 text-[#00D657] hover:bg-[#00D657]/10"
+                    }`}
+                    data-testid={`btn-banner-action-${agent}-${i}`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
           </>
         )}
       </AnimatePresence>
 
+      {mode === "closed" && bannerDismissed && (
+        <motion.button
+          onClick={openChat}
+          className="fixed bottom-6 right-6 z-[55] flex items-center gap-2.5 rounded-full border border-[#00D657]/30 px-4 py-2.5 shadow-lg cursor-pointer group"
+          style={{ background: "rgba(10, 20, 15, 0.88)", backdropFilter: "blur(24px)" }}
+          whileHover={{ width: "auto", boxShadow: "0 0 20px rgba(0, 214, 87, 0.15)" }}
+          animate={pillPulse ? { scale: [1, 1.04, 1], borderColor: ["rgba(0,214,87,0.3)", "rgba(0,214,87,0.6)", "rgba(0,214,87,0.3)"] } : {}}
+          transition={pillPulse ? { duration: 1.5, ease: "easeInOut" } : { type: "spring", stiffness: 300 }}
+          data-testid={`chat-pill-${agent}`}
+        >
+          <div className="relative shrink-0">
+            <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center">
+              <span className="text-[7px] font-bold text-black">CIA</span>
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00D657] border border-black/50" />
+          </div>
+          <span className="text-xs font-medium text-white/80 whitespace-nowrap group-hover:text-white transition-colors">{greeting.title}</span>
+        </motion.button>
+      )}
+
       <AnimatePresence>
-        {mode === "fullchat" && (
-          <>
-            <motion.div
-              initial={{ opacity: 0, y: 60 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 60 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className={fullChatWindowClass}
-              style={{ ...fullChatWindowStyle, background: "rgba(10, 12, 10, 0.95)", boxShadow: "0 -4px 20px rgba(0, 0, 0, 0.5)" }}
-              data-chat-window
-              data-testid={`fullchat-window-${agent}`}
-            >
-              {!isFullscreen && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-5 cursor-ns-resize z-10 flex items-center justify-center group" onMouseDown={handleResizeStart} data-testid={`resize-handle-${agent}`}>
-                  <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#00D657]/50 transition-colors" />
-                </div>
-              )}
-
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0 cursor-grab active:cursor-grabbing select-none" onMouseDown={handleDragStart}>
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center"><span className="text-[8px] font-bold text-black">CIA</span></div>
-                  <span className="text-sm font-semibold text-white truncate max-w-[200px]">
-                    {activeConv?.title && activeConv.title !== "New Chat" ? activeConv.title : agentName}
-                  </span>
-                  <GripHorizontal className="h-3.5 w-3.5 text-white/20 ml-1" />
-                </div>
-                <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
-                  <button onClick={createConversation} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title="New conversation" data-testid={`btn-new-chat-${agent}`}><Plus className="h-4 w-4" /></button>
-                  <button onClick={() => setShowHistory(!showHistory)} className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`} title="History" data-testid={`btn-history-${agent}`}><History className="h-4 w-4" /></button>
-                  <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} data-testid={`btn-fullscreen-${agent}`}>{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
-                  <button onClick={closeAll} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" data-testid={`btn-close-chat-${agent}`}><X className="h-4 w-4" /></button>
-                </div>
+        {mode === "chat" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className={
+              isFullscreen
+                ? "fixed inset-0 z-[55] flex flex-col overflow-hidden"
+                : "fixed bottom-6 right-6 z-[55] flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl w-[420px]"
+            }
+            style={{
+              background: "rgba(10, 12, 10, 0.95)",
+              boxShadow: isFullscreen ? undefined : "-4px 0 20px rgba(0, 0, 0, 0.4)",
+              height: isFullscreen ? undefined : "65vh",
+              maxHeight: isFullscreen ? undefined : "calc(100vh - 48px)",
+            }}
+            data-testid={`chat-panel-${agent}`}
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center"><span className="text-[8px] font-bold text-black">CIA</span></div>
+                <span className="text-sm font-semibold text-white truncate max-w-[200px]">
+                  {activeConv?.title && activeConv.title !== "New Chat" ? activeConv.title : agentName}
+                </span>
               </div>
+              <div className="flex items-center gap-1">
+                <button onClick={createConversation} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title="New conversation" data-testid={`btn-new-chat-${agent}`}><Plus className="h-4 w-4" /></button>
+                <button onClick={() => setShowHistory(!showHistory)} className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`} title="History" data-testid={`btn-history-${agent}`}><History className="h-4 w-4" /></button>
+                <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} data-testid={`btn-fullscreen-${agent}`}>{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
+                <button onClick={closeChat} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" data-testid={`btn-close-chat-${agent}`}><X className="h-4 w-4" /></button>
+              </div>
+            </div>
 
-              <div className="flex flex-1 min-h-0">
-                <AnimatePresence>
-                  {showHistory && (
-                    <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 240, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="border-r border-border/20 overflow-hidden shrink-0">
-                      <div className="w-[240px] h-full overflow-y-auto p-2 scrollbar-thin">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold px-2 py-1 mb-1">History</div>
-                        {conversations.length === 0 ? (
-                          <div className="text-xs text-muted-foreground/40 text-center py-4">No conversations yet</div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            {conversations.map((conv) => (
-                              <div key={conv.id} onClick={() => openConversation(conv)} className={`flex items-center justify-between rounded-lg px-2 py-1.5 cursor-pointer transition group text-xs ${activeConv?.id === conv.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`} data-testid={`conv-item-${agent}-${conv.id}`}>
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate font-medium">{conv.title}</div>
-                                  <div className="text-[10px] text-muted-foreground/40">{new Date(conv.createdAt).toLocaleDateString()}</div>
-                                </div>
-                                <button onClick={(e) => deleteConversation(conv.id, e)} className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all shrink-0" data-testid={`btn-delete-conv-${agent}-${conv.id}`}><Trash2 className="h-3 w-3 text-destructive" /></button>
+            <div className="flex flex-1 min-h-0">
+              <AnimatePresence>
+                {showHistory && (
+                  <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 240, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="border-r border-border/20 overflow-hidden shrink-0">
+                    <div className="w-[240px] h-full overflow-y-auto p-2 scrollbar-thin">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-semibold px-2 py-1 mb-1">History</div>
+                      {conversations.length === 0 ? (
+                        <div className="text-xs text-muted-foreground/40 text-center py-4">No conversations yet</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {conversations.map((conv) => (
+                            <div key={conv.id} onClick={() => openConversation(conv)} className={`flex items-center justify-between rounded-lg px-2 py-1.5 cursor-pointer transition group text-xs ${activeConv?.id === conv.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`} data-testid={`conv-item-${agent}-${conv.id}`}>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{conv.title}</div>
+                                <div className="text-[10px] text-muted-foreground/40">{new Date(conv.createdAt).toLocaleDateString()}</div>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="flex-1 flex flex-col min-w-0">
-                  <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
-                    {msgs.length === 0 && !streamingContent && (
-                      <div className="py-8">
-                        <div className="text-center mb-6">
-                          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#00D657] mb-3"><span className="text-sm font-bold text-black">CIA</span></div>
-                          <div className="text-base font-semibold mb-1">{agentName}</div>
-                          <div className="text-xs text-muted-foreground max-w-[280px] mx-auto">{description}</div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 mb-4 max-w-[500px] mx-auto">
-                          {STARTERS.map((s) => {
-                            const Icon = s.icon;
-                            return (
-                              <button key={s.label} onClick={() => handleStarterClick(s)} className="flex flex-col items-start gap-2 rounded-xl border border-border/30 bg-muted/10 p-3 text-left hover:bg-muted/20 hover:border-[#00D657]/30 transition-all group" data-testid={`starter-fc-${s.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}>
-                                <div className="h-7 w-7 rounded-lg bg-[#00D657]/10 flex items-center justify-center group-hover:bg-[#00D657]/20 transition-colors"><Icon className="h-3.5 w-3.5 text-[#00D657]" /></div>
-                                <span className="text-xs font-medium leading-tight">{s.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="space-y-1.5 max-w-[500px] mx-auto">
-                          {allSuggestions.map((q) => (
-                            <button key={q} onClick={() => { setInput(q); setTimeout(() => chatInputRef.current?.focus(), 50); }} className="w-full text-left text-xs rounded-xl border border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20 hover:border-[#00D657]/30 transition text-muted-foreground hover:text-foreground" data-testid={`suggestion-fc-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}>
-                              {q}
-                            </button>
+                              <button onClick={(e) => deleteConversation(conv.id, e)} className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all shrink-0" data-testid={`btn-delete-conv-${agent}-${conv.id}`}><Trash2 className="h-3 w-3 text-destructive" /></button>
+                            </div>
                           ))}
                         </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex-1 flex flex-col min-w-0">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+                  {msgs.length === 0 && !streamingContent && (
+                    <div className="py-6">
+                      <div className="text-center mb-5">
+                        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#00D657] mb-3"><span className="text-sm font-bold text-black">CIA</span></div>
+                        <div className="text-base font-semibold mb-1">{agentName}</div>
+                        <div className="text-xs text-muted-foreground max-w-[280px] mx-auto leading-relaxed">
+                          {greeting.message}
+                        </div>
                       </div>
-                    )}
-                    {msgs.map(renderMessage)}
-                    {renderStreaming}
-                  </div>
-                  {chatInputArea}
+                      <div className="grid grid-cols-2 gap-2 mb-4 max-w-[380px] mx-auto">
+                        {STARTERS.map((s) => {
+                          const Icon = s.icon;
+                          return (
+                            <button key={s.label} onClick={() => handleStarterClick(s)} className="flex items-center gap-2 rounded-xl border border-border/30 bg-muted/10 p-2.5 text-left hover:bg-muted/20 hover:border-[#00D657]/30 transition-all group" data-testid={`starter-${s.label.slice(0, 15).replace(/\s+/g, "-").toLowerCase()}`}>
+                              <div className="h-7 w-7 rounded-lg bg-[#00D657]/10 flex items-center justify-center group-hover:bg-[#00D657]/20 transition-colors shrink-0"><Icon className="h-3.5 w-3.5 text-[#00D657]" /></div>
+                              <span className="text-xs font-medium leading-tight">{s.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="space-y-1 max-w-[380px] mx-auto">
+                        {allSuggestions.map((q) => (
+                          <button key={q} onClick={() => { setInput(q); setTimeout(() => chatInputRef.current?.focus(), 50); }} className="w-full text-left text-xs rounded-xl border border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20 hover:border-[#00D657]/30 transition text-muted-foreground hover:text-foreground" data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}>
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {msgs.map(renderMessage)}
+                  {renderStreaming}
                 </div>
+                {chatInputArea}
               </div>
-            </motion.div>
-          </>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

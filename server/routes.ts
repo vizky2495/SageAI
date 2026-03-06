@@ -1443,6 +1443,36 @@ Respond with ONLY valid JSON in this exact format:
     }
   });
 
+  app.get("/api/greeting-stats", requireAuth, async (_req, res) => {
+    try {
+      const summary = await buildInsightsSummary();
+      if (!summary) {
+        return res.json({ hasData: false });
+      }
+      const stageCounts: Record<string, number> = {};
+      let totalSqos = 0;
+      let totalAssets = 0;
+      for (const s of summary.stage_summary) {
+        stageCounts[s.stage] = s.count;
+        totalSqos += s.sqos;
+        totalAssets += s.count;
+      }
+      const topPerformer = summary.top_content?.[0] || null;
+      res.json({
+        hasData: true,
+        totalAssets,
+        stageCounts,
+        totalSqos,
+        totalLeads: summary.metric_totals.leads,
+        totalPageviews: summary.metric_totals.pageviews,
+        topPerformer: topPerformer ? { contentId: topPerformer.contentId, sqos: topPerformer.sqos, stage: topPerformer.stage } : null,
+      });
+    } catch (err: any) {
+      console.error("Greeting stats error:", err);
+      res.json({ hasData: false });
+    }
+  });
+
   app.get("/api/insights/summary", requireAuth, async (_req, res) => {
     try {
       const summary = await buildInsightsSummary();

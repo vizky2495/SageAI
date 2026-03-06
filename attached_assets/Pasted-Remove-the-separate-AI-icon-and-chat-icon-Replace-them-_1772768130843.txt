@@ -1,0 +1,173 @@
+Remove the separate AI icon and chat icon. Replace them with a single, prominent AI chat presence that greets the user and makes it obvious there's an intelligent assistant on the page. No Spotlight feature — just a great chat experience.
+
+STEP 1: REMOVE THE CONFUSION
+
+Delete the floating "AI" circle button in the bottom-right
+Delete the separate chat bubble icon
+Delete the Spotlight/command bar overlay
+Replace all of these with ONE unified chat entry point
+
+
+STEP 2: THE AI WELCOME BANNER (first-time & returning user greeting)
+When a user lands on any page for the first time in a session, show a smart welcome banner that slides in from the bottom-right corner:
+Design:
+
+Glassmorphic card, approximately 320px wide × 160px tall
+Position: fixed, bottom-right corner, 24px from edges
+Smooth slide-up animation (400ms spring) with a subtle bounce
+Small green "CIA" avatar (32px) at the top-left of the card with a green pulse ring animation
+
+Content changes based on the page the user is on:
+On Content Library:
+
+Avatar + "Content Librarian"
+Message: "I've analyzed your 258 TOFU and 427 MOFU assets. Want to know which ones are actually performing?"
+Two action buttons: "Show top performers" | "Open chat"
+
+On Performance/Analytics:
+
+Avatar + "Performance Analyst"
+Message: "Your content generated [X] SQOs this quarter. I can spot the trends you're missing."
+Two action buttons: "Show insights" | "Open chat"
+
+On Campaign Planner:
+
+Avatar + "Campaign Strategist"
+Message: "Ready to plan your next campaign? I'll find the best content and tell you exactly how to use it."
+Two action buttons: "Start planning" | "Open chat"
+
+Behavior:
+
+The banner appears 2 seconds after the page loads (give the page time to render first)
+It stays visible for 10 seconds, then gently minimizes to a persistent chat pill at the bottom-right (see Step 3)
+The user can dismiss it earlier by clicking X or clicking outside it
+It only shows the full banner once per session per page. After that, it stays minimized as the chat pill.
+If the user clicks either action button, it opens the full chat with the relevant action pre-loaded
+
+Make the message dynamic using real data:
+
+Pull the actual asset counts from the data: "I've analyzed your 258 TOFU assets..." (not hardcoded)
+Pull actual performance numbers: "Your content generated 1,247 SQOs this quarter..."
+This makes the greeting feel intelligent and personalized, not generic
+
+
+STEP 3: THE PERSISTENT CHAT PILL (always visible after banner dismisses)
+After the welcome banner minimizes, it collapses into a persistent chat pill:
+Design:
+
+Fixed position: bottom-right, 24px from edges
+Pill shaped: approximately 200px wide × 48px tall, border-radius 24px
+Glassmorphic background with green border
+Contents: Green CIA avatar (24px) + "Content Librarian" text + small green dot (active indicator)
+On hover: pill expands slightly (210px), border glows brighter, subtle shadow increases
+On click: opens the full chat panel
+
+Micro-interactions on the pill:
+
+Every 60 seconds, the pill does a very subtle pulse animation (one single pulse, not continuous) — just enough to remind the user it's there without being annoying
+If the AI detects something noteworthy (based on what the user is browsing), the pill briefly expands to show a one-line teaser:
+
+Pill temporarily shows: "CIA | 3 assets need attention →" (then collapses back after 5 seconds)
+Or: "CIA | Found a top performer matching your filters →"
+Clicking the expanded teaser opens the chat with the relevant insight
+
+
+Maximum 1 teaser per 5 minutes — never spam the user
+
+
+STEP 4: THE FULL CHAT PANEL (opens from the pill)
+When the user clicks the pill or any action button from the welcome banner:
+Opening animation:
+
+The pill smoothly transforms into the full chat panel — it grows from the pill's position outward (scale + expand animation, 400ms spring)
+This makes it feel like the pill IS the chat, not a separate element
+
+Chat panel design:
+
+Position: fixed, bottom-right corner
+Size: 420px wide × 65% viewport height (not full-width bottom panel — keep it as a right-side panel that doesn't block the content)
+Glassmorphic background: rgba(10, 12, 10, 0.95) — nearly opaque so chat text is perfectly readable
+NO blur on the page content behind/beside it — the library cards remain fully visible and interactive
+Subtle shadow on the left edge to separate from page content
+Border-radius: 16px on top-left and top-right corners (bottom corners sit flush with screen edge)
+
+Chat panel layout:
+
+Header: CIA avatar + agent name (contextual) + minimize button (collapses back to pill) + expand to full screen + close (X)
+Empty state (new conversation):
+
+Agent greeting that matches the page: "Hey! I'm your Content Librarian. I've already analyzed every asset in your library. What do you want to know?"
+4 quick action chips in a 2×2 grid (compact, not huge cards):
+
+"Top performers" | "Content gaps" | "Compare assets" | "Evaluate content"
+
+
+3-4 suggested prompts as clickable text below the chips
+File upload area: "Drop a file here to evaluate it against your library"
+
+
+Active conversation:
+
+Standard chat layout: user messages right, agent messages left
+Rich rendering: tables, verdict badges, source tags, comparison cards
+Input pinned at bottom: text field + paperclip (upload) + send button
+The page content to the left remains fully visible and interactive
+
+
+
+Full screen mode:
+When user clicks expand:
+
+Split screen: Left (55%) = chat conversation. Right (45%) = live data panel showing referenced assets, tables, and charts as the AI mentions them
+"Exit full screen" returns to the corner panel
+
+
+STEP 5: CONTEXTUAL GREETING VARIATIONS (keep it fresh)
+The welcome banner should not show the same message every time. Rotate through contextual greetings based on user behavior and data:
+First ever visit:
+
+"Welcome to Content Librarian. I know every asset in your library — ask me anything."
+
+Returning user, morning:
+
+"Good morning. Since your last visit, 4 new assets were added and your TOFU conversion is up 8%."
+
+Returning user, browsing same product as last time:
+
+"Back for Sage Intacct content? Your top performer just hit 150 SQOs. Want to build on that momentum?"
+
+User browsing filtered view:
+
+"I see you're looking at TOFU email content. The best performer here has 339 views and 5 SQOs. Want the full analysis?"
+
+User on Performance page with declining metrics:
+
+"Heads up — MOFU conversion dropped 12% this month. I can show you exactly which assets are underperforming."
+
+User on Campaign Planner:
+
+"Your last campaign plan targeted 35 SQOs and you hit 42. Ready to beat that record?"
+
+The key: every greeting should reference real data from the platform. Never show a generic "How can I help you?" — always demonstrate that the AI has already done the work.
+
+STEP 6: INLINE CARD INTERACTIONS (keep these — they complement the chat)
+Keep the hover insight tooltips on content cards from earlier. These are separate from the chat and provide quick inline intelligence:
+
+Hover on any card → small tooltip with one-line AI insight + performance bar
+"Ask" button on tooltip → opens the chat panel with this asset as context
+"Compare" button on tooltip → triggers compare mode
+
+These inline interactions feed into the single chat panel — they're not a separate AI interface, they're shortcuts that open the same chat with pre-loaded context.
+
+WHAT TO DELETE:
+
+The floating "AI" circle button — replaced by the chat pill
+The separate chat bubble icon — merged into the chat pill
+The Spotlight/command bar overlay — removed entirely
+The ⌘K shortcut for Spotlight — replace with ⌘J to toggle the chat panel open/closed
+Any dual-icon confusion — there is now ONE entry point: the pill → the chat panel
+
+
+VISUAL SUMMARY:
+User lands on page → Welcome banner slides in with personalized data-driven greeting (2 sec delay) → User reads it, clicks action or waits → Banner minimizes to persistent pill → Pill sits in bottom-right, always visible, occasionally shows teasers → User clicks pill → Chat panel opens from pill with smooth animation → User chats, uploads files, gets insights → User minimizes → Back to pill → Always there, never confusing.
+One AI. One entry point. One chat. Always smart. Always visible.
