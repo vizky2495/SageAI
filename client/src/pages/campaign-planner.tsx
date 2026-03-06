@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX, FileText, Video, Monitor, Mail, Globe, Pencil, Download } from "lucide-react";
+import { Send, Plus, Trash2, ChevronLeft, Target, ShieldCheck, Copy, Check, Lightbulb, Users, BarChart3, Layers, Rocket, Eye, CalendarDays, FileDown, CircleCheck, CircleX, FileText, Video, Monitor, Mail, Globe, Pencil, Download, ArrowLeftRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { authFetch } from "@/lib/queryClient";
@@ -1427,9 +1427,115 @@ export default function CampaignPlannerPage() {
     scrollToBottom();
   }, [msgs, streamingContent, scrollToBottom]);
 
+  const [comparisonBanner, setComparisonBanner] = useState<{ nameA: string; nameB: string } | null>(null);
+
   useEffect(() => {
     fetchConversations();
     fetchProducts();
+
+    const raw = sessionStorage.getItem("cia-campaign-context");
+    if (raw) {
+      sessionStorage.removeItem("cia-campaign-context");
+      try {
+        const ctx = JSON.parse(raw);
+        if (ctx.fromComparison) {
+          setComparisonBanner({ nameA: ctx.nameA, nameB: ctx.nameB });
+
+          const parts: string[] = [];
+          parts.push("Campaign brief (pre-loaded from content comparison):");
+          parts.push(`- Objective: ${ctx.objective}`);
+          parts.push(`- Product: ${ctx.product}`);
+          if (ctx.country) parts.push(`- Target Country/Region: ${ctx.country}`);
+          if (ctx.industry) parts.push(`- Target Industry: ${ctx.industry}`);
+          parts.push(`- Funnel Stage: ${ctx.funnelStage}`);
+          if (ctx.contentType) parts.push(`- Content Type: ${ctx.contentType}`);
+          if (ctx.budget) parts.push(`- Budget Range: ${ctx.budget}`);
+          if (ctx.timeline) parts.push(`- Timeline: ${ctx.timeline}`);
+
+          if (ctx.selectedAssets?.length) {
+            parts.push(`\nSelected content assets for campaign:`);
+            ctx.selectedAssets.forEach((a: any) => {
+              parts.push(`  - "${a.name}" (${a.format}, ${a.stage}, ${a.product})`);
+              if (a.summary) parts.push(`    Summary: ${a.summary}`);
+            });
+          }
+
+          if (ctx.contentOverview) {
+            parts.push(`\nContent overview from comparison:`);
+            if (ctx.contentOverview.a) parts.push(`  ${ctx.nameA}: ${ctx.contentOverview.a}`);
+            if (ctx.contentOverview.b) parts.push(`  ${ctx.nameB}: ${ctx.contentOverview.b}`);
+          }
+
+          if (ctx.resonanceAssessment) {
+            const ra = ctx.resonanceAssessment;
+            parts.push(`\nAudience resonance assessment:`);
+            if (ra.a) {
+              parts.push(`  ${ctx.nameA}:`);
+              for (const dim of ["countryFit", "industryFit", "funnelStageFit", "productFit"]) {
+                if (ra.a[dim]) parts.push(`    - ${dim}: ${ra.a[dim].rating} — ${ra.a[dim].explanation}`);
+              }
+            }
+            if (ra.b) {
+              parts.push(`  ${ctx.nameB}:`);
+              for (const dim of ["countryFit", "industryFit", "funnelStageFit", "productFit"]) {
+                if (ra.b[dim]) parts.push(`    - ${dim}: ${ra.b[dim].rating} — ${ra.b[dim].explanation}`);
+              }
+            }
+          }
+
+          if (ctx.verdict) {
+            parts.push(`\nComparison verdict: ${ctx.verdict}`);
+          }
+
+          if (ctx.suggestions?.length) {
+            parts.push(`\nActionable suggestions from comparison:`);
+            ctx.suggestions.forEach((s: string, i: number) => {
+              parts.push(`  ${i + 1}. ${s}`);
+            });
+          }
+
+          if (ctx.contextNotes) {
+            parts.push(`\nAdditional context and notes from the user:\n${ctx.contextNotes}`);
+          }
+
+          if (ctx.metricsA || ctx.metricsB) {
+            parts.push(`\nPerformance data:`);
+            if (ctx.metricsA) parts.push(`  ${ctx.nameA}: Pageviews=${ctx.metricsA.pageviews ?? "N/A"}, Leads=${ctx.metricsA.uniqueLeads ?? "N/A"}, SQOs=${ctx.metricsA.sqoCount ?? "N/A"}`);
+            if (ctx.metricsB) parts.push(`  ${ctx.nameB}: Pageviews=${ctx.metricsB.pageviews ?? "N/A"}, Leads=${ctx.metricsB.uniqueLeads ?? "N/A"}, SQOs=${ctx.metricsB.sqoCount ?? "N/A"}`);
+          }
+
+          parts.push("");
+          parts.push("Skip the Q&A phase. You have all required inputs from the content comparison. Proceed directly to analysis and build a complete campaign plan. Use the resonance assessment, comparison verdict, and suggestions to inform your channel selection, messaging, and content strategy. Reference the comparison insights in your recommendations where relevant. Tag every data point with its source.");
+
+          const prompt = parts.join("\n");
+          const title = `${ctx.product || "Campaign"} — ${ctx.country || ctx.industry || ctx.funnelStage} (from comparison)`;
+
+          setTimeout(async () => {
+            try {
+              const res = await authFetch("/api/conversations", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, agent: "planner" }),
+              });
+              if (!res.ok) {
+                throw new Error(`Failed to create conversation: ${res.status}`);
+              }
+              const conv = await res.json();
+              setActiveConv(conv);
+              setMsgs([]);
+              setShowList(false);
+              setShowIntakeForm(false);
+              setShowSummaryView(false);
+              fetchConversations();
+              sendMessageDirect(conv.id, prompt);
+            } catch (e) {
+              console.error("Failed to create comparison-based conversation", e);
+              setComparisonBanner(null);
+            }
+          }, 500);
+        }
+      } catch {}
+    }
   }, []);
 
   async function fetchProducts() {
@@ -1795,8 +1901,23 @@ export default function CampaignPlannerPage() {
               <CompletedPlanSummary msgs={msgs} convTitle={activeConv?.title || "Campaign Plan"} onExportPdf={handleSummaryExportPdf} onEditPlan={() => setShowSummaryView(false)} />
             )}
 
+            {comparisonBanner && (
+              <div className="mx-3 mt-2 rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-start gap-3" data-testid="comparison-banner">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <ArrowLeftRight className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold">Campaign plan pre-loaded from content comparison</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{comparisonBanner.nameA} vs {comparisonBanner.nameB}. All parameters were set from your comparison — you can still edit them.</p>
+                </div>
+                <button onClick={() => setComparisonBanner(null)} className="text-muted-foreground hover:text-foreground p-0.5 shrink-0">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
             <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pb-4">
-              {msgs.length === 0 && !streamingContent && (
+              {msgs.length === 0 && !streamingContent && !comparisonBanner && (
                 <div className="text-center py-8">
                   <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/30 mb-4">
                     <Target className="h-7 w-7 text-primary" />

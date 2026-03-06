@@ -1,0 +1,220 @@
+Rewrite the Content Comparison tool completely. The comparison should answer one question: "Which content will resonate better with my target audience and why?" Add a PDF download in Sage brand template and a "Plan Campaign" button that passes full context to the Campaign Planner with user approval before proceeding.
+
+PART 1: REMOVE THESE SECTIONS FROM THE CURRENT COMPARISON
+Delete entirely:
+
+Performance Forecast section — never project or estimate numbers
+Stage Benchmarks section (Min/Max/Mean/Median cards) — remove from default view
+Reusability Assessment — hide by default, only show when user explicitly asks
+CTA as standalone section — if CTA is relevant, mention it within the resonance assessment or suggestions, not as its own section
+Projected numbers in performance table — never fabricate data
+"Readiness score" — no made-up scores
+"NEW CONTENT (PROJECTED)" column — replace with actual data or "No data"
+Delta percentages against imaginary numbers — show "—" when one side has no data
+
+
+PART 2: THE COMPARISON FRAMEWORK — CONTENT RESONANCE
+When both assets have uploaded content, the AI reads both pieces and evaluates them through the lens of audience resonance using four dimensions:
+
+Country/Region — from engagement data or user input. Different countries have different business practices, regulations, language expectations, and cultural norms.
+Industry — from engagement data or user input. Industry-specific pain points, terminology, and use cases matter.
+Funnel Stage — from engagement data. TOFU should educate and build awareness. MOFU should nurture and build consideration. BOFU should drive action and conversion. Content tagged as one stage but reading like another is misaligned.
+Product — from engagement data. Content should clearly connect to the product's value proposition for the target audience.
+
+
+PART 3: COMPARISON OUTPUT STRUCTURE
+Section 1 — Content Overview (what each piece is about):
+Simple side-by-side summaries in plain language — no tables, just clear descriptions. For each content piece describe: what it covers, who it's written for, the tone and approach, the language, the depth (word count, page count), and how it's structured.
+Source tag: [Source: Content Analysis — from uploaded files]
+Section 2 — Audience Resonance Assessment:
+For each content piece, evaluate resonance across the four dimensions:
+
+Country fit: Does the content reference country-specific regulations, business practices, terminology, and cultural norms? Is the language appropriate for the target market? Rate as Strong / Moderate / Weak with a 1-2 sentence explanation.
+Industry fit: Does the content speak to industry-specific pain points and use cases? Does it use the right terminology? Would someone in this industry see their problems reflected? Rate with explanation.
+Funnel stage fit: Does the content match its tagged funnel stage? TOFU should educate and build awareness, not assume prior knowledge. MOFU should nurture and compare. BOFU should drive action. Flag misalignment if the content reads like a different stage than it's tagged. Rate with explanation.
+Product fit: Does the content clearly connect to the product's value proposition? Is it product-centric or problem-centric? Does it help the reader understand why this product matters for their situation? Rate with explanation.
+
+Source tag: [Source: Content Analysis — from uploaded files, cross-referenced with asset metadata from Internal Data]
+Section 3 — Topic Relevance (what they talk about and does it matter):
+For each content piece, list the key topics and evaluate whether each topic is relevant to the target audience:
+Show as a table per content piece:
+| Topic | Relevant to target audience? | Why |
+Rate each topic as: Highly relevant / Moderately relevant / Low relevance — with a brief explanation of why.
+Below both tables, provide an AI insight comparing the two: which piece has more relevant topics, which approach (problem-centric vs product-centric) is stronger, and what this means for audience engagement.
+Source tag: [Source: Content Analysis]
+Section 4 — What's Shared, What's Different:
+Two subsections:
+
+Where they overlap: topics, audience, market, approach elements they share
+Where they diverge: language, approach (problem-first vs product-first), depth, specificity, audience assumptions, and any fundamental differences
+
+Source tag: [Source: Content Analysis]
+Section 5 — Verdict & Suggestions:
+A clear verdict paragraph that:
+
+States which content resonates better with the target audience and why
+References real engagement data where available to support the verdict
+Acknowledges when content serves different purposes rather than forcing a winner
+Is based ONLY on what was actually found in the content and real data — no fabricated scores or projections
+
+Followed by numbered suggestions that are specific, actionable, and grounded in the analysis. Each suggestion should explain what to do and why based on evidence from the content or data.
+Source tags: [Source: Content Analysis + Internal Data] for verdict, [Source: AI Recommendation — based on content analysis and engagement patterns] for suggestions
+Section 6 — Performance Comparison (factual only):
+Show at the bottom as supporting context, not the main analysis.
+Table with real numbers only:
+| Metric | Content A | Content B |
+
+If an asset has real engagement data, show real numbers
+If an asset has NO data, show "No data" — not projections
+Delta column only shows a delta when BOTH sides have real data. If one side has no data, show "—"
+Column headers: "Content A (Actual)" and "Content B (Actual)" — not "Baseline" and "New Content (Projected)"
+If one side has no data, add a note: "Content B has no engagement history. Performance comparison will be meaningful once this content is deployed and generates data."
+
+Source tag: [Source: Internal Data]
+
+PART 4: ACTION BUTTONS AT THE BOTTOM
+After the last section of the comparison, show two action buttons side by side:
+Button 1 — "Download Comparison Report (PDF)"
+
+Brilliant Green filled button, left side
+Download icon on the left of the label
+
+Button 2 — "Plan Campaign With This Content →"
+
+Dark background with green border and green text, right side
+Campaign/rocket icon on the left of the label
+
+
+PART 5: PDF DOWNLOAD — SAGE BRAND TEMPLATE
+When user clicks "Download Comparison Report":
+Generate a professionally formatted PDF with Sage branding:
+Page 1 — Cover page:
+
+Black background with subtle green gradient glow in lower-right area
+Title: "Content Comparison Report" in large bold white text
+Subtitle: "[Content A readable name] vs [Content B readable name]"
+Date generated in Brilliant Green
+"Prepared by Content Intelligence Analyst" in Brilliant Green
+Sage logo bottom-left
+"CONFIDENTIAL: INTERNAL USE ONLY" + copyright in small green text at bottom
+
+Page 2 — Content Overview:
+
+Side-by-side summaries of both content pieces
+Key metadata: format, word count, language, funnel stage, product, country, industry
+Engagement data summary where available
+Source tags on all data points
+
+Page 3 — Audience Resonance Assessment:
+
+Country fit, Industry fit, Funnel stage fit, Product fit for each content piece
+Formatted as two columns — Content A on left, Content B on right
+Each dimension rated with explanation
+
+Page 4 — Topic Relevance:
+
+Topic comparison tables with relevance ratings
+AI insight paragraph below
+
+Page 5 — Shared vs Different:
+
+Overlap and divergence points
+
+Page 6 — Verdict & Suggestions:
+
+Verdict paragraph
+Numbered suggestions with specific recommendations
+Source tags on everything
+
+Page 7 — Performance Comparison (only if data exists):
+
+Performance table with real numbers only
+No projections, no forecasts
+Note where data is unavailable
+
+PDF styling:
+
+All pages: black background (#000000)
+Headlines: white, bold. Section accents: Brilliant Green (#00D657)
+Body text: white (#E0E0E0)
+Tables: green header row with black text, alternating dark teal (#004D4D) / near-black (#1A1A1A) rows
+Source tags: colored text — green for Internal Data, jade for Content Analysis, amber for AI Recommendation
+Sage logo on every page bottom-left
+Page numbers bottom-right
+Footer: "CONFIDENTIAL: INTERNAL USE ONLY" + "© 2026 The Sage Group plc, or its licensors. All rights reserved." in small green text
+No emoji, no garbled characters, no raw markdown
+All table columns wide enough for full text — no truncation
+Text wrapping enabled in all table cells
+
+
+PART 6: PLAN CAMPAIGN FLOW — CONTEXT HANDOFF WITH USER APPROVAL
+When user clicks "Plan Campaign With This Content":
+Step 1 — Context Review Screen:
+Show a modal or overlay where the user reviews and edits the context before it goes to the Campaign Planner. Title: "Review Campaign Context". Subtitle: "This information will be pre-loaded into the Campaign Planner. Edit anything before proceeding."
+Recommended Content section:
+
+Show which content piece the comparison recommends (the "winner" or both if they serve different purposes)
+Each shown as a compact card: readable name, format, funnel stage, product
+User can toggle each on/off with "Include in campaign plan" checkbox
+User can select "Use both — multi-asset campaign"
+
+Campaign Parameters section (all pre-filled from comparison context, all editable):
+
+Campaign Objective: Pre-filled based on funnel stage (TOFU → Awareness, MOFU → Lead Generation, BOFU → Conversion). Dropdown — user can change.
+Product: Pre-filled from content's product tag. Dropdown — user can change.
+Target Country/Region: Pre-filled from content's country tag. Dropdown — user can change.
+Target Industry: Pre-filled from content's industry tag. Text field — user can change.
+Funnel Stage: Pre-filled from content's funnel stage. TOFU / MOFU / BOFU pills — user can change. If the comparison verdict suggested a different funnel stage, show an AI suggestion note: "Based on content analysis, this may perform better as MOFU. Current tag: TOFU" — user decides.
+Content Type: Pre-filled from content format. Dropdown — user can change.
+Timeline: Not pre-filled. Optional dropdown (4 weeks / 8 weeks / 12 weeks / Custom).
+Budget: Not pre-filled. Optional text field.
+
+Comparison Insights section (pre-filled, editable text area):
+Pre-populated with key insights from the comparison relevant to campaign planning:
+
+Content resonance findings (which audience it connects with and why)
+Key suggestions from the comparison (what to improve, what to leverage)
+Performance data context where available
+User can edit, add, or remove any of this text
+
+Full Context Preview (collapsible):
+A collapsible section showing everything that will be sent to the Campaign Planner AI:
+
+Content summaries from both pieces
+Audience resonance assessment results
+Suggestions from the comparison
+Performance data
+Note: "This context helps the AI create a more accurate campaign plan"
+
+Action buttons:
+
+"Build Campaign Plan →" — Brilliant Green, primary. Submits everything and opens Campaign Planner.
+"Edit" — keeps review screen open
+"Cancel" — returns to comparison results
+
+Step 2 — Campaign Planner receives full context:
+When user clicks "Build Campaign Plan":
+
+Navigate to the Campaign Planner
+Skip the wizard intake form — all fields are pre-filled from the context review
+Show confirmation at top: "Campaign plan pre-loaded from content comparison: [Content A] vs [Content B]. All parameters were set from your comparison — you can still edit them."
+The Campaign Planner AI receives everything as its starting context:
+
+Selected content asset(s) with full summaries
+Audience resonance assessment
+Comparison suggestions
+Performance data where available
+All campaign parameters
+User's additional context and edits
+
+
+The AI begins building the campaign plan immediately using all context — no additional questions needed unless something is genuinely missing
+The plan should reference comparison insights: "Based on content analysis, this PDF resonates strongly with French-Canadian accountants on compliance topics. The campaign should leverage this by targeting accountant communities during year-end season."
+
+Context mapping — what flows from comparison to planner:
+Comparison DataMaps To In PlannerWinning/selected contentPre-selected content asset(s)Content funnel stageFunnel stage field (pre-filled, editable)Content product tagProduct field (pre-filled, editable)Content country tagTarget country field (pre-filled, editable)Content industry tagTarget industry field (pre-filled, editable)Funnel stage → objective logicCampaign objective (pre-filled, editable)Content summariesAI context for plan generationResonance assessmentAI context for channel and messaging recommendationsComparison suggestionsAI context for recommendationsPerformance dataAI context for KPI settingUser's additional notesAdditional context (passed as-is to AI)
+Edge cases:
+
+If comparison has no clear winner (both serve different purposes): context review shows both with checkboxes, user selects which to include
+If content has no engagement data: performance section in context shows "No engagement history — new content". Campaign Planner uses comparable asset data from library, clearly labeled as [Source: Internal Data — comparable assets]
+If user edits parameters significantly in the review (changes country, product, etc.): Campaign Planner respects the user's edits, not the original comparison tags

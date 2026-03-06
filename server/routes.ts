@@ -664,22 +664,13 @@ No explanation, no markdown, no extra text. Only JSON.`,
   app.post("/api/assets/full-comparison", requireAuth, async (req: Request, res: Response) => {
     try {
       const { contentA, contentB } = req.body as {
-        contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
-        contentB: { name: string; contentId?: string; stage: string; product: string; contentType: string; industry: string; topic: string; text?: string; hasExistingAnalysis?: boolean; metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
+        contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; country?: string; industry?: string; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
+        contentB: { name: string; contentId?: string; stage: string; product: string; contentType: string; industry: string; country?: string; topic: string; text?: string; metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
       };
 
       if (!contentA || !contentB) {
         return res.status(400).json({ error: "Both contentA and contentB are required." });
       }
-
-      const classification = {
-        contentType: contentB.contentType || "Document",
-        stage: contentB.stage || "TOFU",
-        product: contentB.product || "General",
-        industry: contentB.industry || "General",
-        topic: contentB.topic || contentB.name,
-        confidence: 1.0,
-      };
 
       function toReadableName(raw: string): string {
         if (!raw || raw.length < 5) return raw;
@@ -704,18 +695,23 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
       const nameA = toReadableName(contentA.name);
       const nameB = toReadableName(contentB.name);
+      const countryA = contentA.country || "";
+      const countryB = contentB.country || "";
+      const industryA = contentA.industry || "";
+      const industryB = contentB.industry || contentB.industry || "";
+      const stageA = contentA.stage || "TOFU";
+      const stageB = contentB.stage || "TOFU";
+      const productA = contentA.product || "General";
+      const productB = contentB.product || "General";
+      const typeA = contentA.type || "Document";
+      const typeB = contentB.contentType || "Document";
 
       let contentAStored: any = null;
       let contentBStored: any = null;
-      try {
-        contentAStored = await storage.getContentByAssetId(contentA.contentId);
-      } catch {}
-      try {
-        if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId);
-      } catch {}
+      try { contentAStored = await storage.getContentByAssetId(contentA.contentId); } catch {}
+      try { if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId); } catch {}
       const aHasContent = contentAStored?.fetchStatus === "success";
       const bHasContent = contentBStored?.fetchStatus === "success" || !!contentB.text;
-
       const aTextForAnalysis = contentAStored?.contentText || "";
       const bTextForAnalysis = contentBStored?.contentText || contentB.text || "";
       const bothHaveContent = !!(aTextForAnalysis && bTextForAnalysis);
@@ -725,191 +721,137 @@ No explanation, no markdown, no extra text. Only JSON.`,
       const aHasMetrics = metricsA.pageviews > 0 || metricsA.downloads > 0 || metricsA.leads > 0 || metricsA.sqos > 0;
       const bHasMetrics = metricsB.pageviews > 0 || metricsB.downloads > 0 || metricsB.leads > 0 || metricsB.sqos > 0;
 
-      let contentAnalysis: any = null;
+      const aSummary = contentAStored?.contentSummary || "";
+      const bSummary = contentBStored?.contentSummary || "";
+      const aStructure = contentAStored?.contentStructure || {};
+      const bStructure = contentBStored?.contentStructure || {};
+
+      let resonanceAnalysis: any = null;
 
       if (bothHaveContent) {
         try {
           const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-
-          const aStructure = contentAStored?.contentStructure || {};
-          const bStructure = contentBStored?.contentStructure || {};
-          const aTopics = contentAStored?.extractedTopics || [];
-          const bTopics = contentBStored?.extractedTopics || [];
-          const aCta = contentAStored?.extractedCta;
-          const bCta = contentBStored?.extractedCta;
-          const aSummary = contentAStored?.contentSummary || "";
-          const bSummary = contentBStored?.contentSummary || "";
-          const aThemes = contentAStored?.messagingThemes || [];
-          const bThemes = contentBStored?.messagingThemes || [];
-
           const analysisMsg = await anthropic.messages.create({
             model: "claude-sonnet-4-5",
-            max_tokens: 3000,
-            system: `You are a senior content analyst. You will receive the full text of two content assets (Content A and Content B). Analyze them and return a JSON object with detailed content-to-content comparison. Be specific — cite section numbers, word counts, and exact details from the content. Do NOT fabricate or project any performance numbers. Only describe what is actually in the content.
+            max_tokens: 5000,
+            system: `You are a senior content strategist evaluating which of two content assets will resonate better with the target audience. You evaluate content through four resonance dimensions: Country/Region fit, Industry fit, Funnel Stage fit, and Product fit. Be specific and cite evidence from the actual content. Do NOT fabricate performance numbers or readiness scores.
 
 Return ONLY valid JSON with this exact structure:
 {
-  "topicCoverage": [
-    { "topic": "string", "contentA": "string describing coverage or 'Not covered'", "contentB": "string describing coverage or 'Not covered'" }
-  ],
-  "sharedContent": [
-    { "topic": "string", "comparison": "string explaining how each piece handles it differently" }
-  ],
-  "uniqueToA": [
-    { "topic": "string", "assessment": "string — is this a strength or gap, and why" }
-  ],
-  "uniqueToB": [
-    { "topic": "string", "assessment": "string — is this a strength or gap, and why" }
-  ],
-  "messaging": {
-    "primaryAudienceA": "string",
-    "primaryAudienceB": "string",
-    "toneA": "string",
-    "toneB": "string",
-    "depthA": "string",
-    "depthB": "string",
-    "languageA": "string",
-    "languageB": "string",
-    "readingLevelA": "string",
-    "readingLevelB": "string"
+  "contentOverview": {
+    "a": { "covers": "what the content covers in plain language", "writtenFor": "who the target audience is", "tone": "the tone and approach", "language": "the language used", "depth": "word count and page count and level of detail", "structure": "how it is organized" },
+    "b": { "covers": "...", "writtenFor": "...", "tone": "...", "language": "...", "depth": "...", "structure": "..." }
   },
-  "ctaComparison": {
-    "ctaPresentA": true/false,
-    "ctaPresentB": true/false,
-    "ctaTextA": "exact CTA text found or 'None found'",
-    "ctaTextB": "exact CTA text found or 'None found'",
-    "ctaTypeA": "Soft/Medium/Strong or 'N/A'",
-    "ctaTypeB": "Soft/Medium/Strong or 'N/A'",
-    "ctaPlacementA": "where in the document",
-    "ctaPlacementB": "where in the document",
-    "ctaStrengthAssessmentA": "AI assessment with reasoning",
-    "ctaStrengthAssessmentB": "AI assessment with reasoning"
+  "resonanceAssessment": {
+    "a": {
+      "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences on country-specific regulations, practices, terminology, cultural norms" },
+      "industryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences on industry pain points, use cases, terminology" },
+      "funnelStageFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences — does the content match its tagged stage? TOFU=educate/awareness, MOFU=nurture/compare, BOFU=drive action. Flag misalignment." },
+      "productFit": { "rating": "Strong|Moderate|Weak", "explanation": "1-2 sentences on product value proposition connection" }
+    },
+    "b": {
+      "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "..." },
+      "industryFit": { "rating": "Strong|Moderate|Weak", "explanation": "..." },
+      "funnelStageFit": { "rating": "Strong|Moderate|Weak", "explanation": "..." },
+      "productFit": { "rating": "Strong|Moderate|Weak", "explanation": "..." }
+    },
+    "suggestedStageA": "TOFU|MOFU|BOFU or null if stage matches",
+    "suggestedStageB": "TOFU|MOFU|BOFU or null if stage matches"
   },
-  "structureComparison": {
-    "formatA": "string",
-    "formatB": "string",
-    "wordCountA": number,
-    "wordCountB": number,
-    "sectionsA": "string describing section structure",
-    "sectionsB": "string describing section structure",
-    "visualsA": "string describing visual elements",
-    "visualsB": "string describing visual elements",
-    "readabilityA": "string",
-    "readabilityB": "string"
+  "topicRelevance": {
+    "a": [
+      { "topic": "topic name", "relevance": "Highly relevant|Moderately relevant|Low relevance", "why": "brief explanation" }
+    ],
+    "b": [
+      { "topic": "topic name", "relevance": "Highly relevant|Moderately relevant|Low relevance", "why": "brief explanation" }
+    ],
+    "aiInsight": "2-3 sentences comparing topic approaches: which has more relevant topics, problem-centric vs product-centric, what this means for engagement"
   },
+  "sharedAndDifferent": {
+    "overlap": ["shared element 1", "shared element 2"],
+    "divergence": ["difference 1", "difference 2"]
+  },
+  "verdict": "A clear verdict paragraph (4-8 sentences) stating which content resonates better and why. Reference engagement data where provided. Acknowledge when content serves different purposes. Based ONLY on actual content and real data.",
   "suggestions": [
-    { "text": "string — specific actionable recommendation grounded in analysis", "source": "AI Recommendation" }
+    { "text": "specific actionable suggestion explaining what to do and why based on evidence", "source": "AI Recommendation" }
   ]
 }`,
             messages: [{
               role: "user",
               content: `CONTENT A — "${nameA}":
-Summary: ${aSummary}
-Known topics: ${aTopics.join(", ") || "none extracted"}
-Known CTA: ${aCta ? `${aCta.text} (${aCta.type}, ${aCta.strength})` : "none extracted"}
-Known themes: ${aThemes.join(", ") || "none"}
+Tagged Stage: ${stageA} | Product: ${productA} | Country/Region: ${countryA || "Not specified"} | Industry: ${industryA || "Not specified"} | Format: ${contentAStored?.contentFormat || typeA}
+Summary: ${aSummary || "Not available"}
 Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages, ${aStructure.sectionCount || "?"} sections
-Format: ${contentAStored?.contentFormat || contentA.type || "Unknown"}
 Headings: ${(aStructure.headings || []).join("; ") || "none"}
+Engagement data: ${aHasMetrics ? `Pageviews: ${metricsA.pageviews}, Downloads: ${metricsA.downloads}, Leads: ${metricsA.leads}, SQOs: ${metricsA.sqos}, Avg Time: ${metricsA.avgTime}s` : "No engagement data"}
 
-Full text (first 4000 chars):
-${aTextForAnalysis.slice(0, 4000)}
+Full text (first 6000 chars):
+${aTextForAnalysis.slice(0, 6000)}
 
 ---
 
 CONTENT B — "${nameB}":
-Summary: ${bSummary}
-Known topics: ${bTopics.join(", ") || "none extracted"}
-Known CTA: ${bCta ? `${bCta.text} (${bCta.type}, ${bCta.strength})` : "none extracted"}
-Known themes: ${bThemes.join(", ") || "none"}
+Tagged Stage: ${stageB} | Product: ${productB} | Country/Region: ${countryB || "Not specified"} | Industry: ${industryB || "Not specified"} | Format: ${contentBStored?.contentFormat || typeB}
+Summary: ${bSummary || "Not available"}
 Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages, ${bStructure.sectionCount || "?"} sections
-Format: ${contentBStored?.contentFormat || classification.contentType || "Unknown"}
 Headings: ${(bStructure.headings || []).join("; ") || "none"}
+Engagement data: ${bHasMetrics ? `Pageviews: ${metricsB.pageviews}, Downloads: ${metricsB.downloads}, Leads: ${metricsB.leads}, SQOs: ${metricsB.sqos}, Avg Time: ${metricsB.avgTime}s` : "No engagement data"}
 
-Full text (first 4000 chars):
-${bTextForAnalysis.slice(0, 4000)}`,
+Full text (first 6000 chars):
+${bTextForAnalysis.slice(0, 6000)}`,
             }],
           });
-
           const analysisText = ((analysisMsg.content[0] as any).text || "").trim();
           const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            contentAnalysis = JSON.parse(jsonMatch[0]);
+            resonanceAnalysis = JSON.parse(jsonMatch[0]);
           }
         } catch (analysisErr) {
-          console.error("Content analysis generation failed:", analysisErr);
+          console.error("Content resonance analysis failed:", analysisErr);
         }
       }
 
-      let sourceTags: string[] = [];
-      if (aHasMetrics || bHasMetrics) sourceTags.push("[Source: Internal Data — engagement metrics]");
-      if (bothHaveContent) sourceTags.push("[Source: Content Analysis — from uploaded files]");
-      else if (aHasContent || bHasContent) {
-        const side = aHasContent ? nameA : nameB;
-        sourceTags.push(`[Source: Content Analysis — ${side} only]`);
-      }
+      const contentOverview = resonanceAnalysis?.contentOverview || null;
+      const resonanceAssessment = resonanceAnalysis?.resonanceAssessment || null;
+      const topicRelevance = resonanceAnalysis?.topicRelevance || null;
+      const sharedAndDifferent = resonanceAnalysis?.sharedAndDifferent || null;
 
-      let verdict = "";
-      try {
-        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-        const verdictMsg = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
-          max_tokens: 800,
-          system: `You are a senior content strategist for Sage. Write a factual comparison verdict based ONLY on the data provided. 
+      let verdict = resonanceAnalysis?.verdict || "";
+      let suggestions = resonanceAnalysis?.suggestions || [];
 
-RULES:
-- Do NOT assign readiness scores or project performance numbers
-- Do NOT fabricate any metrics — if an asset has zero engagement data, say "no engagement data yet"
-- DO describe what each content piece covers based on the content analysis provided
-- DO cite real engagement numbers with [Source: Internal Data] tags
-- DO cite content observations with [Source: Content Analysis] tags
-- DO end with 2-3 specific suggestions tagged [Source: AI Recommendation]
-- Use the human-readable asset names, not raw IDs
-- Write in a clear, factual tone. 4-8 sentences for the main verdict, then suggestions as bullet points.`,
-          messages: [{
-            role: "user",
-            content: `CONTENT A — "${nameA}":
-Stage: ${contentA.stage} | Product: ${contentA.product || "N/A"} | Type: ${contentA.type || "N/A"}
-Engagement: Pageviews: ${metricsA.pageviews}, Downloads: ${metricsA.downloads}, Leads: ${metricsA.leads}, SQOs: ${metricsA.sqos}, Avg Time: ${metricsA.avgTime}s
-Has engagement data: ${aHasMetrics ? "Yes" : "No"}
-Content uploaded: ${aHasContent ? "Yes" : "No"}
-${aHasContent ? `Content summary: ${contentAStored?.contentSummary || "N/A"}` : ""}
-
-CONTENT B — "${nameB}":
-Stage: ${classification.stage} | Product: ${classification.product} | Type: ${classification.contentType}
-Engagement: Pageviews: ${metricsB.pageviews}, Downloads: ${metricsB.downloads}, Leads: ${metricsB.leads}, SQOs: ${metricsB.sqos}, Avg Time: ${metricsB.avgTime}s
-Has engagement data: ${bHasMetrics ? "Yes" : "No"}
-Content uploaded: ${bHasContent ? "Yes" : "No"}
-${bHasContent ? `Content summary: ${contentBStored?.contentSummary || contentB.text?.slice(0, 200) || "N/A"}` : ""}
-
-${contentAnalysis ? `CONTENT ANALYSIS AVAILABLE:
-Topic overlap: ${contentAnalysis.sharedContent?.length || 0} shared topics
-Unique to A: ${contentAnalysis.uniqueToA?.length || 0} topics
-Unique to B: ${contentAnalysis.uniqueToB?.length || 0} topics
-Tone A: ${contentAnalysis.messaging?.toneA || "N/A"}
-Tone B: ${contentAnalysis.messaging?.toneB || "N/A"}` : "No content analysis available — content files not uploaded for both assets."}`,
-          }],
-        });
-        verdict = ((verdictMsg.content[0] as any).text || "").trim();
-      } catch (verdictErr) {
-        console.error("Verdict generation failed:", verdictErr);
-        const parts = [`${nameA} (${contentA.stage}) vs ${nameB} (${classification.stage}).`];
+      if (!verdict) {
+        const parts = [`${nameA} (${stageA}) vs ${nameB} (${stageB}).`];
         if (aHasMetrics) parts.push(`${nameA} has ${metricsA.pageviews} pageviews, ${metricsA.leads} leads, ${metricsA.sqos} SQOs. [Source: Internal Data]`);
         else parts.push(`${nameA} has no engagement data yet.`);
         if (bHasMetrics) parts.push(`${nameB} has ${metricsB.pageviews} pageviews, ${metricsB.leads} leads, ${metricsB.sqos} SQOs. [Source: Internal Data]`);
-        else parts.push(`${nameB} has no engagement data yet — performance comparison will be available once deployed.`);
-        if (bothHaveContent) parts.push("Both assets have uploaded content — see the Content Analysis section below for detailed comparison. [Source: Content Analysis]");
+        else parts.push(`${nameB} has no engagement data yet.`);
+        if (!bothHaveContent) parts.push("Content files are not uploaded for both assets — upload content for both to get a full resonance analysis. [Source: Content Analysis]");
         verdict = parts.join(" ");
       }
 
       res.json({
-        verdict,
-        classification,
-        contentAnalysis,
-        metricsA: { ...metricsA, hasData: aHasMetrics },
-        metricsB: { ...metricsB, hasData: bHasMetrics },
         nameA,
         nameB,
+        contentOverview,
+        resonanceAssessment,
+        topicRelevance,
+        sharedAndDifferent,
+        verdict,
+        suggestions,
+        metricsA: { ...metricsA, hasData: aHasMetrics },
+        metricsB: { ...metricsB, hasData: bHasMetrics },
+        metadata: {
+          stageA, stageB, productA, productB, countryA, countryB, industryA, industryB, typeA, typeB,
+          wordCountA: aStructure.wordCount || null,
+          wordCountB: bStructure.wordCount || null,
+          pageCountA: aStructure.pageCount || null,
+          pageCountB: bStructure.pageCount || null,
+          formatA: contentAStored?.contentFormat || typeA,
+          formatB: contentBStored?.contentFormat || typeB,
+          summaryA: aSummary,
+          summaryB: bSummary,
+          bothHaveContent,
+        },
       });
     } catch (error: any) {
       console.error("Full comparison error:", error);
