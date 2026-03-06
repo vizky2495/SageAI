@@ -29,12 +29,11 @@ import {
   ArrowRight,
   Filter,
   ChevronDown,
-  FileCheck2,
-  FileX2,
-  Download,
-  AlertTriangle,
-  FileQuestion,
+  Plus,
+  Upload,
 } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
 import ContentPreviewPanel from "@/components/content-preview-panel";
@@ -750,39 +749,161 @@ function ComparisonPanel({
   );
 }
 
-function ContentStatusIcon({ status, hasUrl }: { status: string | undefined; hasUrl: boolean }) {
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ContentStatusIndicator({ status, assetId, assetName }: { status: string | undefined; assetId: string; assetName?: string }) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { refreshStatus } = useContext(ContentStatusContext);
+
+  const handleFile = useCallback(async (file: File) => {
+    setSelectedFile({ name: file.name, size: file.size });
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await authFetch("/api/content/upload-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId, fileBase64: base64, filename: file.name }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(data.message || "Upload failed");
+      }
+      setPopoverOpen(false);
+      setSelectedFile(null);
+      refreshStatus();
+    } catch (err: any) {
+      setUploadError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }, [assetId, refreshStatus]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
   if (status === "success") {
     return (
-      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-emerald-500/15" title="Content stored & analyzed" data-testid="status-icon-stored">
-        <FileCheck2 className="h-3 w-3 text-emerald-500" />
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 cursor-default"
+              data-testid="status-dot-success"
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Content uploaded — preview and analysis available
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
-  if (status === "partial" || status === "gated") {
-    return (
-      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-amber-500/15" title={status === "gated" ? "Content gated" : "Partial content"} data-testid="status-icon-partial">
-        <AlertTriangle className="h-3 w-3 text-amber-500" />
-      </div>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-red-500/15" title="Fetch failed" data-testid="status-icon-failed">
-        <FileX2 className="h-3 w-3 text-red-500" />
-      </div>
-    );
-  }
-  if (hasUrl) {
-    return (
-      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-muted" title="Has URL, not fetched" data-testid="status-icon-unfetched">
-        <Download className="h-3 w-3 text-muted-foreground" />
-      </div>
-    );
-  }
+
   return (
-    <div className="flex items-center justify-center h-5 w-5 rounded-full bg-muted" title="No URL, no content" data-testid="status-icon-none">
-      <FileQuestion className="h-3 w-3 text-muted-foreground/50" />
-    </div>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                className="relative h-2 w-2 rounded-full border border-muted-foreground/40 bg-transparent shrink-0 cursor-pointer group flex items-center justify-center hover:border-muted-foreground/70 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+                data-testid="status-dot-empty"
+              >
+                <Plus className="h-1.5 w-1.5 text-muted-foreground/50 group-hover:text-muted-foreground/80 transition-colors" strokeWidth={3} />
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Content not uploaded — click to add
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <PopoverContent
+        side="bottom"
+        align="end"
+        className="w-[260px] p-3 space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-xs font-semibold truncate" data-testid="upload-popover-title">
+          {assetName || assetId}
+        </div>
+        {uploading && selectedFile ? (
+          <div className="flex flex-col items-center gap-2 py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+            <div className="text-[11px] font-medium truncate max-w-full">{selectedFile.name}</div>
+            <div className="text-[10px] text-muted-foreground">{formatFileSize(selectedFile.size)} — Uploading and analyzing...</div>
+          </div>
+        ) : (
+          <div
+            className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition-colors cursor-pointer ${
+              dragOver ? "border-emerald-500 bg-emerald-500/10" : "border-muted-foreground/20 hover:border-muted-foreground/40"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="upload-popover-dropzone"
+          >
+            <Upload className="h-5 w-5 text-muted-foreground/50" />
+            <div className="text-[11px] text-muted-foreground text-center">
+              Drag & drop or browse
+            </div>
+            <div className="text-[10px] text-muted-foreground/60">
+              PDF, DOCX, PPTX, images
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.gif,.webp,.svg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.target.value = "";
+              }}
+              data-testid="upload-popover-file-input"
+            />
+          </div>
+        )}
+        {uploadError && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-2.5 py-1.5">
+            <span className="text-[11px] text-red-400 truncate">{uploadError}</span>
+            <button
+              className="text-[10px] font-medium text-red-400 hover:text-red-300 whitespace-nowrap"
+              onClick={(e) => { e.stopPropagation(); setUploadError(null); fileInputRef.current?.click(); }}
+              data-testid="button-try-again"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -909,7 +1030,7 @@ function ContentCard({
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <ContentStatusIcon status={contentStatus?.fetchStatus} hasUrl={!!asset.url} />
+              <ContentStatusIndicator status={contentStatus?.fetchStatus} assetId={asset.contentId} assetName={asset.name || asset.contentId} />
               <Badge
                 className={`border ${tone.bg} ${tone.text} ${tone.border}`}
                 data-testid="card-stage-badge"
@@ -1121,6 +1242,7 @@ interface Filters {
   channel: string;
   campaign: string;
   industry: string;
+  contentAvailability: string;
 }
 
 function StageCarousel({
@@ -1161,6 +1283,7 @@ function StageCarousel({
       if (filters.channel) params.set("channel", filters.channel);
       if (filters.campaign) params.set("campaign", filters.campaign);
       if (filters.industry) params.set("industry", filters.industry);
+      if (filters.contentAvailability) params.set("contentAvailability", filters.contentAvailability);
       const res = await authFetch(`/api/assets?${params}`);
       if (!res.ok) throw new Error("Failed to fetch assets");
       return res.json() as Promise<{ data: AssetAgg[]; total: number }>;
@@ -1288,7 +1411,7 @@ export default function ContentLibrary() {
   const [, navigate] = useLocation();
   const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "" });
+  const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
   const qc = useQueryClient();
 
   const { data: contentStatusMap } = useQuery<ContentStatusMap>({
@@ -1301,8 +1424,19 @@ export default function ContentLibrary() {
     staleTime: 30_000,
   });
 
+  const { data: coverageData } = useQuery<Record<string, { total: number; withContent: number }>>({
+    queryKey: ["/api/content/coverage"],
+    queryFn: async () => {
+      const res = await authFetch("/api/content/coverage");
+      if (!res.ok) return {};
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
   const refreshContentStatus = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["/api/content/status"] });
+    qc.invalidateQueries({ queryKey: ["/api/content/coverage"] });
   }, [qc]);
 
   const contentStatusCtx = {
@@ -1323,7 +1457,7 @@ export default function ContentLibrary() {
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   const clearFilters = useCallback(() => {
-    setFilters({ product: "", channel: "", campaign: "", industry: "" });
+    setFilters({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
   }, []);
 
   const [compareMode, setCompareMode] = useState(false);
@@ -1444,7 +1578,7 @@ export default function ContentLibrary() {
             )}
           </div>
           {showFilters && (
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="filter-panel">
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="filter-panel">
               <Select value={filters.product} onValueChange={(v) => setFilters((f) => ({ ...f, product: v === "__all__" ? "" : v }))}>
                 <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-product">
                   <SelectValue placeholder="Product" />
@@ -1489,9 +1623,43 @@ export default function ContentLibrary() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={filters.contentAvailability} onValueChange={(v) => setFilters((f) => ({ ...f, contentAvailability: v === "__all__" ? "" : v }))}>
+                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-content">
+                  <SelectValue placeholder="Content status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All assets</SelectItem>
+                  <SelectItem value="with_content">With content</SelectItem>
+                  <SelectItem value="without_content">Without content</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
         </Card>
+
+        {coverageData && (Object.keys(coverageData).length > 0) && (
+          <div className="flex items-center gap-4 text-[11px] text-muted-foreground px-1" data-testid="text-coverage-summary">
+            <span className="font-medium text-foreground/70">Content uploaded:</span>
+            {(["TOFU", "MOFU", "BOFU"] as const).map((s) => {
+              const c = coverageData[s];
+              if (!c) return null;
+              return (
+                <span key={s} className="flex items-center gap-1.5">
+                  <span className="font-medium">{s}</span>
+                  <span>{c.withContent} of {c.total}</span>
+                  {c.total > 0 && (
+                    <span className="inline-block h-1 w-12 rounded-full bg-muted overflow-hidden">
+                      <span
+                        className="block h-full rounded-full bg-emerald-500"
+                        style={{ width: `${Math.round((c.withContent / c.total) * 100)}%` }}
+                      />
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
         <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />

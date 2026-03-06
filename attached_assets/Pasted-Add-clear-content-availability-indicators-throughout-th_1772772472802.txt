@@ -1,0 +1,139 @@
+Add clear content availability indicators throughout the Content Library so users always know which assets have actual content uploaded and which only have engagement metrics. Make uploading content seamless from any point where the user discovers content is missing.
+
+CONTENT STATUS ON LIBRARY CARDS
+Every content card in the library should show a small, non-intrusive status indicator. Do NOT make missing content look like an error — it's simply an asset that hasn't been enriched yet.
+Two states:
+State 1 — Content available (uploaded and analyzed):
+
+Small green filled circle (8px) in the top-right corner of the card
+Tooltip on hover: "Content uploaded — preview and analysis available"
+The card shows additional info below existing metrics: 1-2 line summary, topic tags, CTA pill
+Clicking the card opens the full preview with PDF viewer/content display + AI analysis
+
+State 2 — Content not available (only engagement data):
+
+Small gray outlined circle (8px) with a subtle "+" inside it in the top-right corner
+Tooltip on hover: "Content not uploaded — click to add"
+The card shows only engagement metrics (what it shows today — no change)
+No summary, no topic tags, no CTA pill — these sections simply don't appear (no empty states or "not available" text cluttering the card)
+Clicking the "+" icon directly opens a compact upload popover on the card itself
+
+Why this approach works:
+
+Green dot = enriched. Gray dot with "+" = not yet enriched but easy to fix.
+It doesn't make the library look broken. Cards without content look exactly like they do today — clean and normal. They just don't have the extra enrichment layer.
+The "+" is an invitation to upload, not a warning that something is missing.
+
+
+UPLOAD DIRECTLY FROM THE CARD
+When user clicks the gray "+" icon on a card:
+
+A compact upload popover appears anchored to that card (not a full modal — keep it lightweight)
+Popover contains:
+
+Card header showing asset name and ID so user confirms they're uploading to the right asset
+Drag-and-drop zone: "Drop PDF, DOCX, PPTX, or image here"
+Or "Browse files" link to open file picker
+That's it — no metadata fields needed because the asset already exists in the engagement data with all its tags (product, funnel stage, country, etc.)
+
+
+When file is dropped or selected:
+
+Show filename + file size + processing spinner
+"Uploading and analyzing..."
+On success: popover closes, card refreshes — gray "+" becomes green dot, summary and topic tags appear on the card
+On failure: show error in the popover with "Try again" button
+
+
+
+
+UPLOAD FROM THE PREVIEW PANEL
+When user clicks on a card that has no content (clicking the card body, not the "+" icon), open the preview panel:
+Preview panel for assets WITHOUT content:
+
+Top section: instead of a content preview, show a clean upload prompt:
+
+Centered upload icon (large, muted green)
+"No content uploaded for this asset"
+"Upload the actual content file to enable AI analysis, comparison, and campaign planning"
+Large drag-and-drop zone with "Drop file here or browse"
+Accepted formats listed: "PDF, DOCX, PPTX, PNG, JPG"
+
+
+Middle section: still show all engagement metrics from existing data (views, leads, SQOs, avg time, channel, etc.) so the user sees the performance context
+Bottom section: action buttons — "Compare (performance only)" is available, "Ask AI about this" is available (AI will answer from engagement data only and note content is not uploaded)
+
+This way the preview panel is never empty — it always shows engagement data, and the upload prompt is a natural invitation, not a blocker.
+Preview panel for assets WITH content:
+
+Top section: PDF viewer or rendered preview (as described in earlier prompts)
+Middle section: AI analysis (summary, topics, CTA, structure, messaging) + engagement metrics
+Bottom section: all action buttons fully enabled — Compare (full), Use in campaign, Ask AI, Upload new version
+
+
+UPLOAD FROM THE COMPARISON TOOL
+When user selects an asset for comparison that has no content:
+
+Show the asset card with engagement metrics as normal
+Below the card, show a clear but non-blocking message:
+
+"Content not uploaded for this asset. Performance comparison is available. Upload the content file to also compare topics, messaging, CTA quality, and structure."
+"Upload file" button with compact drag-and-drop zone inline
+
+
+The user can choose to:
+
+Upload the file right there → comparison proceeds with full analysis
+Skip the upload → comparison proceeds with performance metrics only, content quality section shows "Upload content to enable quality comparison"
+
+
+Do NOT block the comparison because content is missing. Always let the user proceed with whatever data is available.
+
+
+UPLOAD FROM THE CHAT
+When the user asks the AI about a specific asset that has no content:
+
+AI responds with engagement data and notes: "I have performance metrics for this asset (339 views, 5 SQOs, 44m avg time) but the actual content hasn't been uploaded yet. Upload the PDF or document and I can analyze the topics, messaging, CTA quality, and compare it against similar content."
+Show a file upload area directly in the chat message (below the AI response): drag-and-drop zone + "Upload content for [asset name]"
+When uploaded: AI automatically continues with the enriched analysis — no need for the user to re-ask the question
+
+
+LIBRARY-LEVEL CONTENT COVERAGE INDICATOR
+At the top of the Content Library page, show a small content coverage summary:
+
+"Content uploaded: 47 of 258 TOFU assets | 23 of 427 MOFU assets | 12 of 206 BOFU assets"
+Show as a subtle text line near the funnel stage headers, or as a thin progress bar under each funnel stage label
+This gives the user and admin a sense of how much of the library has been enriched
+Optional: "Upload content for top performers" quick action — filters to the top 20 assets by SQOs that don't have content uploaded yet, making it easy to prioritize enrichment
+
+
+FILTER BY CONTENT AVAILABILITY
+Add a filter option in the Content Library:
+
+"Show: All assets | With content | Without content"
+This helps users who are on an upload mission to quickly find assets that need content
+Also helps users who want to only browse fully enriched assets for comparison or campaign planning
+
+
+AI INSIGHTS ABOUT CONTENT COVERAGE
+The AI agent should proactively mention content gaps in relevant contexts:
+In the chat:
+
+When recommending assets: "I'm recommending this asset based on strong performance data (5 SQOs, 44m engagement). Note: actual content isn't uploaded yet, so I can't verify if the messaging is still relevant. Upload it for a complete assessment."
+When running gap analysis: "Of your top 20 performers, 14 don't have content uploaded. I'd recommend prioritizing uploads for these high-value assets so I can verify content quality and freshness."
+
+In the AI welcome banner:
+
+"Your library has 685 assets but only 82 have content uploaded. Upload content for your top performers so I can give you deeper analysis."
+
+In the campaign planner:
+
+When recommending content for a campaign: if the recommended asset has no content uploaded, note it: "This is your top performer for this segment. Upload the content file so I can verify it's still relevant and analyze the CTA before you build a campaign around it."
+
+
+WHAT NOT TO DO
+
+Do NOT show red icons, warning banners, or error states for missing content. It's not an error — it's simply not enriched yet.
+Do NOT block any functionality because content is missing. Performance comparisons, chat, and campaign planning should all work with engagement data alone. Content upload adds depth but is never required.
+Do NOT show empty placeholder text like "No summary available" or "No topics extracted" on cards. If content isn't uploaded, simply don't show those sections. The card looks clean, just less detailed.
+Do NOT auto-prompt users to upload every time they interact with an asset that has no content. Mention it once when relevant, not repeatedly.

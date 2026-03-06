@@ -970,10 +970,11 @@ Projected ${primaryMetric}: ${analysis.performanceForecast.projectedRange[0]}-${
     const channel = req.query.channel ? String(req.query.channel) : undefined;
     const campaign = req.query.campaign ? String(req.query.campaign) : undefined;
     const industry = req.query.industry ? String(req.query.industry) : undefined;
+    const contentAvailability = req.query.contentAvailability ? String(req.query.contentAvailability) : undefined;
     const limit = Math.min(Number(req.query.limit) || 25, 100);
     const offset = Number(req.query.offset) || 0;
 
-    const result = await storage.getAssets({ stage, search, product, channel, campaign, industry, limit, offset });
+    const result = await storage.getAssets({ stage, search, product, channel, campaign, industry, contentAvailability, limit, offset });
     res.json(result);
   });
 

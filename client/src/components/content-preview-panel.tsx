@@ -12,7 +12,6 @@ import {
   Upload,
   Globe,
   FileText,
-  Image as ImageIcon,
   Loader2,
   CheckCircle,
   AlertTriangle,
@@ -23,6 +22,16 @@ import {
   Layers,
   ExternalLink,
   Sparkles,
+  BarChart3,
+  ChevronDown,
+  ChevronRight,
+  GitCompare,
+  Bot,
+  Clock,
+  Eye,
+  Users,
+  Target,
+  Megaphone,
 } from "lucide-react";
 import type { AssetAgg } from "@shared/schema";
 
@@ -209,6 +218,8 @@ export default function ContentPreviewPanel({
                 </div>
               )}
 
+              <UploadNewVersion onFileSelect={handleFileSelect} />
+
               {content.contentSummary && (
                 <section>
                   <SectionHeader icon={<BookOpen className="h-3.5 w-3.5" />} label="AI Summary" />
@@ -316,8 +327,6 @@ export default function ContentPreviewPanel({
                   </a>
                 )}
               </div>
-
-              <UploadNewVersion onFileSelect={handleFileSelect} />
             </>
           ) : (
             <NotStoredView
@@ -379,14 +388,16 @@ function StatBox({ label, value }: { label: string; value: string }) {
 
 function UploadNewVersion({ onFileSelect }: { onFileSelect: (file: File) => void }) {
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upload new version</div>
+    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Upload className="h-4 w-4 text-primary" />
+        <span className="text-sm font-medium text-primary">Upload new version</span>
+      </div>
       <label
-        className="flex items-center gap-2 rounded-xl border border-dashed border-muted-foreground/30 px-4 py-3 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+        className="flex items-center gap-2 rounded-lg border border-dashed border-primary/30 px-4 py-3 cursor-pointer hover:border-primary/60 hover:bg-primary/10 transition-colors"
         data-testid="upload-new-version"
       >
-        <Upload className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">Drop file or click to upload (PDF, DOCX, PPTX, images)</span>
+        <span className="text-xs text-muted-foreground">Drop file or click to replace current content (PDF, DOCX, PPTX, images)</span>
         <input
           type="file"
           className="hidden"
@@ -398,6 +409,34 @@ function UploadNewVersion({ onFileSelect }: { onFileSelect: (file: File) => void
         />
       </label>
     </div>
+  );
+}
+
+function EngagementMetrics({ asset }: { asset: AssetAgg }) {
+  const metrics = [
+    { icon: <Eye className="h-3.5 w-3.5" />, label: "Pageviews", value: asset.pageviewsSum.toLocaleString() },
+    { icon: <Users className="h-3.5 w-3.5" />, label: "Leads", value: asset.uniqueLeads.toLocaleString() },
+    { icon: <Target className="h-3.5 w-3.5" />, label: "SQOs", value: asset.sqoCount.toLocaleString() },
+    { icon: <Download className="h-3.5 w-3.5" />, label: "Downloads", value: asset.downloadsSum.toLocaleString() },
+    { icon: <Clock className="h-3.5 w-3.5" />, label: "Avg Time", value: asset.timeAvg > 0 ? `${Math.round(asset.timeAvg)}s` : "—" },
+    { icon: <Megaphone className="h-3.5 w-3.5" />, label: "Channel", value: asset.utmChannel || "—" },
+  ];
+
+  return (
+    <section>
+      <SectionHeader icon={<BarChart3 className="h-3.5 w-3.5" />} label="Engagement Metrics" />
+      <div className="grid grid-cols-3 gap-2" data-testid="engagement-metrics-grid">
+        {metrics.map((m, i) => (
+          <div key={i} className="rounded-xl border bg-secondary/30 p-3 text-center">
+            <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+              {m.icon}
+              <span className="text-[10px]">{m.label}</span>
+            </div>
+            <div className="text-sm font-bold">{m.value}</div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -424,79 +463,102 @@ function NotStoredView({
   setDragOver: (v: boolean) => void;
   handleDrop: (e: React.DragEvent) => void;
 }) {
+  const [showUrlFetch, setShowUrlFetch] = useState(false);
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <div className="rounded-2xl bg-muted/20 p-4 mb-3">
-          <FileText className="h-10 w-10 text-muted-foreground/40" />
+    <div className="space-y-5" data-testid="not-stored-view">
+      <div className="flex flex-col items-center justify-center py-6 text-center">
+        <div className="rounded-full bg-emerald-500/10 p-4 mb-3">
+          <Upload className="h-8 w-8 text-emerald-500/60" />
         </div>
-        <div className="text-sm font-medium">No content stored yet</div>
-        <div className="text-xs text-muted-foreground mt-1">Fetch from URL or upload a file to analyze this content</div>
+        <div className="text-sm font-medium">No content uploaded for this asset</div>
+        <div className="text-xs text-muted-foreground mt-1 max-w-[300px]">
+          Upload a file to unlock AI-powered content analysis, topic extraction, and messaging insights
+        </div>
       </div>
 
-      <section>
-        <SectionHeader icon={<Globe className="h-3.5 w-3.5" />} label="Fetch from URL" />
-        <div className="flex gap-2">
-          <Input
-            value={fetchUrl}
-            onChange={(e) => setFetchUrl(e.target.value)}
-            placeholder="https://..."
-            className="text-sm"
-            data-testid="input-fetch-url"
-          />
-          <Button
-            size="sm"
-            onClick={onFetch}
-            disabled={!fetchUrl.trim() || fetchPending}
-            className="shrink-0 gap-1.5"
-            data-testid="button-fetch-content"
-          >
-            {fetchPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
-            Fetch
-          </Button>
+      <label
+        className={`flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 cursor-pointer transition-all ${
+          dragOver
+            ? "border-emerald-500 bg-emerald-500/10 scale-[1.01]"
+            : "border-muted-foreground/20 hover:border-emerald-500/40 hover:bg-emerald-500/5"
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        data-testid="dropzone-upload"
+      >
+        <div className="rounded-full bg-muted/30 p-3">
+          <Upload className={`h-6 w-6 ${dragOver ? "text-emerald-500" : "text-muted-foreground/50"}`} />
         </div>
+        <div className="text-center">
+          <div className="text-sm font-medium">Drop file here or click to browse</div>
+          <div className="text-xs text-muted-foreground mt-1">PDF, DOCX, PPTX, or images up to 50MB</div>
+        </div>
+        <input
+          type="file"
+          className="hidden"
+          accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFileSelect(file);
+          }}
+        />
+      </label>
+
+      <div>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => setShowUrlFetch(!showUrlFetch)}
+          data-testid="button-toggle-url-fetch"
+        >
+          {showUrlFetch ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <Globe className="h-3 w-3" />
+          Or fetch from URL
+        </button>
+        {showUrlFetch && (
+          <div className="mt-2 flex gap-2">
+            <Input
+              value={fetchUrl}
+              onChange={(e) => setFetchUrl(e.target.value)}
+              placeholder="https://..."
+              className="text-sm"
+              data-testid="input-fetch-url"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onFetch}
+              disabled={!fetchUrl.trim() || fetchPending}
+              className="shrink-0 gap-1.5"
+              data-testid="button-fetch-content"
+            >
+              {fetchPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+              Fetch
+            </Button>
+          </div>
+        )}
         {fetchError && (
           <div className="mt-2 text-xs text-red-400">{fetchError}</div>
         )}
-      </section>
+      </div>
 
-      <section>
-        <SectionHeader icon={<Upload className="h-3.5 w-3.5" />} label="Upload File" />
-        <label
-          className={`flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
-            dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/40 hover:bg-primary/5"
-          }`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          data-testid="dropzone-upload"
-        >
-          <Upload className="h-8 w-8 text-muted-foreground/40" />
-          <div className="text-center">
-            <div className="text-sm font-medium">Drop file here or click to browse</div>
-            <div className="text-xs text-muted-foreground mt-1">PDF, DOCX, PPTX, or images up to 50MB</div>
-          </div>
-          <input
-            type="file"
-            className="hidden"
-            accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onFileSelect(file);
-            }}
-          />
-        </label>
-      </section>
+      <Separator />
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-xl border bg-secondary/30 p-3">
-          <div className="text-muted-foreground">Pageviews</div>
-          <div className="mt-1 text-lg font-bold">{asset.pageviewsSum.toLocaleString()}</div>
-        </div>
-        <div className="rounded-xl border bg-secondary/30 p-3">
-          <div className="text-muted-foreground">Leads</div>
-          <div className="mt-1 text-lg font-bold">{asset.uniqueLeads.toLocaleString()}</div>
-        </div>
+      <EngagementMetrics asset={asset} />
+
+      <Separator />
+
+      <div className="flex gap-2" data-testid="preview-panel-actions">
+        <Button variant="outline" size="sm" className="flex-1 gap-1.5" data-testid="button-compare-performance">
+          <GitCompare className="h-3.5 w-3.5" />
+          Compare (performance only)
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1 gap-1.5" data-testid="button-ask-ai">
+          <Bot className="h-3.5 w-3.5" />
+          Ask AI
+        </Button>
       </div>
     </div>
   );

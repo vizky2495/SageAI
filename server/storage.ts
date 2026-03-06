@@ -28,6 +28,7 @@ export interface IStorage {
     channel?: string;
     campaign?: string;
     industry?: string;
+    contentAvailability?: string;
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }>;
@@ -59,6 +60,7 @@ export interface IStorage {
   createContentPlaceholders(assetIds: { assetId: string; sourceUrl?: string | null }[]): Promise<number>;
   getAllStoredContent(): Promise<ContentStored[]>;
   getUnfetchedWithUrls(): Promise<{ assetId: string; sourceUrl: string }[]>;
+  getContentCoverage(): Promise<Record<string, { total: number; withContent: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -81,6 +83,7 @@ export class DatabaseStorage implements IStorage {
     channel?: string;
     campaign?: string;
     industry?: string;
+    contentAvailability?: string;
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }> {
@@ -99,6 +102,16 @@ export class DatabaseStorage implements IStorage {
     }
     if (opts.industry) {
       conditions.push(eq(assetsAgg.productCategory, opts.industry));
+    }
+
+    if (opts.contentAvailability === "with_content") {
+      conditions.push(
+        sql`${assetsAgg.contentId} IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} = 'success')`
+      );
+    } else if (opts.contentAvailability === "without_content") {
+      conditions.push(
+        sql`${assetsAgg.contentId} NOT IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} = 'success')`
+      );
     }
 
     const where = conditions.length === 1 ? conditions[0] : and(...conditions);
@@ -316,6 +329,52 @@ export class DatabaseStorage implements IStorage {
       .from(contentStored)
       .where(and(eq(contentStored.fetchStatus, "not_stored"), sql`${contentStored.sourceUrl} IS NOT NULL AND ${contentStored.sourceUrl} != ''`));
     return rows.map(r => ({ assetId: r.assetId, sourceUrl: r.sourceUrl! }));
+  }
+
+  async getContentCoverage(): Promise<Record<string, { total: number; withContent: number }>> {
+    const stages = ["TOFU", "MOFU", "BOFU"] as const;
+    const result: Record<string, { total: number; withContent: number }> = {};
+
+    const [totals, withContentRows] = await Promise.all([
+      db
+        .select({
+          stage: assetsAgg.stage,
+          total: count(),
+        })
+        .from(assetsAgg)
+        .where(inArray(assetsAgg.stage, [...stages]))
+        .groupBy(assetsAgg.stage),
+      db
+        .select({
+          stage: assetsAgg.stage,
+          withContent: count(),
+        })
+        .from(assetsAgg)
+        .innerJoin(contentStored, eq(assetsAgg.contentId, contentStored.assetId))
+        .where(
+          and(
+            inArray(assetsAgg.stage, [...stages]),
+            eq(contentStored.fetchStatus, "success")
+          )
+        )
+        .groupBy(assetsAgg.stage),
+    ]);
+
+    for (const stage of stages) {
+      result[stage] = { total: 0, withContent: 0 };
+    }
+    for (const row of totals) {
+      if (result[row.stage]) {
+        result[row.stage].total = row.total;
+      }
+    }
+    for (const row of withContentRows) {
+      if (result[row.stage]) {
+        result[row.stage].withContent = row.withContent;
+      }
+    }
+
+    return result;
   }
 }
 

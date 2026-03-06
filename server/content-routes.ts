@@ -381,6 +381,16 @@ export function registerContentRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/content/coverage", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const coverage = await storage.getContentCoverage();
+      res.json(coverage);
+    } catch (err: any) {
+      console.error("Content coverage error:", err);
+      res.status(500).json({ message: "Failed to fetch content coverage" });
+    }
+  });
+
   app.get("/api/content/status", requireAuth, async (_req: Request, res: Response) => {
     try {
       const statusMap = await storage.getContentStatusMap();
