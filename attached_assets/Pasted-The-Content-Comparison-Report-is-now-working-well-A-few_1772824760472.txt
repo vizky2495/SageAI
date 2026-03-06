@@ -1,0 +1,40 @@
+The Content Comparison Report is now working well. A few final quality refinements:
+
+1. DUPLICATE DETECTION SHOULD BE A PROMINENT CALLOUT
+The report correctly identified that Content A and Content B are identical documents. This is a critical finding that should be immediately obvious, not buried in the Content Overview on page 2. When the AI detects that two content pieces are identical or near-identical (90%+ text overlap):
+
+Show a prominent alert banner at the very top of the report (right after the cover page, before Content Overview):
+
+"DUPLICATE CONTENT DETECTED: Content A and Content B contain identical text. Content B appears to be a mislabelled copy of Content A. See Verdict for recommended actions."
+Style it as a callout box with an amber/warning left border so it stands out immediately
+
+
+In the on-screen comparison UI, show the same alert at the top of the results before any analysis sections
+When duplicates are detected, shorten the rest of the report significantly — no need for full topic breakdowns, resonance assessment, and shared/different analysis when the content is identical. Instead:
+
+Show the alert
+Show one combined overview (since both are the same content)
+Show the performance comparison (this IS useful — same content performing differently under different tags/channels is valuable insight)
+Show the verdict explaining why the metrics differ despite identical content (likely due to different metadata, distribution channels, or audience targeting)
+Show suggestions focused on: which version to keep, how to fix metadata, whether to retire the duplicate
+
+
+This could bring a duplicate comparison report down to 3-4 pages instead of 8
+
+
+2. PERFORMANCE DELTA IS NOW USEFUL — GOOD
+Unlike the previous report where one side had zero data, this report has real data on both sides with meaningful deltas. The -82% pageview delta between identical content is genuinely interesting — it suggests Content A's metadata and distribution are significantly better than Content B's. The report handles this well. Keep this format.
+
+3. THE FUNNEL STAGE CORRECTION IS VALUABLE
+The report correctly notes Content B is tagged as MOFU and labelled "Case Study" but the actual content is TOFU thought leadership. The resonance assessment caught this with "Weak" funnel stage fit. The suggestion to retag is exactly right. This is the kind of insight campaign planners need — it prevents them from deploying TOFU content as MOFU and wondering why it doesn't convert.
+
+4. ADD A "METADATA HEALTH" INDICATOR
+Since both assets in this comparison have significant metadata problems (wrong product tags, wrong funnel stages, missing country context), add a small metadata health check to the report:
+
+After the Key Metadata table, add a row or note:
+
+"Metadata issues detected: [X] fields may be incorrect based on content analysis"
+List the specific mismatches: "Product tag says 'Sage 50 Accounting' but content does not mention Sage 50" / "Country tag says 'Canada' but content contains no Canadian references" / "Content B tagged as 'Case Study' but contains no case study content"
+
+
+This makes metadata problems visible immediately without having to read the full report to find them

@@ -726,6 +726,31 @@ No explanation, no markdown, no extra text. Only JSON.`,
       const bothHaveContent = !!(aTextForAnalysis && bTextForAnalysis);
       console.log(`[Comparison] bothHaveContent=${bothHaveContent}, aTextLen=${aTextForAnalysis.length}, bTextLen=${bTextForAnalysis.length}`);
 
+      let isDuplicate = false;
+      let duplicateMessage = "";
+      if (bothHaveContent) {
+        const normalizeForComparison = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+        const normA = normalizeForComparison(aTextForAnalysis);
+        const normB = normalizeForComparison(bTextForAnalysis);
+        if (normA.length > 50 && normB.length > 50) {
+          const shorter = normA.length <= normB.length ? normA : normB;
+          const longer = normA.length > normB.length ? normA : normB;
+          let matchingChars = 0;
+          const chunkSize = 100;
+          for (let i = 0; i < shorter.length; i += chunkSize) {
+            const chunk = shorter.slice(i, i + chunkSize);
+            if (longer.includes(chunk)) matchingChars += chunk.length;
+          }
+          const similarity = matchingChars / shorter.length;
+          console.log(`[Comparison] Text similarity: ${(similarity * 100).toFixed(1)}%`);
+          if (similarity >= 0.9) {
+            isDuplicate = true;
+            const mislabelled = normA === normB ? "Content B appears to be an identical copy of Content A." : "Content B appears to be a near-identical copy of Content A.";
+            duplicateMessage = `DUPLICATE CONTENT DETECTED: Content A and Content B contain identical or near-identical text (${Math.round(similarity * 100)}% overlap). ${mislabelled} See Verdict for recommended actions.`;
+          }
+        }
+      }
+
       const metricsA = contentA.metrics;
       const metricsB = contentB.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
       const aHasMetrics = metricsA.pageviews > 0 || metricsA.downloads > 0 || metricsA.leads > 0 || metricsA.sqos > 0;
@@ -1001,6 +1026,27 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const bTotalEngagement = metricsB.pageviews + metricsB.downloads + metricsB.leads + metricsB.sqos;
       const lowEngagement = aTotalEngagement < 10 && bTotalEngagement < 10;
 
+      const metadataIssues: { asset: string; field: string; tagged: string; issue: string }[] = [];
+      if (resonanceAssessment) {
+        const checkAsset = (assessment: any, assetName: string, stage: string, product: string, country: string, industry: string) => {
+          if (!assessment) return;
+          if (assessment.productFit?.rating === "Weak" && !isGenericVal(product)) {
+            metadataIssues.push({ asset: assetName, field: "Product", tagged: product, issue: assessment.productFit.explanation || `Tagged as "${product}" but content does not align` });
+          }
+          if (assessment.funnelStageFit?.rating === "Weak" && stage) {
+            metadataIssues.push({ asset: assetName, field: "Funnel Stage", tagged: stage, issue: assessment.funnelStageFit.explanation || `Tagged as ${stage} but content does not match this stage` });
+          }
+          if (assessment.countryFit?.rating === "Weak" && !isGenericVal(country)) {
+            metadataIssues.push({ asset: assetName, field: "Country/Region", tagged: country, issue: assessment.countryFit.explanation || `Tagged as "${country}" but content contains no relevant references` });
+          }
+          if (assessment.industryFit?.rating === "Weak" && !isGenericVal(industry)) {
+            metadataIssues.push({ asset: assetName, field: "Industry", tagged: industry, issue: assessment.industryFit.explanation || `Tagged as "${industry}" but content does not target this industry` });
+          }
+        };
+        checkAsset(resonanceAssessment.a, nameA, stageA, finalProductA, finalCountryA, finalIndustryA);
+        checkAsset(resonanceAssessment.b, nameB, stageB, finalProductB, finalCountryB, finalIndustryB);
+      }
+
       res.json({
         nameA,
         nameB,
@@ -1025,6 +1071,9 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         performanceDisplay,
         performanceInlineSummary,
         lowEngagement,
+        isDuplicate,
+        duplicateMessage,
+        metadataIssues,
         metadata: {
           stageA, stageB,
           productA: finalProductA, productB: finalProductB,

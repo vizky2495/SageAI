@@ -1583,6 +1583,9 @@ interface FullComparisonResult {
   performanceDisplay: "table" | "inline" | "none";
   performanceInlineSummary: string | null;
   lowEngagement?: boolean;
+  isDuplicate?: boolean;
+  duplicateMessage?: string;
+  metadataIssues?: { asset: string; field: string; tagged: string; issue: string }[];
   metadata: ComparisonMetadata;
 }
 
