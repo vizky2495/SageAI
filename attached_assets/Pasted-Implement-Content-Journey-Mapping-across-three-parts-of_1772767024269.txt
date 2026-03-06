@@ -1,0 +1,105 @@
+Implement Content Journey Mapping across three parts of the platform, with each section serving a different purpose:
+
+1. PERFORMANCE / ANALYTICS SECTION — The Data Home (primary location)
+This is where the journey map lives as a full, explorable visualization. It's the "source of truth" for understanding how content flows work.
+What to show:
+
+A Sankey diagram or flow visualization showing the most common content consumption paths from TOFU → MOFU → BOFU
+Each node represents a content type or specific asset. Width of the flow lines represents volume (how many users took that path)
+Color code by conversion outcome: green flows = paths that ended in SQO, amber = paths that ended in lead only, gray = paths that dropped off
+A summary table below the diagram showing the top 10 journeys ranked by SQO conversion rate:
+
+| Journey Path | Users | Leads | SQOs | Conv% | Avg Duration |
+
+Filters: by product, country, industry, time period
+Clicking on any node or flow in the diagram opens detail: which specific assets are in that path, how long users spent at each stage, where the drop-off happens
+
+AI integration on this page:
+
+The AI Insights bar should surface journey-specific insights: "The TOFU Webinar → MOFU Email → BOFU Demo path converts at 14.2% — 3x higher than any single-asset path"
+The AI icon next to the Sankey diagram offers: "Why does this path convert better?" with an inline explanation
+
+Why here: Performance/Analytics is where marketers go to understand what's happening and why. Journey mapping is fundamentally an analytical view — it answers "how do users move through our content?"
+
+2. CAMPAIGN PLANNER — The Action Layer (applied during planning)
+Don't duplicate the full visualization here. Instead, pull journey intelligence INTO the campaign planning flow as recommendations.
+Where it appears in the planner:
+In the Campaign Brief wizard — Step 3 (Content Selection):
+When the user selects a content asset, the AI should automatically check if that asset appears in any high-performing journeys, then show a recommendation card:
+
+"This asset performs best as part of a sequence:"
+Visual mini-flow: [Your selected PDF] → [MOFU Email Nurture] → [BOFU Demo Request]
+"This 3-step journey converts at 14.2% vs 4.8% for the PDF alone"
+"Recommendation: Plan follow-up touchpoints, not just a single campaign blast"
+One-click button: "Add full journey to campaign plan"
+
+If the user clicks "Add full journey," the campaign plan automatically includes all three stages with timing recommendations between each step.
+In the PDF export — Campaign Timeline section:
+When a journey-based campaign is planned, the timeline should show the multi-touch sequence:
+
+Week 1-2: Distribute TOFU PDF via LinkedIn
+Week 3-4: Email nurture to PDF downloaders with MOFU content
+Week 5-6: Demo request retargeting to MOFU engaged users
+
+In the Content Evaluation response:
+When the AI evaluates a content asset, include a "Journey Context" section:
+
+"This asset appears in 3 high-performing journeys"
+"It performs best as a TOFU entry point, followed by [specific MOFU asset]"
+"Using this asset as a standalone piece reduces SQO conversion by approximately 60% compared to deploying it within a sequence"
+
+Why here: Campaign Planner is where journey insights become actionable. The marketer doesn't need to see the full Sankey diagram here — they need the AI to tell them "pair this with these other assets for better results."
+
+3. CONTENT LIBRARY — The Discovery Layer (contextual hints)
+Don't build a full journey view in the library. Instead, add subtle journey context to individual content cards so users discover connections while browsing.
+On content card hover (add to existing hover tooltip):
+
+Add a small line below the performance insight: "Part of 3 high-converting journeys" with a small flow icon
+Clicking this line opens a popover showing the top journeys this asset appears in as simple text flows:
+
+"This PDF → Trial Nurture Email → Demo Request (14.2% conv)"
+"This PDF → Product Webinar → Contact Us Form (9.8% conv)"
+
+
+
+On content card detail view:
+
+Add a "Journey Map" tab showing which sequences this asset appears in
+Show both upstream (what content users consumed before this) and downstream (what content users consumed after this)
+Highlight the recommended next asset in green
+
+In the "Compare" mode:
+When comparing two assets, include journey context:
+
+"Asset A appears in 5 high-converting journeys. Asset B appears in 1."
+"Asset A works better as a sequence starter. Asset B works better as a mid-funnel follow-up."
+
+Why here: The Content Library is for browsing and discovery. Journey information here should be lightweight context that helps users understand how an asset fits into the bigger picture — not a full analytical view.
+
+DATA REQUIREMENTS & FALLBACK
+If the data supports journey tracking (content sequence data exists):
+
+Build all three layers above
+The Sankey diagram in Analytics is the centerpiece
+Campaign Planner and Library get the applied/contextual layers
+
+If the data does NOT support journey tracking yet:
+In Analytics/Performance section:
+
+Show a placeholder card: "Content Journey Mapping"
+Description: "Visualize how users move through your content from awareness to conversion. See which content sequences drive the most SQOs."
+Status: "Requires content sequence data. Connect your marketing automation platform (Marketo, HubSpot, Eloqua) to enable journey tracking."
+A "Learn more" link explaining what data is needed
+
+In Campaign Planner:
+
+The AI should still recommend logical sequences based on funnel stage and performance data, even without explicit journey data:
+
+"While we don't have user journey data, based on performance patterns I recommend pairing this TOFU PDF with your top-performing MOFU asset [name] and your highest-converting BOFU demo request form. This covers the full funnel for this segment."
+
+
+Label these as "[Assumption: based on funnel stage logic, not user journey data]"
+
+In Content Library:
+
+Don't show journey context on cards if the data doesn't exist — no empty states on individual cards

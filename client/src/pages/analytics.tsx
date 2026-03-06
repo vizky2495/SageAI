@@ -8,6 +8,10 @@ import {
   Loader2,
   BarChart3,
   Table as TableIcon,
+  GitBranch,
+  Database,
+  ArrowRight,
+  Plug,
 } from "lucide-react";
 import {
   Bar,
@@ -751,6 +755,95 @@ export default function AnalyticsPage() {
           </Tabs>
         </motion.div>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, duration: 0.4 }}
+        className="px-4 sm:px-6 lg:px-8 mt-6"
+      >
+        <Card className="rounded-2xl border border-border/40 bg-card/70 p-6 shadow-sm backdrop-blur relative overflow-hidden" data-testid="card-journey-mapping">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#00D657]/[0.03] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-xl bg-[#00D657]/10 flex items-center justify-center shrink-0">
+              <GitBranch className="h-6 w-6 text-[#00D657]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-lg font-semibold" data-testid="text-journey-title">Content Journey Mapping</h3>
+                <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]" data-testid="badge-journey-status">Coming Soon</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl" data-testid="text-journey-description">
+                Visualize how users move through your content from awareness to conversion. See which content sequences
+                drive the most SQOs with interactive Sankey flow diagrams, path analysis, and conversion tracking across
+                TOFU → MOFU → BOFU journeys.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="h-2 w-2 rounded-full bg-[#00D657]" />
+                    <span className="text-xs font-medium">Flow Visualization</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Sankey diagrams showing the most common content paths, color-coded by conversion outcome.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="h-2 w-2 rounded-full bg-amber-400" />
+                    <span className="text-xs font-medium">Journey Rankings</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Top 10 content journeys ranked by SQO conversion rate with user volume and duration metrics.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="h-2 w-2 rounded-full bg-blue-400" />
+                    <span className="text-xs font-medium">Drop-off Analysis</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Identify where users exit content sequences and which assets have the highest stage transitions.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-dashed border-border/40 bg-muted/5 p-4">
+                <div className="flex items-start gap-3">
+                  <Database className="h-4 w-4 text-muted-foreground/60 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1" data-testid="text-journey-requirement">
+                      Requires content sequence data
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                      Connect your marketing automation platform (Marketo, HubSpot, Eloqua) to enable journey tracking.
+                      This requires user-level touchpoint data showing the sequence of content interactions per lead or account.
+                    </p>
+                    <div className="flex items-center gap-4 mt-3">
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
+                        <Plug className="h-3 w-3" />
+                        <span>Marketing automation</span>
+                      </div>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground/30" />
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
+                        <Database className="h-3 w-3" />
+                        <span>Touchpoint sequences</span>
+                      </div>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground/30" />
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#00D657]/60">
+                        <GitBranch className="h-3 w-3" />
+                        <span>Journey maps</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
 
       <PageChat
         agent="cia"
