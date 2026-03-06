@@ -1724,9 +1724,10 @@ Respond with ONLY valid JSON in this exact format:
 
   app.post("/api/content-library/upload", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { assetName, contentType, product, funnelStage, country, industry, dateCreated, description } = req.body as {
+      const { assetName, contentType, product, funnelStage, country, industry, dateCreated, description, contentText, classification, pageCount, wordCount, filename } = req.body as {
         assetName?: string; contentType?: string; product?: string; funnelStage?: string;
         country?: string; industry?: string; dateCreated?: string; description?: string;
+        contentText?: string; classification?: any; pageCount?: number; wordCount?: number; filename?: string;
       };
       if (!assetName?.trim() || !contentType?.trim() || !product?.trim() || !funnelStage?.trim()) {
         return res.status(400).json({ message: "Asset name, content type, product, and funnel stage are required." });
@@ -1748,6 +1749,28 @@ Respond with ONLY valid JSON in this exact format:
         source: "uploaded",
         description: (description || "").trim(),
       });
+
+      if (contentText && contentText.length > 20) {
+        try {
+          const summary = contentText.slice(0, 500);
+          await storage.upsertContent({
+            assetId: contentId,
+            contentText,
+            contentSummary: description || `${contentType} about ${classification?.topic || product} for ${funnelStage} stage`,
+            extractedTopics: classification?.topic ? [classification.topic] : null,
+            contentFormat: contentType,
+            sourceType: "file_uploaded",
+            originalFilename: filename || `${assetName}.pdf`,
+            fetchStatus: "success",
+            contentStructure: { wordCount: wordCount || 0, sectionCount: 1, pageCount: pageCount || 0, headings: [] },
+            dateStored: new Date(),
+            storedBy: (req as any).userId || "user",
+          });
+        } catch (storeErr) {
+          console.error("Failed to store content text for uploaded asset:", storeErr);
+        }
+      }
+
       res.json(asset);
     } catch (err: any) {
       console.error("Upload asset error:", err);

@@ -123,6 +123,67 @@ interface WhatCouldBeImprovedItem {
   source?: string;
 }
 
+interface AnalysisBenchmark {
+  contentId: string;
+  name?: string;
+  stage: string;
+  type?: string;
+  product?: string;
+  pageviews: number;
+  downloads: number;
+  leads: number;
+  sqos: number;
+  avgTime: number;
+  relevanceScore: number;
+}
+
+interface ReadinessBreakdown {
+  structure: number;
+  ctas: number;
+  topicDepth: number;
+  format: number;
+}
+
+interface PerformanceForecast {
+  metric: string;
+  projectedRange: [number, number];
+  confidence: string;
+}
+
+interface AnalysisRecommendation {
+  priority: number;
+  text: string;
+  contentId?: string;
+}
+
+interface ReusabilityItem {
+  contentId: string;
+  overlap: number;
+  cannibalizationRisk: string;
+  repurposingOpportunity: string;
+}
+
+interface PdfAnalysis {
+  readinessScore: number;
+  readinessBreakdown: ReadinessBreakdown;
+  performanceForecast: PerformanceForecast;
+  recommendations: AnalysisRecommendation[];
+  reusability: ReusabilityItem[];
+  topAction: string;
+  isFallbackAnalysis?: boolean;
+}
+
+interface AggregateBenchmarks {
+  sampleSize: number;
+  totalPoolSize: number;
+  pageviews: { min: number; max: number; mean: number; median: number };
+  downloads: { min: number; max: number; mean: number; median: number };
+  leads: { min: number; max: number; mean: number; median: number };
+  sqos: { min: number; max: number; mean: number; median: number };
+  timeOnPage: { min: number; max: number; mean: number; median: number };
+  avgCtaCount: number;
+}
+
 interface PdfResult {
   filename: string;
   pageCount: number;
@@ -132,6 +193,9 @@ interface PdfResult {
   isFallback: boolean;
   contentId?: string;
   metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number };
+  analysis?: PdfAnalysis;
+  benchmarks?: AnalysisBenchmark[];
+  aggregateBenchmarks?: AggregateBenchmarks;
 }
 
 interface AssetPickerItem {
@@ -283,8 +347,10 @@ function getAssetStatus(asset: LibraryAsset): { label: string; color: string } {
 
 function UploadAndSavePanel({
   onAnalyzed,
+  onViewAnalysis,
 }: {
   onAnalyzed: (result: PdfResult, savedToLibrary: boolean) => void;
+  onViewAnalysis?: (result: PdfResult) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -351,7 +417,13 @@ function UploadAndSavePanel({
         setLoading(false);
         return;
       }
-      setPdfResult(data);
+      const fullResult: PdfResult = {
+        ...data,
+        analysis: data.analysis || undefined,
+        benchmarks: data.benchmarks || undefined,
+        aggregateBenchmarks: data.aggregateBenchmarks || undefined,
+      };
+      setPdfResult(fullResult);
 
       if (meta.contentType === "" && data.classification?.contentType) {
         setMeta(prev => ({ ...prev, contentType: prev.contentType || data.classification.contentType }));
@@ -372,7 +444,7 @@ function UploadAndSavePanel({
     if (!meta.assetName.trim()) return;
     setSaving(true);
     try {
-      await authFetch("/api/content-library/upload", {
+      const res = await authFetch("/api/content-library/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -384,11 +456,20 @@ function UploadAndSavePanel({
           industry: meta.industry || pdfResult?.classification?.industry || "",
           dateCreated: new Date().toISOString().split("T")[0],
           description: meta.description,
+          contentText: pdfResult?.text?.slice(0, 50000),
+          classification: pdfResult?.classification,
+          pageCount: pdfResult?.pageCount,
+          wordCount: pdfResult?.wordCount,
+          filename: pdfResult?.filename,
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Save failed");
+      }
       setSavedToLibrary(true);
-    } catch {
-      setError("Failed to save to library.");
+    } catch (err: any) {
+      setError(err.message || "Failed to save to library.");
     }
     setSaving(false);
   }
@@ -553,13 +634,25 @@ function UploadAndSavePanel({
             </div>
           )}
 
+          {onViewAnalysis && pdfResult?.analysis && (
+            <Button
+              onClick={() => onViewAnalysis(pdfResult!)}
+              className="w-full rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-medium"
+              data-testid="btn-view-standalone-analysis"
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              View Full Analysis
+            </Button>
+          )}
+
           <Button
             onClick={handleUseForComparison}
-            className="w-full rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-medium"
+            variant={onViewAnalysis && pdfResult?.analysis ? "outline" : "default"}
+            className={`w-full rounded-xl font-medium ${!onViewAnalysis || !pdfResult?.analysis ? "bg-[#00D657] hover:bg-[#00C04E] text-black" : ""}`}
             data-testid="btn-use-for-comparison"
           >
             <ArrowLeftRight className="h-4 w-4 mr-2" />
-            Use for Comparison
+            Compare Against Library Asset
           </Button>
         </motion.div>
       )}
@@ -1620,11 +1713,249 @@ interface FullComparisonResult {
   metadata: ComparisonMetadata;
 }
 
+function ReadinessGauge({ score, size = "lg" }: { score: number; size?: "sm" | "lg" }) {
+  const color = score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400";
+  const bgColor = score >= 75 ? "bg-emerald-400" : score >= 50 ? "bg-amber-400" : "bg-red-400";
+  const label = score >= 75 ? "High" : score >= 50 ? "Moderate" : "Low";
+  const dim = size === "lg" ? "h-20 w-20" : "h-14 w-14";
+  const textSize = size === "lg" ? "text-2xl" : "text-lg";
+  const labelSize = size === "lg" ? "text-[10px]" : "text-[8px]";
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className={`${dim} rounded-full border-4 ${bgColor}/30 flex items-center justify-center relative`}>
+        <span className={`${textSize} font-bold ${color}`}>{score}</span>
+      </div>
+      <span className={`${labelSize} font-semibold uppercase tracking-wider ${color}`}>{label} Readiness</span>
+    </div>
+  );
+}
+
+function BreakdownBar({ label, value }: { label: string; value: number }) {
+  const color = value >= 75 ? "bg-emerald-400" : value >= 50 ? "bg-amber-400" : "bg-red-400";
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold tabular-nums">{value}</span>
+      </div>
+      <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${Math.min(value, 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StandaloneAnalysisView({
+  result,
+  onCompare,
+  onAskChat,
+}: {
+  result: PdfResult;
+  onCompare: () => void;
+  onAskChat?: (prompt: string) => void;
+}) {
+  const analysis = result.analysis;
+  const benchmarks = result.benchmarks || [];
+  const aggBench = result.aggregateBenchmarks;
+  const cls = result.classification;
+
+  if (!analysis) return null;
+
+  const forecast = analysis.performanceForecast;
+  const recs = [...(analysis.recommendations || [])].sort((a, b) => a.priority - b.priority);
+  const reuse = analysis.reusability || [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-4"
+      data-testid="standalone-analysis-view"
+    >
+      <div className="rounded-2xl border border-primary/30 bg-card/70 backdrop-blur p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30">
+            <BarChart3 className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold">Content Analysis</h3>
+            <p className="text-xs text-muted-foreground truncate">{result.filename}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-4 mb-4">
+          <div className="rounded-lg bg-muted/20 border border-border/30 px-3 py-2">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">Type</span>
+            <span className="text-sm font-medium">{cls.contentType}</span>
+          </div>
+          <div className="rounded-lg bg-muted/20 border border-border/30 px-3 py-2">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">Stage</span>
+            <Badge className={`${stageBadgeColors[cls.stage] || "bg-muted"} border text-[10px]`}>{cls.stage}</Badge>
+          </div>
+          <div className="rounded-lg bg-muted/20 border border-border/30 px-3 py-2">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">Product</span>
+            <span className="text-sm font-medium">{cls.product}</span>
+          </div>
+          <div className="rounded-lg bg-muted/20 border border-border/30 px-3 py-2">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">Pages / Words</span>
+            <span className="text-sm font-medium">{result.pageCount}p · {formatNum(result.wordCount)}w</span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-[auto_1fr] mb-5">
+          <div className="flex justify-center sm:justify-start">
+            <ReadinessGauge score={analysis.readinessScore} />
+          </div>
+          <div className="space-y-2">
+            <BreakdownBar label="Structure" value={analysis.readinessBreakdown.structure} />
+            <BreakdownBar label="CTAs" value={analysis.readinessBreakdown.ctas} />
+            <BreakdownBar label="Topic Depth" value={analysis.readinessBreakdown.topicDepth} />
+            <BreakdownBar label="Format" value={analysis.readinessBreakdown.format} />
+          </div>
+        </div>
+
+        {forecast && (
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-sky-400" />
+              <span className="text-sm font-semibold text-sky-400">Performance Forecast</span>
+            </div>
+            <div className="text-xs text-muted-foreground mb-1">
+              Primary metric: <span className="font-medium text-foreground">{forecast.metric}</span> · Confidence: <span className="font-medium text-foreground">{forecast.confidence}</span>
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="rounded-lg bg-sky-500/10 border border-sky-500/20 px-3 py-2 text-center flex-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">Low Estimate</span>
+                <span className="text-lg font-bold text-sky-400 tabular-nums">{formatNum(forecast.projectedRange[0])}</span>
+              </div>
+              <span className="text-muted-foreground text-xs">to</span>
+              <div className="rounded-lg bg-sky-500/10 border border-sky-500/20 px-3 py-2 text-center flex-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block">High Estimate</span>
+                <span className="text-lg font-bold text-sky-400 tabular-nums">{formatNum(forecast.projectedRange[1])}</span>
+              </div>
+            </div>
+            {aggBench && (
+              <div className="text-[10px] text-muted-foreground mt-2">
+                Stage benchmark ({forecast.metric}): median {formatNum(aggBench[forecast.metric as keyof AggregateBenchmarks] ? (aggBench[forecast.metric as keyof AggregateBenchmarks] as any)?.median || 0 : 0)} across {aggBench.sampleSize} assets
+              </div>
+            )}
+          </div>
+        )}
+
+        {analysis.topAction && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 mb-4 flex items-start gap-2">
+            <Rocket className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs leading-relaxed">{analysis.topAction}</p>
+          </div>
+        )}
+
+        {recs.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-semibold">Recommendations</span>
+            </div>
+            <div className="space-y-2">
+              {recs.map((r, i) => (
+                <div key={i} className="rounded-lg bg-muted/10 border border-border/20 p-3 flex items-start gap-2">
+                  <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    r.priority <= 2 ? "bg-red-500/15 text-red-400" : r.priority <= 3 ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground"
+                  }`}>
+                    {r.priority}
+                  </div>
+                  <p className="text-xs leading-relaxed">{r.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {benchmarks.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Similar Content in Your Library</span>
+            </div>
+            <div className="rounded-lg border border-border/20 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/15 border-b border-border/20">
+                    <th className="text-left px-3 py-2 text-muted-foreground font-medium">Asset</th>
+                    <th className="text-center px-2 py-2 text-muted-foreground font-medium">Match</th>
+                    <th className="text-right px-2 py-2 text-muted-foreground font-medium">Views</th>
+                    <th className="text-right px-2 py-2 text-muted-foreground font-medium">Leads</th>
+                    <th className="text-right px-2 py-2 text-muted-foreground font-medium">SQOs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benchmarks.slice(0, 5).map((b, i) => (
+                    <tr key={i} className="border-b border-border/10 last:border-0">
+                      <td className="px-3 py-2 max-w-[200px] truncate font-medium">{b.name || b.contentId}</td>
+                      <td className="text-center px-2 py-2">
+                        <span className={`font-semibold ${b.relevanceScore >= 70 ? "text-emerald-400" : b.relevanceScore >= 40 ? "text-amber-400" : "text-muted-foreground"}`}>{b.relevanceScore}%</span>
+                      </td>
+                      <td className="text-right px-2 py-2 tabular-nums">{formatNum(b.pageviews)}</td>
+                      <td className="text-right px-2 py-2 tabular-nums">{formatNum(b.leads)}</td>
+                      <td className="text-right px-2 py-2 tabular-nums">{formatNum(b.sqos)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {reuse.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="h-4 w-4 text-violet-400" />
+              <span className="text-sm font-semibold">Overlap & Cannibalization Risk</span>
+            </div>
+            <div className="space-y-1.5">
+              {reuse.map((r, i) => (
+                <div key={i} className="rounded-lg bg-muted/10 border border-border/20 p-2.5 flex items-center gap-3 text-xs">
+                  <span className="font-medium truncate flex-1 max-w-[180px]">{r.contentId}</span>
+                  <span className="text-muted-foreground">Overlap: <span className="font-semibold text-foreground">{r.overlap}%</span></span>
+                  <Badge className={`text-[9px] ${r.cannibalizationRisk === "high" ? "bg-red-500/15 text-red-400" : r.cannibalizationRisk === "medium" ? "bg-amber-500/15 text-amber-400" : "bg-emerald-500/15 text-emerald-400"}`}>
+                    {r.cannibalizationRisk} risk
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-4 border-t border-border/20">
+          <Button
+            onClick={onCompare}
+            className="flex-1 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-medium"
+            data-testid="btn-compare-from-analysis"
+          >
+            <ArrowLeftRight className="h-4 w-4 mr-2" />
+            Compare Against Library Asset
+          </Button>
+          {onAskChat && (
+            <Button
+              onClick={() => onAskChat(`I just analyzed "${result.filename}" — a ${cls.contentType} about ${cls.topic} for ${cls.product} (${cls.stage}). Readiness score: ${analysis.readinessScore}/100. ${analysis.topAction || ""} What suggestions do you have to improve this content?`)}
+              variant="outline"
+              className="flex-1 rounded-xl"
+              data-testid="btn-ask-chat-about-analysis"
+            >
+              <Lightbulb className="h-4 w-4 mr-2" />
+              Ask Librarian About This
+            </Button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ContentComparison() {
   const [approach, setApproach] = useState<ContentApproach | null>(null);
   const [slotA, setSlotA] = useState<SlotAState>(EMPTY_SLOT_A);
   const [slotB, setSlotB] = useState<SlotBState>(EMPTY_SLOT_B);
-  const [step, setStep] = useState<"intake" | "baseline" | "results">("intake");
+  const [step, setStep] = useState<"intake" | "standalone" | "baseline" | "results">("intake");
   const [newContentResult, setNewContentResult] = useState<PdfResult | null>(null);
   const [comparisonResult, setComparisonResult] = useState<FullComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
@@ -1642,6 +1973,16 @@ export default function ContentComparison() {
   function handleNewContentReady(result: PdfResult, _savedToLibrary: boolean) {
     setNewContentResult(result);
     setSlotB({ ...EMPTY_SLOT_B, result });
+    setStep("baseline");
+  }
+
+  function handleViewStandaloneAnalysis(result: PdfResult) {
+    setNewContentResult(result);
+    setSlotB({ ...EMPTY_SLOT_B, result });
+    setStep("standalone");
+  }
+
+  function handleMoveToComparison() {
     setStep("baseline");
   }
 
@@ -1724,13 +2065,15 @@ export default function ContentComparison() {
         className="rounded-2xl border border-primary/30 bg-card/70 backdrop-blur p-5"
         data-testid="panel-content-intake"
       >
-        <div className="flex items-center gap-2 mb-4">
+        <div className={`flex items-center gap-2 ${step === "standalone" ? "mb-0" : "mb-4"}`}>
           <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30">
             <ArrowLeftRight className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <h3 className="text-base font-semibold">Content Comparison</h3>
-            <p className="text-xs text-muted-foreground">Upload or select content to compare against your library's top performers</p>
+            <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
+            {step !== "standalone" && (
+              <p className="text-xs text-muted-foreground">Upload or select content to compare against your library's top performers</p>
+            )}
           </div>
           {step !== "intake" && (
             <Button onClick={handleReset} variant="outline" size="sm" className="ml-auto rounded-lg text-xs" data-testid="btn-reset-comparison">
@@ -1772,7 +2115,7 @@ export default function ContentComparison() {
             <AnimatePresence mode="wait">
               {approach === "upload" && (
                 <motion.div key="upload" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                  <UploadAndSavePanel onAnalyzed={handleNewContentReady} />
+                  <UploadAndSavePanel onAnalyzed={handleNewContentReady} onViewAnalysis={handleViewStandaloneAnalysis} />
                 </motion.div>
               )}
               {approach === "existing" && (
@@ -1911,6 +2254,16 @@ export default function ContentComparison() {
           </motion.div>
         )}
       </motion.div>
+
+      {step === "standalone" && newContentResult && (
+        <StandaloneAnalysisView
+          result={newContentResult}
+          onCompare={handleMoveToComparison}
+          onAskChat={(prompt) => {
+            window.dispatchEvent(new CustomEvent("open-full-chat", { detail: { prompt } }));
+          }}
+        />
+      )}
 
       {step === "results" && comparisonLoading && !comparisonResult && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>

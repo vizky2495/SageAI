@@ -392,6 +392,11 @@ export default function PageChat({
   useEffect(() => {
     function handleOpenFullChat(e: Event) {
       const detail = (e as CustomEvent).detail;
+      if (detail?.prompt) {
+        openChat();
+        setInput(detail.prompt);
+        return;
+      }
       if (detail?.asset) {
         const context = `Asking about: ${detail.asset.contentId} — ${detail.stage || "Unknown"} — ${detail.asset.productFranchise || "N/A"}`;
         openChat();
