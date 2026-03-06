@@ -1406,7 +1406,7 @@ export default function ContentComparison() {
               <p className="text-xs text-muted-foreground mb-3">
                 Choose an existing asset from your library as the performance benchmark.
               </p>
-              <AssetSearchPicker onSelect={handleBaselineSelected} />
+              <BaselineAssetBrowser onSelect={handleBaselineSelected} />
             </div>
           </motion.div>
         )}
@@ -1449,104 +1449,118 @@ export default function ContentComparison() {
   );
 }
 
-function AssetSearchPicker({ onSelect }: { onSelect: (asset: AssetPickerItem) => void }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<AssetPickerItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout>();
-  const containerRef = useRef<HTMLDivElement>(null);
+function BaselineAssetBrowser({ onSelect }: { onSelect: (asset: AssetPickerItem) => void }) {
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("TOFU");
+  const [assets, setAssets] = useState<AssetPickerItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await authFetch(`/api/assets/search-picker?q=${encodeURIComponent(query.trim())}`);
-        const data = await res.json();
-        setResults(data);
-        setOpen(true);
-      } catch {
-        setResults([]);
-      }
-      setLoading(false);
-    }, 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [query]);
+    setLoading(true);
+    const params = new URLSearchParams({ stage: stageFilter, limit: "50", offset: "0" });
+    if (search.trim().length >= 2) params.set("search", search.trim());
+    authFetch(`/api/assets?${params}`)
+      .then(r => r.json())
+      .then((data: { data: any[]; total: number }) => {
+        setAssets(data.data.map((a: any) => ({
+          id: String(a.id),
+          contentId: a.contentId,
+          name: a.name || a.contentId,
+          stage: a.stage,
+          product: a.productFranchise || null,
+          channel: a.utmChannel || null,
+          cta: a.typecampaignmember || null,
+          type: a.typecampaignmember || null,
+          pageviews: a.pageviewsSum || 0,
+          downloads: a.downloadsSum || 0,
+          leads: a.uniqueLeads || 0,
+          sqos: a.sqoCount || 0,
+          avgTime: a.timeAvg || 0,
+        })));
+        setTotal(data.total);
+      })
+      .catch(() => setAssets([]))
+      .finally(() => setLoading(false));
+  }, [stageFilter, search]);
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const stages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Search by content ID, title, or product..."
-          className="w-full h-10 pl-9 pr-3 rounded-lg bg-muted/20 border border-border/40 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-          data-testid="input-baseline-search"
-        />
-        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground/50" />}
+    <div className="space-y-3" data-testid="baseline-asset-browser">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by content ID..."
+            className="w-full h-9 pl-8 pr-3 rounded-lg bg-muted/20 border border-border/40 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+            data-testid="input-baseline-search"
+          />
+        </div>
       </div>
 
-      <AnimatePresence>
-        {open && results.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-border/40 bg-card shadow-xl"
+      <div className="flex gap-1">
+        {stages.map(s => (
+          <button
+            key={s}
+            onClick={() => setStageFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              stageFilter === s
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "text-muted-foreground hover:bg-muted/30 border border-transparent"
+            }`}
+            data-testid={`btn-baseline-stage-${s.toLowerCase()}`}
           >
-            {results.map((asset) => (
-              <button
-                key={asset.id}
-                onClick={() => {
-                  onSelect(asset);
-                  setOpen(false);
-                  setQuery("");
-                }}
-                className="w-full text-left px-3 py-2.5 hover:bg-muted/20 transition-colors border-b border-border/10 last:border-0"
-                data-testid={`picker-baseline-${asset.id}`}
-              >
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-medium truncate flex-1">{asset.name || asset.contentId}</span>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <div className="max-h-72 overflow-y-auto rounded-xl border border-border/30 divide-y divide-border/10">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Loading assets...
+          </div>
+        ) : assets.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            No {stageFilter} content found{search ? ` matching "${search}"` : ""}.
+          </div>
+        ) : (
+          assets.map(asset => (
+            <button
+              key={asset.id}
+              onClick={() => onSelect(asset)}
+              className="w-full text-left px-3 py-2.5 hover:bg-muted/20 transition-colors flex items-center gap-3"
+              data-testid={`picker-baseline-${asset.id}`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium truncate">{asset.name || asset.contentId}</span>
                   <Badge className={`${stageBadgeColors[asset.stage] || "bg-muted"} border text-[9px] shrink-0`}>
                     {asset.stage}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
                   {asset.type && <span className="text-foreground/70 font-medium">{asset.type}</span>}
-                  <span>{formatNum(asset.pageviews)} views</span>
-                  <span>{formatNum(asset.leads)} leads</span>
-                  <span>{formatNum(asset.sqos)} SQOs</span>
                   {asset.product && <span className="truncate">{asset.product}</span>}
                 </div>
-              </button>
-            ))}
-          </motion.div>
+              </div>
+              <div className="flex gap-3 text-[10px] text-muted-foreground shrink-0">
+                <span>{formatNum(asset.pageviews)} views</span>
+                <span>{formatNum(asset.leads)} leads</span>
+                <span>{formatNum(asset.sqos)} SQOs</span>
+              </div>
+            </button>
+          ))
         )}
-      </AnimatePresence>
-
-      {query.length >= 2 && !loading && results.length === 0 && open && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-border/40 bg-card shadow-xl p-4 text-center">
-          <p className="text-xs text-muted-foreground">No matching content found</p>
-        </div>
-      )}
+      </div>
+      <div className="text-[10px] text-muted-foreground">
+        Showing {assets.length} of {total} {stageFilter} assets
+      </div>
     </div>
   );
 }
