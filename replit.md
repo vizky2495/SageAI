@@ -90,9 +90,10 @@ Organized into `client/` (React frontend), `server/` (Express backend), `shared/
 
 -   **PostgreSQL**: Primary database for all application data, accessed via `node-postgres`.
 -   **Authentication System**: Custom email/password authentication with user/admin roles, session management, rate limiting, and secure token storage.
--   **Claude AI (Anthropic)**: Utilized via Replit AI integrations for:
+-   **Claude AI (Anthropic)**: Utilized via Replit AI integrations (`AI_INTEGRATIONS_ANTHROPIC_API_KEY` / `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` env vars — all Anthropic clients must use these, NOT `ANTHROPIC_API_KEY`):
     -   **CIA Agent**: Provides concise, data-grounded answers within dashboards.
     -   **Campaign Planner**: Generates comprehensive campaign strategies with a senior strategist persona, including budget allocations, readiness scores, and PDF export with Sage branding.
+    -   **Content Comparison** (`/api/assets/full-comparison`): Full resonance analysis with keyword tags, topic breakdowns, content insights.
     -   **Content Librarian**: Powers content classification, comparison, and recommendation within the Content Library.
     -   Supports image attachments for vision-based analysis.
 -   **Replit-specific Plugins**: For development environment enhancements (e.g., error modal, cartographer, dev banner).

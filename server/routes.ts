@@ -259,7 +259,10 @@ export async function registerRoutes(
       ? `Pool: ${aggregateBenchmarks.sampleSize} of ${aggregateBenchmarks.totalPoolSize} assets. Pageviews: ${aggregateBenchmarks.pageviews.min}-${aggregateBenchmarks.pageviews.max} (median ${aggregateBenchmarks.pageviews.median}). Leads: ${aggregateBenchmarks.leads.min}-${aggregateBenchmarks.leads.max} (median ${aggregateBenchmarks.leads.median}). SQOs: ${aggregateBenchmarks.sqos.min}-${aggregateBenchmarks.sqos.max} (median ${aggregateBenchmarks.sqos.median}). Avg CTAs: ${aggregateBenchmarks.avgCtaCount}.`
       : "No benchmark data available.";
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    const anthropic = new Anthropic({
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY!,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+    });
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 500,
@@ -459,7 +462,10 @@ Benchmarks: ${benchmarkSummary}`
       let isFallback = false;
 
       try {
-        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+        const anthropic = new Anthropic({
+          apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY!,
+          baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+        });
         const msg = await anthropic.messages.create({
           model: "claude-sonnet-4-5",
           max_tokens: 200,
@@ -708,12 +714,16 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
       let contentAStored: any = null;
       let contentBStored: any = null;
-      try { contentAStored = await storage.getContentByAssetId(contentA.contentId); } catch {}
-      try { if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId); } catch {}
+      try { contentAStored = await storage.getContentByAssetId(contentA.contentId); } catch (e) { console.error("Failed to fetch content A:", contentA.contentId, e); }
+      try { if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId); } catch (e) { console.error("Failed to fetch content B:", contentB.contentId, e); }
+
+      console.log(`[Comparison] Content A (${contentA.contentId}): stored=${!!contentAStored}, textLen=${contentAStored?.contentText?.length || 0}`);
+      console.log(`[Comparison] Content B (${contentB.contentId || 'no-id'}): stored=${!!contentBStored}, textLen=${contentBStored?.contentText?.length || 0}, inlineTextLen=${contentB.text?.length || 0}`);
 
       const aTextForAnalysis = contentAStored?.contentText || "";
       const bTextForAnalysis = contentBStored?.contentText || contentB.text || "";
       const bothHaveContent = !!(aTextForAnalysis && bTextForAnalysis);
+      console.log(`[Comparison] bothHaveContent=${bothHaveContent}, aTextLen=${aTextForAnalysis.length}, bTextLen=${bTextForAnalysis.length}`);
 
       const metricsA = contentA.metrics;
       const metricsB = contentB.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
@@ -733,7 +743,10 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
       if (hasAnyContent) {
         try {
-          const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+          const anthropic = new Anthropic({
+            apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY!,
+            baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+          });
 
           const engagementBlockA = aHasMetrics
             ? `Pageviews: ${metricsA.pageviews}, Downloads: ${metricsA.downloads}, Leads: ${metricsA.leads}, SQOs: ${metricsA.sqos}, Avg Time: ${metricsA.avgTime}s`

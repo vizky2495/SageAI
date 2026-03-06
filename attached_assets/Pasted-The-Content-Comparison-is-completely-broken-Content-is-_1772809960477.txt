@@ -1,0 +1,198 @@
+The Content Comparison is completely broken. Content is uploaded for both assets (green checkmark shows "Content uploaded") but the AI never reads or analyzes the content. Every section is empty or shows "upload content" messages. This is the #1 priority fix — nothing else matters until this works.
+
+STEP 1: DEBUG — FIND WHERE THE PIPELINE IS BROKEN
+Something in the chain between "content uploaded" and "AI analyzes content" is failing. Check each step:
+Check 1 — Is the content text actually stored in the database?
+
+After a user uploads a PDF, is the extracted text being saved to the content_text field in the content_stored table?
+Log the content_text field for both assets. Is it populated or empty/null?
+If empty: the PDF text extraction step is failing. Fix the PDF parser.
+If populated: the text is there but the AI is never receiving it. Move to Check 2.
+
+Check 2 — Is the AI being called with the content text?
+
+When the comparison runs, is the system actually sending the content_text to the AI model?
+Add console logging to the comparison function: log what is being sent to the AI. Does the prompt include the actual content text or just metadata?
+If the content text is NOT in the prompt: fix the comparison function to pull content_text from content_stored and include it in the AI prompt.
+If the content text IS in the prompt: the AI is receiving it but the response is not being parsed correctly. Move to Check 3.
+
+Check 3 — Is the AI response being parsed and displayed?
+
+Log the raw AI response when the comparison runs. Does it contain the analysis (summary, topics, resonance, tags)?
+If yes: the parsing/rendering layer is broken. The AI produces the analysis but the UI doesn't display it.
+If no: the AI prompt is not instructing the AI to analyze the content. Fix the prompt.
+
+Check 4 — Is the AI analysis being stored for the PDF?
+
+When the comparison generates results, are those results saved in a state/variable that the PDF generator can access?
+If the PDF generator re-runs its own queries instead of using the on-screen results, it may not have access to the same data.
+
+Fix each broken step before moving on. The most likely issue is that the comparison function is not pulling content_text from the database and including it in the AI prompt.
+
+STEP 2: THE CORRECT COMPARISON FLOW (implement this)
+When the user clicks "Compare" after selecting two assets:
+1. Get asset_id_A and asset_id_B
+
+2. Pull engagement data for both from engagement_data table:
+   - views, downloads, leads, sqos, avg_time, product, country, 
+     industry, funnel_stage, channel, content_type
+
+3. Pull stored content for both from content_stored table:
+   - content_text, content_summary, keyword_tags, extracted_topics, 
+     content_structure, fetch_status
+
+4. Determine comparison type:
+   - If BOTH have content_text (not null, not empty): FULL COMPARISON
+   - If ONE has content_text: PARTIAL COMPARISON
+   - If NEITHER has content_text: PERFORMANCE ONLY
+
+5. For FULL COMPARISON, send this prompt to AI:
+   
+   "You are a content intelligence analyst. Compare these two 
+   content pieces and produce a detailed analysis.
+   
+   CONTENT A:
+   Name: [readable name]
+   Product: [product]
+   Country: [country]  
+   Industry: [industry]
+   Funnel Stage: [funnel_stage]
+   Channel: [channel]
+   Engagement: [views] views, [leads] leads, [sqos] SQOs, 
+   [avg_time]s avg time
+   
+   FULL CONTENT TEXT:
+   [content_text_A]
+   
+   CONTENT B:
+   Name: [readable name]
+   Product: [product]
+   Country: [country]
+   Industry: [industry]
+   Funnel Stage: [funnel_stage]
+   Channel: [channel]
+   Engagement: [views] views, [leads] leads, [sqos] SQOs, 
+   [avg_time]s avg time
+   
+   FULL CONTENT TEXT:
+   [content_text_B]
+   
+   Produce the following analysis in JSON format:
+   
+   {
+     content_overview_A: '2-3 sentence summary of Content A',
+     content_overview_B: '2-3 sentence summary of Content B',
+     keyword_tags_A: ['tag1', 'tag2', ...8-15 specific keyword tags],
+     keyword_tags_B: ['tag1', 'tag2', ...8-15 specific keyword tags],
+     shared_tags: ['tags that appear in both'],
+     resonance_A: {
+       country_fit: {rating: 'Strong/Moderate/Weak', explanation: '...'},
+       industry_fit: {rating: '...', explanation: '...'},
+       funnel_stage_fit: {rating: '...', explanation: '...'},
+       product_fit: {rating: '...', explanation: '...'}
+     },
+     resonance_B: { same structure },
+     topic_breakdown_A: [
+       {topic: '...', what_content_says: '...', depth: 'detailed/overview/brief mention', relevant_to_audience: true/false, why: '...'}
+     ],
+     topic_breakdown_B: [ same structure ],
+     shared_themes: ['what both cover'],
+     differences: ['how they diverge'],
+     what_works_A: 'why this content works (connect to engagement data if available)',
+     what_works_B: 'same',
+     improvements_A: 'specific gaps or weaknesses found',
+     improvements_B: 'same',
+     verdict: 'which resonates better and why - 2-3 paragraphs',
+     suggestions: ['suggestion 1', 'suggestion 2', 'suggestion 3']
+   }
+   
+   Rules:
+   - Read the FULL content text, not just titles
+   - Keyword tags must be specific (Year-End Payroll, T4 Slips, 
+     CRA Reporting) not generic (Accounting, Business, Software)
+   - Only reference engagement data that exists. If data is zero 
+     or missing, say so
+   - Never fabricate projections or scores
+   - Every claim must be based on what you read in the content
+   "
+
+6. Parse the AI JSON response
+
+7. Store the parsed results in component state
+
+8. Render on screen using the parsed results
+
+9. Pass the same parsed results to the PDF generator when 
+   user clicks download
+
+STEP 3: WHAT THE UI SHOULD SHOW AFTER A SUCCESSFUL COMPARISON
+Content A and B cards (top):
+
+Everything currently shown: name, ID, tags, metrics — keep this
+REMOVE "AI analysis unavailable" text
+REPLACE with: content summary (1-2 lines from AI) + keyword tags as colored pills below the summary
+Content A tags in teal pills, Content B tags in jade pills
+Tags that appear in both pieces highlighted in green with a small "shared" label
+
+"What This Content Covers" section (NEW — first analysis section):
+
+For each content piece:
+
+Primary focus in 1-2 sentences
+Key topics with what the content actually says about each topic and the depth of coverage
+What it does NOT cover that you'd expect given the audience
+Keyword tags displayed as pills
+
+
+Then a comparison insight: "Content A talks about [X] while Content B talks about [Y]. The key difference is..."
+
+"Audience Resonance" section:
+
+Country fit, Industry fit, Funnel stage fit, Product fit for each piece
+Each rated Strong/Moderate/Weak with explanation
+Show as two side-by-side blocks or a comparison layout
+
+"What's Shared, What's Different" section:
+
+Use keyword tags visually: "Shared: [tag] [tag]. Unique to A: [tag] [tag] [tag]. Unique to B: [tag] [tag]"
+Then prose explanation of how they overlap and diverge
+
+"What Makes This Content Work" section (only for assets with engagement data above zero):
+
+Connect content characteristics to performance data
+"This content's strong engagement (855s avg time) correlates with its detailed coverage of [topic] — a high-urgency topic for [audience]."
+Only show when there is real data to support it
+
+"What Could Be Improved" section (only when AI finds specific gaps):
+
+Specific issues found in the content with why they matter
+Never generic advice — only issues the AI actually found by reading the content
+
+"Verdict & Suggestions" section:
+
+2-3 paragraph substantive analysis
+Numbered actionable suggestions
+Source tags on everything
+
+Performance Data section (only if both sides have meaningful data):
+
+If both have data: comparison table
+If one has data: inline summary sentence, no table
+If neither: skip entirely
+
+Action buttons:
+
+Download Comparison Report (PDF)
+Plan Campaign With This Content →
+
+
+STEP 4: THINGS TO REMOVE FROM CURRENT UI
+
+Remove "AI analysis unavailable" — either show the analysis or show a retry button with the actual error
+Remove "Upload content files for both assets to enable full audience resonance analysis" — content IS uploaded, this message is wrong
+Remove Performance Comparison table when one side is all zeros — show inline summary instead
+Remove any section that has just a header and no content — either populate it or hide it
+Remove "Content Resonance Analysis" section at the bottom that just says "upload content" — this should be the actual resonance analysis, not a placeholder message
+
+
+PRIORITY: Fix the AI pipeline first (Steps 1-2). Everything else depends on the AI actually reading the content. Test with these two assets: upload both PDFs, run comparison, verify the AI response contains actual content analysis. If the AI response is empty or generic, the prompt is wrong. If the AI response is good but doesn't show on screen, the rendering is wrong. If the text is never sent to the AI, the data retrieval is wrong. Debug systematically.

@@ -1533,12 +1533,18 @@ function ComparisonResults({
       )}
 
       {!hasAnalysis && !isLoadingVerdict && (
-        <Card className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-5 backdrop-blur" data-testid="no-content-analysis">
+        <Card className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 backdrop-blur" data-testid="no-content-analysis">
           <div className="flex items-center gap-2 mb-2">
-            <Layers className="h-4 w-4 text-muted-foreground/50" />
-            <h3 className="text-sm font-semibold text-muted-foreground">Content Resonance Analysis</h3>
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-semibold text-amber-300">Content Analysis Unavailable</h3>
           </div>
-          <p className="text-xs text-muted-foreground">Upload content files for both assets to enable full audience resonance analysis, keyword tags, topic breakdowns, and actionable suggestions.</p>
+          <p className="text-xs text-muted-foreground">
+            {meta.bothHaveContent
+              ? "The AI analysis could not be generated. This may be a temporary issue — try running the comparison again."
+              : meta.aHasContent || meta.bHasContent
+              ? `Content text is only available for ${meta.aHasContent ? nameA : nameB}. Upload content for the other asset to enable full resonance analysis.`
+              : "No content text is available for either asset. Upload content files to enable AI-powered resonance analysis, keyword tags, and topic breakdowns."}
+          </p>
         </Card>
       )}
 
