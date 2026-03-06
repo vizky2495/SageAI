@@ -1,0 +1,185 @@
+Improve the quality of AI-generated keyword tags for content in the library. The current tags are too generic or too surface-level. Tags should be genuinely useful for a marketing manager searching for specific content for campaigns.
+
+UPDATE THE TAG GENERATION PROMPT
+When the AI analyzes uploaded content, use this specific prompt structure for generating tags:
+You are a content analyst for a B2B marketing team. Read the 
+following content and generate keyword tags that would help 
+a marketing manager find this content when planning campaigns.
+
+CONTENT TEXT:
+[full content text]
+
+CONTENT METADATA:
+Product: [product]
+Country: [country]
+Industry: [industry]
+Funnel Stage: [funnel_stage]
+
+Generate 3 types of tags:
+
+TOPIC TAGS (5-8 tags):
+What specific subjects does this content cover? These should 
+be the actual topics discussed, not generic categories.
+- Good: "Year-End Payroll Close", "T4 Slip Generation", 
+  "CRA Reporting Deadlines"
+- Bad: "Payroll", "Tax", "Compliance"
+The tag should be specific enough that someone searching 
+for it would find exactly what they need.
+
+AUDIENCE TAGS (2-3 tags):
+Who specifically is this content written for?
+- Good: "Accounting Firm Owners", "Canadian CPAs", 
+  "Growing Practices 10-50 Employees"
+- Bad: "Accountants", "Business Owners", "Professionals"
+Include the seniority level, role, or business stage if 
+the content targets a specific segment.
+
+INTENT TAGS (2-3 tags):
+What is someone trying to do or solve when they need 
+this content?
+- Good: "Modernize Practice Operations", 
+  "Shift Compliance to Advisory", 
+  "Reduce Year-End Processing Time"
+- Bad: "Learn", "Improve", "Grow"
+These describe the reader's goal or pain point, not 
+the content's format.
+
+Rules:
+- Each tag must be 1-4 words
+- Every tag must come from something actually discussed 
+  in the content text. Never infer from title or metadata.
+- Prefer specific over general: "Sage 50 Cloud Migration" 
+  not "Cloud Migration"
+- Prefer action-oriented over passive: "Automate Month-End 
+  Close" not "Month-End Close"
+- Include proper nouns when the content specifically 
+  discusses them: "Will Farnell Methodology", 
+  "CRA Digital Filing", "CPA Canada Standards"
+- Do not repeat the product name as a standalone tag 
+  unless the content specifically reviews or discusses 
+  the product features
+- If the content mentions specific regulations, standards, 
+  or frameworks by name, include them as tags
+- If the content mentions specific metrics or benchmarks, 
+  include the concept: "30% YoY Growth", 
+  "100% Cloud Adoption"
+
+Return as JSON:
+{
+  "topic_tags": ["tag1", "tag2", ...],
+  "audience_tags": ["tag1", "tag2", ...],
+  "intent_tags": ["tag1", "tag2", ...]
+}
+
+DISPLAY THE THREE TAG TYPES DIFFERENTLY
+On content cards and in the comparison report, show all three tag types with visual differentiation:
+On content library cards:
+
+Topic tags: teal pills (#006362 background, white text)
+Audience tags: jade pills (#00A65C background, white text)
+Intent tags: green outlined pills (transparent background, #00D657 border and text)
+Show maximum 5 tags total on the card (mix of all three types, prioritizing topic tags). "+X more" for overflow.
+
+In the content preview panel (expanded view):
+
+Show all tags grouped by type:
+
+"Topics: [tag] [tag] [tag] [tag] [tag]"
+"Audience: [tag] [tag]"
+"Intent: [tag] [tag]"
+
+
+Each group on its own line with the type label in muted gray text
+
+In the comparison report (PDF and on-screen):
+
+Same grouped display per content piece
+Shared tags between Content A and B highlighted with a distinct style (green filled with white text + small "shared" icon)
+
+In the tag filter bar:
+
+Show three filter groups or let users toggle between tag types:
+
+"All tags" (default — shows all types mixed)
+"Topics" — filter by topic tags only
+"Audience" — filter by audience tags only
+"Intent" — filter by intent tags only
+
+
+This lets users search differently: "Show me all content about CRA Reporting" (topic) vs "Show me all content for Accounting Firm Owners" (audience) vs "Show me all content about Modernizing Practice Operations" (intent)
+
+
+STORE TAGS WITH THEIR TYPE
+Update the keyword_tags field in content_stored from a simple array to a structured JSON:
+json{
+  "topic_tags": [
+    "Year-End Payroll Close",
+    "T4 Slip Generation", 
+    "CRA Reporting Deadlines",
+    "Living Brand Development",
+    "Firm Transformation Framework",
+    "Cloud Accounting Adoption"
+  ],
+  "audience_tags": [
+    "Accounting Firm Owners",
+    "Growth-Stage Practices",
+    "Canadian CPAs"
+  ],
+  "intent_tags": [
+    "Shift Compliance to Advisory",
+    "Differentiate Through Client Relationships",
+    "Scale Practice Operations"
+  ],
+  "user_added_tags": []
+}
+
+MAKE TAGS SEARCHABLE ACROSS ALL THREE TYPES
+When user searches in the Content Library:
+
+Search across topic_tags, audience_tags, and intent_tags simultaneously
+If user types "accounting firm owners" → matches audience_tag → shows those assets with the matching tag highlighted
+If user types "CRA reporting" → matches topic_tag → shows those assets
+If user types "modernize practice" → matches intent_tag "Modernize Practice Operations" → shows those assets
+Show which tag type matched in the result: "Matched: Audience — Accounting Firm Owners"
+
+
+TAG QUALITY EXAMPLES
+For the Human Firm content that was successfully analyzed, the tags should look like:
+Current (bad — too generic):
+"Human Firm", "Cloud Accounting", "Firm Transformation", "Living Brand", "Advisory Services", "Compliance Shift", "Practice Management", "Sage 50", "Will Farnell", "Brand Personality"
+Improved (specific and useful):
+Topic tags:
+
+"Human Firm Four-Phase Model"
+"Living Brand Development"
+"Digital to Human Revolution"
+"Compliance-to-Advisory Shift"
+"Generational Workforce Impact"
+"Output-Based Pricing Model"
+
+Audience tags:
+
+"Accounting Firm Owners"
+"Growth-Stage Practices"
+"Traditional Compliance Firms"
+
+Intent tags:
+
+"Differentiate Beyond Technology"
+"Build Client-Centric Culture"
+"Scale Advisory Services"
+
+The difference: the improved tags tell a marketing manager exactly what this content is about, who it's for, and what problem it solves — without opening the content. A campaign planner looking for "content about helping traditional firms shift to advisory" would find this through the intent tag. A planner targeting "accounting firm owners" would find it through the audience tag. A planner looking for "content about living brand concepts" would find it through the topic tag.
+
+RE-GENERATE TAGS FOR EXISTING CONTENT
+For content that has already been analyzed with the old generic tag prompt:
+
+Add an admin action: "Re-generate tags for all analyzed content"
+This re-runs the improved tag prompt against all stored content_text
+Preserves any user_added_tags
+Shows progress: "Regenerating tags: 23/47 complete"
+Also add a per-asset "Regenerate tags" button in the content preview panel
+
+
+
+The three-type tag system (Topic + Audience + Intent) is the key improvement. Generic single-type tags like "Accounting" or "Payroll" are useless because they match too broadly. When a campaign planner searches "content for accounting firm owners about shifting to advisory services," they need the audience tag AND the intent tag to find the right asset. That precision is what makes tags actually useful. Opus 4.6

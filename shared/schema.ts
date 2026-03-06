@@ -169,6 +169,28 @@ export const insertFeedbackSchema = createInsertSchema(feedback).omit({
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 
+export interface StructuredKeywordTags {
+  topic_tags: string[];
+  audience_tags: string[];
+  intent_tags: string[];
+  user_added_tags: string[];
+}
+
+export function normalizeKeywordTags(raw: StructuredKeywordTags | string[] | null | undefined): StructuredKeywordTags {
+  if (!raw) return { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+  if (Array.isArray(raw)) return { topic_tags: raw, audience_tags: [], intent_tags: [], user_added_tags: [] };
+  return {
+    topic_tags: raw.topic_tags || [],
+    audience_tags: raw.audience_tags || [],
+    intent_tags: raw.intent_tags || [],
+    user_added_tags: raw.user_added_tags || [],
+  };
+}
+
+export function flattenKeywordTags(tags: StructuredKeywordTags): string[] {
+  return [...tags.topic_tags, ...tags.audience_tags, ...tags.intent_tags, ...tags.user_added_tags];
+}
+
 export const contentStored = pgTable("content_stored", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   assetId: text("asset_id").notNull().unique(),
@@ -178,7 +200,7 @@ export const contentStored = pgTable("content_stored", {
   extractedCta: jsonb("extracted_cta").$type<{ text: string; type: string; strength: string; location: string } | null>(),
   contentStructure: jsonb("content_structure").$type<{ wordCount: number; sectionCount: number; pageCount: number; headings: string[] }>(),
   messagingThemes: jsonb("messaging_themes").$type<string[]>(),
-  keywordTags: jsonb("keyword_tags").$type<string[]>(),
+  keywordTags: jsonb("keyword_tags").$type<StructuredKeywordTags | string[]>(),
   contentFormat: text("content_format"),
   sourceType: text("source_type").notNull().default("not_stored"),
   sourceUrl: text("source_url"),

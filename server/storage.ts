@@ -14,6 +14,8 @@ import {
   type ContentStored,
   type InsertContentStored,
   contentStored,
+  type StructuredKeywordTags,
+  normalizeKeywordTags,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, and, or, sql, count, inArray, isNull, ne } from "drizzle-orm";
@@ -54,7 +56,9 @@ export interface IStorage {
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
-  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }>>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags }>>;
+  getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> }>;
+  updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
   deleteContent(assetId: string): Promise<void>;
   getContentStats(): Promise<{ totalStored: number; totalSize: number }>;
   createContentPlaceholders(assetIds: { assetId: string; sourceUrl?: string | null }[]): Promise<number>;
@@ -84,6 +88,7 @@ export class DatabaseStorage implements IStorage {
     campaign?: string;
     industry?: string;
     contentAvailability?: string;
+    tagFilter?: string[];
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }> {
@@ -94,6 +99,17 @@ export class DatabaseStorage implements IStorage {
           SELECT ${contentStored.assetId} FROM ${contentStored}
           WHERE ${contentStored.keywordTags}::text ILIKE ${'%' + opts.search + '%'}
         ))`
+      );
+    }
+    if (opts.tagFilter && opts.tagFilter.length > 0) {
+      const tagConditions = opts.tagFilter.map(tag =>
+        sql`${contentStored.keywordTags}::text ILIKE ${'%' + tag + '%'}`
+      );
+      conditions.push(
+        sql`${assetsAgg.contentId} IN (
+          SELECT ${contentStored.assetId} FROM ${contentStored}
+          WHERE ${and(...tagConditions)}
+        )`
       );
     }
     if (opts.product) {
@@ -259,7 +275,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }>> {
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags }>> {
     const rows = await db
       .select({
         assetId: contentStored.assetId,
@@ -271,7 +287,7 @@ export class DatabaseStorage implements IStorage {
         keywordTags: contentStored.keywordTags,
       })
       .from(contentStored);
-    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: string[] | null }> = {};
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags }> = {};
     for (const r of rows) {
       map[r.assetId] = {
         fetchStatus: r.fetchStatus,
@@ -279,10 +295,30 @@ export class DatabaseStorage implements IStorage {
         contentSummary: r.contentSummary,
         extractedTopics: r.extractedTopics as string[] | null,
         extractedCta: r.extractedCta as { text: string; type: string; strength: string; location: string } | null,
-        keywordTags: r.keywordTags as string[] | null,
+        keywordTags: normalizeKeywordTags(r.keywordTags as any),
       };
     }
     return map;
+  }
+
+  async getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> }> {
+    const rows = await db.select({ keywordTags: contentStored.keywordTags }).from(contentStored);
+    const result: { topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> } = {
+      topic_tags: {}, audience_tags: {}, intent_tags: {}, user_added_tags: {},
+    };
+    for (const r of rows) {
+      const tags = normalizeKeywordTags(r.keywordTags as any);
+      for (const type of ["topic_tags", "audience_tags", "intent_tags", "user_added_tags"] as const) {
+        for (const tag of tags[type]) {
+          result[type][tag] = (result[type][tag] || 0) + 1;
+        }
+      }
+    }
+    return result;
+  }
+
+  async updateAssetTags(assetId: string, tags: StructuredKeywordTags): Promise<void> {
+    await db.update(contentStored).set({ keywordTags: tags, dateLastUpdated: new Date() }).where(eq(contentStored.assetId, assetId));
   }
 
   async deleteContent(assetId: string): Promise<void> {

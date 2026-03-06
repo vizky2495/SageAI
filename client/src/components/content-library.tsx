@@ -38,13 +38,20 @@ import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
 import ContentPreviewPanel from "@/components/content-preview-panel";
 
+interface StructuredKeywordTags {
+  topic_tags: string[];
+  audience_tags: string[];
+  intent_tags: string[];
+  user_added_tags: string[];
+}
+
 interface ContentStatusEntry {
   fetchStatus: string;
   sourceUrl: string | null;
   contentSummary: string | null;
   extractedTopics: string[] | null;
   extractedCta: { text: string; type: string; strength: string; location: string } | null;
-  keywordTags: string[] | null;
+  keywordTags: StructuredKeywordTags;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -1196,18 +1203,36 @@ function ContentCard({
                   CTA: {contentStatus.extractedCta.type.replace(/_/g, " ")}
                 </Badge>
               )}
-              {contentStatus.keywordTags && contentStatus.keywordTags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1" data-testid="card-keyword-tags">
-                  {contentStatus.keywordTags.slice(0, 5).map((tag, i) => (
-                    <Badge key={i} variant="outline" className="rounded-full text-[8px] px-1.5 py-0 bg-teal-500/8 text-teal-400 border-teal-500/25 font-medium">
-                      {tag}
-                    </Badge>
-                  ))}
-                  {contentStatus.keywordTags.length > 5 && (
-                    <span className="text-[8px] text-muted-foreground self-center">+{contentStatus.keywordTags.length - 5}</span>
-                  )}
-                </div>
-              )}
+              {contentStatus.keywordTags && (() => {
+                const t = contentStatus.keywordTags;
+                const allTagsTyped: { tag: string; type: "topic" | "audience" | "intent" | "user" }[] = [
+                  ...t.topic_tags.map(tag => ({ tag, type: "topic" as const })),
+                  ...t.audience_tags.map(tag => ({ tag, type: "audience" as const })),
+                  ...t.intent_tags.map(tag => ({ tag, type: "intent" as const })),
+                  ...t.user_added_tags.map(tag => ({ tag, type: "user" as const })),
+                ];
+                if (allTagsTyped.length === 0) return null;
+                const tagStyles = {
+                  topic: "bg-[#006362] text-white border-[#006362]/60",
+                  audience: "bg-[#00A65C] text-white border-[#00A65C]/60",
+                  intent: "bg-transparent text-[#00D657] border-[#00D657]/60",
+                  user: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+                };
+                const visible = allTagsTyped.slice(0, 5);
+                const overflow = allTagsTyped.length - 5;
+                return (
+                  <div className="flex flex-wrap gap-1 mt-1" data-testid="card-keyword-tags">
+                    {visible.map((item, i) => (
+                      <Badge key={i} variant="outline" className={`rounded-full text-[8px] px-1.5 py-0 font-medium border ${tagStyles[item.type]}`}>
+                        {item.tag}
+                      </Badge>
+                    ))}
+                    {overflow > 0 && (
+                      <span className="text-[8px] text-muted-foreground self-center">+{overflow}</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1425,6 +1450,8 @@ export default function ContentLibrary() {
   const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagTypeFilter, setTagTypeFilter] = useState<"all" | "topic" | "audience" | "intent">("all");
   const qc = useQueryClient();
 
   const { data: contentStatusMap } = useQuery<ContentStatusMap>({

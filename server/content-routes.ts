@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as cheerio from "cheerio";
 import https from "https";
 import http from "http";
+import { type StructuredKeywordTags, normalizeKeywordTags } from "@shared/schema";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -32,7 +33,7 @@ async function analyzeContentWithAI(text: string, url?: string): Promise<{
   cta: { text: string; type: string; strength: string; location: string } | null;
   structure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] };
   messagingThemes: string[];
-  keywordTags: string[];
+  keywordTags: StructuredKeywordTags;
 }> {
   const truncated = text.slice(0, 15000);
   const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -40,19 +41,48 @@ async function analyzeContentWithAI(text: string, url?: string): Promise<{
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2500,
+      max_tokens: 3000,
       messages: [
         {
           role: "user",
-          content: `Analyze this marketing content and return JSON only (no markdown fences):
+          content: `You are a content analyst for a B2B marketing team. Analyze this marketing content and return JSON only (no markdown fences).
+
 {
   "summary": "2-3 sentence summary of key message and value proposition",
-  "topics": ["topic1", "topic2", ...],  // 3-8 key topics/themes
+  "topics": ["topic1", "topic2", ...],
   "cta": { "text": "CTA text found", "type": "demo_request|free_trial|download|contact|learn_more|subscribe|purchase|none", "strength": "strong|moderate|weak|none", "location": "hero|body|footer|sidebar|popup" } or null if no CTA,
-  "headings": ["heading1", "heading2", ...],  // extracted section headings
-  "messagingThemes": ["theme1", "theme2", ...],  // 2-5 overarching messaging themes (e.g. "cost savings", "ease of use", "security")
-  "keywordTags": ["tag1", "tag2", ...]  // 8-15 specific keyword tags. Each tag 1-3 words. Must be SPECIFIC and meaningful — capture specific topics, regulations, standards, product features, industries, markets, processes. Good examples: "Year-End Payroll", "T4 Slips", "CRA Reporting", "Penalty Avoidance", "Sage 50 Payroll Module". Bad examples: "Accounting", "Software", "Business" (too generic).
+  "headings": ["heading1", "heading2", ...],
+  "messagingThemes": ["theme1", "theme2", ...],
+  "topic_tags": ["tag1", "tag2", ...],
+  "audience_tags": ["tag1", "tag2", ...],
+  "intent_tags": ["tag1", "tag2", ...]
 }
+
+Tag generation rules:
+
+TOPIC TAGS (5-8 tags): What specific subjects does this content cover?
+- Good: "Year-End Payroll Close", "T4 Slip Generation", "CRA Reporting Deadlines", "Human Firm Four-Phase Model"
+- Bad: "Payroll", "Tax", "Compliance", "Accounting" (too generic)
+- Tags must be specific enough that someone searching would find exactly what they need
+- Include proper nouns when discussed: "Will Farnell Methodology", "CPA Canada Standards"
+- Include specific metrics/benchmarks if mentioned: "30% YoY Growth", "100% Cloud Adoption"
+
+AUDIENCE TAGS (2-3 tags): Who specifically is this content for?
+- Good: "Accounting Firm Owners", "Canadian CPAs", "Growing Practices 10-50 Employees"
+- Bad: "Accountants", "Business Owners", "Professionals" (too broad)
+- Include seniority, role, or business stage if the content targets a specific segment
+
+INTENT TAGS (2-3 tags): What is the reader trying to do or solve?
+- Good: "Modernize Practice Operations", "Shift Compliance to Advisory", "Reduce Year-End Processing Time"
+- Bad: "Learn", "Improve", "Grow" (too vague)
+- Describe the reader's goal or pain point, not the content format
+- Prefer action-oriented: "Automate Month-End Close" not "Month-End Close"
+
+Rules for ALL tags:
+- Each tag 1-4 words
+- Every tag must come from something actually discussed in the content text
+- Never infer from title or metadata alone
+- Do not repeat the product name as a standalone tag
 
 Content${url ? ` from ${url}` : ""}:
 ${truncated}`,
@@ -67,6 +97,10 @@ ${truncated}`,
     const headings: string[] = parsed.headings || [];
     const sectionCount = headings.length || Math.max(1, Math.floor(wordCount / 300));
 
+    const topicTags = Array.isArray(parsed.topic_tags) ? parsed.topic_tags.slice(0, 8) : [];
+    const audienceTags = Array.isArray(parsed.audience_tags) ? parsed.audience_tags.slice(0, 3) : [];
+    const intentTags = Array.isArray(parsed.intent_tags) ? parsed.intent_tags.slice(0, 3) : [];
+
     return {
       summary: parsed.summary || "No summary available",
       topics: Array.isArray(parsed.topics) ? parsed.topics.slice(0, 8) : [],
@@ -78,7 +112,12 @@ ${truncated}`,
         headings,
       },
       messagingThemes: Array.isArray(parsed.messagingThemes) ? parsed.messagingThemes.slice(0, 5) : [],
-      keywordTags: Array.isArray(parsed.keywordTags) ? parsed.keywordTags.slice(0, 15) : [],
+      keywordTags: {
+        topic_tags: topicTags,
+        audience_tags: audienceTags,
+        intent_tags: intentTags,
+        user_added_tags: [],
+      },
     };
   } catch (err) {
     console.error("AI content analysis failed:", err);
@@ -88,7 +127,7 @@ ${truncated}`,
       cta: null,
       structure: { wordCount, sectionCount: 1, pageCount: 1, headings: [] },
       messagingThemes: [],
-      keywordTags: [],
+      keywordTags: { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] },
     };
   }
 }
@@ -527,6 +566,94 @@ export function registerContentRoutes(app: Express): void {
       console.error("Bulk fetch error:", err);
       if (!res.headersSent) {
         res.status(500).json({ message: "Bulk fetch failed" });
+      }
+    }
+  });
+
+  app.get("/api/tags/summary", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const summary = await storage.getTagsSummary();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to get tags summary" });
+    }
+  });
+
+  app.put("/api/content/:assetId/tags", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetId } = req.params;
+      const tags = req.body as StructuredKeywordTags;
+      if (!tags || !Array.isArray(tags.topic_tags)) {
+        return res.status(400).json({ message: "Invalid tags structure" });
+      }
+      await storage.updateAssetTags(assetId, {
+        topic_tags: tags.topic_tags || [],
+        audience_tags: tags.audience_tags || [],
+        intent_tags: tags.intent_tags || [],
+        user_added_tags: tags.user_added_tags || [],
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update tags" });
+    }
+  });
+
+  app.post("/api/content/:assetId/regenerate-tags", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetId } = req.params;
+      const content = await storage.getContentByAssetId(assetId);
+      if (!content || !content.contentText || content.contentText.length < 50) {
+        return res.status(400).json({ message: "No readable content to regenerate tags from" });
+      }
+      const existingTags = normalizeKeywordTags(content.keywordTags as any);
+      const analysis = await analyzeContentWithAI(content.contentText, content.sourceUrl || undefined);
+      const newTags: StructuredKeywordTags = {
+        ...analysis.keywordTags,
+        user_added_tags: existingTags.user_added_tags,
+      };
+      await storage.updateAssetTags(assetId, newTags);
+      res.json({ success: true, tags: newTags });
+    } catch (err: any) {
+      console.error("Regenerate tags error:", err);
+      res.status(500).json({ message: "Failed to regenerate tags" });
+    }
+  });
+
+  app.post("/api/content/regenerate-all-tags", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+
+      const allContent = await storage.getAllStoredContent();
+      const eligible = allContent.filter(c => c.contentText && c.contentText.length >= 50);
+      let completed = 0;
+      let failed = 0;
+
+      for (const content of eligible) {
+        try {
+          const existingTags = normalizeKeywordTags(content.keywordTags as any);
+          const analysis = await analyzeContentWithAI(content.contentText!, content.sourceUrl || undefined);
+          const newTags: StructuredKeywordTags = {
+            ...analysis.keywordTags,
+            user_added_tags: existingTags.user_added_tags,
+          };
+          await storage.updateAssetTags(content.assetId, newTags);
+          completed++;
+        } catch {
+          failed++;
+        }
+        res.write(`data: ${JSON.stringify({ completed, failed, total: eligible.length, current: content.assetId })}\n\n`);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, completed, failed, total: eligible.length })}\n\n`);
+      res.end();
+    } catch (err: any) {
+      console.error("Regenerate all tags error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to regenerate tags" });
       }
     }
   });

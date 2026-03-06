@@ -18,6 +18,7 @@ import {
   adminTokens,
 } from "./auth";
 import { registerContentRoutes } from "./content-routes";
+import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -734,8 +735,8 @@ No explanation, no markdown, no extra text. Only JSON.`,
       const bSummary = contentBStored?.contentSummary || "";
       const aStructure = contentAStored?.contentStructure || {};
       const bStructure = contentBStored?.contentStructure || {};
-      const aKeywordTags: string[] = contentAStored?.keywordTags || contentAStored?.extractedTopics || [];
-      const bKeywordTags: string[] = contentBStored?.keywordTags || contentBStored?.extractedTopics || [];
+      const aStructuredTags = normalizeKeywordTags(contentAStored?.keywordTags as any);
+      const bStructuredTags = normalizeKeywordTags(contentBStored?.keywordTags as any);
 
       let resonanceAnalysis: any = null;
 
@@ -858,14 +859,29 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const aReadable = !!aTextForAnalysis;
       const bReadable = !!bTextForAnalysis;
 
-      let finalKeywordTagsA: string[] = resonanceAnalysis?.keywordTagsA || [];
-      let finalKeywordTagsB: string[] = resonanceAnalysis?.keywordTagsB || [];
-      if (!aReadable) finalKeywordTagsA = [];
-      if (!bReadable) finalKeywordTagsB = [];
+      const finalTagsA: StructuredKeywordTags = aReadable
+        ? (resonanceAnalysis?.keywordTagsA
+          ? { topic_tags: resonanceAnalysis.keywordTagsA, audience_tags: [], intent_tags: [], user_added_tags: [] }
+          : aStructuredTags)
+        : { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+      const finalTagsB: StructuredKeywordTags = bReadable
+        ? (resonanceAnalysis?.keywordTagsB
+          ? { topic_tags: resonanceAnalysis.keywordTagsB, audience_tags: [], intent_tags: [], user_added_tags: [] }
+          : bStructuredTags)
+        : { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
 
-      const sharedTags = finalKeywordTagsA.filter((t: string) => finalKeywordTagsB.some((bt: string) => bt.toLowerCase() === t.toLowerCase()));
-      const uniqueTagsA = finalKeywordTagsA.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
-      const uniqueTagsB = finalKeywordTagsB.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
+      if (aReadable && aStructuredTags.topic_tags.length > 0) {
+        Object.assign(finalTagsA, aStructuredTags);
+      }
+      if (bReadable && bStructuredTags.topic_tags.length > 0) {
+        Object.assign(finalTagsB, bStructuredTags);
+      }
+
+      const flatA = flattenKeywordTags(finalTagsA);
+      const flatB = flattenKeywordTags(finalTagsB);
+      const sharedTags = flatA.filter((t: string) => flatB.some((bt: string) => bt.toLowerCase() === t.toLowerCase()));
+      const uniqueTagsA = flatA.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
+      const uniqueTagsB = flatB.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
 
       let verdict = resonanceAnalysis?.verdict || "";
       let suggestions = resonanceAnalysis?.suggestions || [];
@@ -906,8 +922,8 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         keyTopics,
         whatMakesItWork,
         whatCouldBeImproved,
-        keywordTagsA: finalKeywordTagsA,
-        keywordTagsB: finalKeywordTagsB,
+        keywordTagsA: finalTagsA,
+        keywordTagsB: finalTagsB,
         sharedTags,
         uniqueTagsA,
         uniqueTagsB,
@@ -1048,10 +1064,11 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
     const campaign = req.query.campaign ? String(req.query.campaign) : undefined;
     const industry = req.query.industry ? String(req.query.industry) : undefined;
     const contentAvailability = req.query.contentAvailability ? String(req.query.contentAvailability) : undefined;
+    const tagFilter = req.query.tagFilter ? String(req.query.tagFilter).split(",").filter(Boolean) : undefined;
     const limit = Math.min(Number(req.query.limit) || 25, 100);
     const offset = Number(req.query.offset) || 0;
 
-    const result = await storage.getAssets({ stage, search, product, channel, campaign, industry, contentAvailability, limit, offset });
+    const result = await storage.getAssets({ stage, search, product, channel, campaign, industry, contentAvailability, tagFilter, limit, offset });
     res.json(result);
   });
 
