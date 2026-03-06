@@ -17,7 +17,7 @@ import {
   destroySession,
   adminTokens,
 } from "./auth";
-import { registerContentRoutes } from "./content-routes";
+import { registerContentRoutes, analyzeContentWithAI } from "./content-routes";
 import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
 
 export async function registerRoutes(
@@ -1995,22 +1995,42 @@ Respond with ONLY valid JSON in this exact format:
 
       if (contentText && contentText.length > 20) {
         try {
-          const summary = contentText.slice(0, 500);
+          const analysis = await analyzeContentWithAI(contentText, undefined);
           await storage.upsertContent({
             assetId: contentId,
             contentText,
-            contentSummary: description || `${contentType} about ${classification?.topic || product} for ${funnelStage} stage`,
-            extractedTopics: classification?.topic ? [classification.topic] : null,
+            contentSummary: analysis.summary || description || `${contentType} about ${classification?.topic || product} for ${funnelStage} stage`,
+            extractedTopics: analysis.topics?.length ? analysis.topics : (classification?.topic ? [classification.topic] : null),
+            extractedCta: analysis.cta,
             contentFormat: contentType,
             sourceType: "file_uploaded",
             originalFilename: filename || `${assetName}.pdf`,
             fetchStatus: "success",
-            contentStructure: { wordCount: wordCount || 0, sectionCount: 1, pageCount: pageCount || 0, headings: [] },
+            contentStructure: analysis.structure || { wordCount: wordCount || 0, sectionCount: 1, pageCount: pageCount || 0, headings: [] },
+            messagingThemes: analysis.messagingThemes,
+            keywordTags: analysis.keywordTags,
             dateStored: new Date(),
             storedBy: (req as any).userId || "user",
           });
         } catch (storeErr) {
           console.error("Failed to store content text for uploaded asset:", storeErr);
+          try {
+            await storage.upsertContent({
+              assetId: contentId,
+              contentText,
+              contentSummary: description || `${contentType} about ${classification?.topic || product} for ${funnelStage} stage`,
+              extractedTopics: classification?.topic ? [classification.topic] : null,
+              contentFormat: contentType,
+              sourceType: "file_uploaded",
+              originalFilename: filename || `${assetName}.pdf`,
+              fetchStatus: "success",
+              contentStructure: { wordCount: wordCount || 0, sectionCount: 1, pageCount: pageCount || 0, headings: [] },
+              dateStored: new Date(),
+              storedBy: (req as any).userId || "user",
+            });
+          } catch (fallbackErr) {
+            console.error("Fallback content storage also failed:", fallbackErr);
+          }
         }
       }
 

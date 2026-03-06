@@ -27,7 +27,7 @@ function isAllowedUrl(url: string): boolean {
   }
 }
 
-async function analyzeContentWithAI(text: string, url?: string): Promise<{
+export async function analyzeContentWithAI(text: string, url?: string): Promise<{
   summary: string;
   topics: string[];
   cta: { text: string; type: string; strength: string; location: string } | null;
