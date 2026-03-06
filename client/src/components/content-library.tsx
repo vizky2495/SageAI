@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, createContext, useContext } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,9 +29,30 @@ import {
   ArrowRight,
   Filter,
   ChevronDown,
+  FileCheck2,
+  FileX2,
+  Download,
+  AlertTriangle,
+  FileQuestion,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
+import ContentPreviewPanel from "@/components/content-preview-panel";
+
+interface ContentStatusEntry {
+  fetchStatus: string;
+  sourceUrl: string | null;
+  contentSummary: string | null;
+  extractedTopics: string[] | null;
+  extractedCta: { text: string; type: string; strength: string; location: string } | null;
+}
+
+type ContentStatusMap = Record<string, ContentStatusEntry>;
+
+const ContentStatusContext = createContext<{ statusMap: ContentStatusMap; refreshStatus: () => void }>({
+  statusMap: {},
+  refreshStatus: () => {},
+});
 
 const PAGE_SIZE = 25;
 
@@ -729,6 +750,42 @@ function ComparisonPanel({
   );
 }
 
+function ContentStatusIcon({ status, hasUrl }: { status: string | undefined; hasUrl: boolean }) {
+  if (status === "success") {
+    return (
+      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-emerald-500/15" title="Content stored & analyzed" data-testid="status-icon-stored">
+        <FileCheck2 className="h-3 w-3 text-emerald-500" />
+      </div>
+    );
+  }
+  if (status === "partial" || status === "gated") {
+    return (
+      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-amber-500/15" title={status === "gated" ? "Content gated" : "Partial content"} data-testid="status-icon-partial">
+        <AlertTriangle className="h-3 w-3 text-amber-500" />
+      </div>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-red-500/15" title="Fetch failed" data-testid="status-icon-failed">
+        <FileX2 className="h-3 w-3 text-red-500" />
+      </div>
+    );
+  }
+  if (hasUrl) {
+    return (
+      <div className="flex items-center justify-center h-5 w-5 rounded-full bg-muted" title="Has URL, not fetched" data-testid="status-icon-unfetched">
+        <Download className="h-3 w-3 text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-center h-5 w-5 rounded-full bg-muted" title="No URL, no content" data-testid="status-icon-none">
+      <FileQuestion className="h-3 w-3 text-muted-foreground/50" />
+    </div>
+  );
+}
+
 function ContentCard({
   asset,
   stage,
@@ -745,10 +802,14 @@ function ContentCard({
   const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, navigate] = useLocation();
   const tone = stageTones[stage] || stageTones.TOFU;
   const { compareMode, selectedCard, onCompareSelect } = useContext(CompareContext);
+  const { statusMap, refreshStatus } = useContext(ContentStatusContext);
+  const contentStatus = statusMap[asset.contentId];
+  const qc = useQueryClient();
 
   const isSelectedForCompare = selectedCard?.asset.contentId === asset.contentId;
 
@@ -849,12 +910,15 @@ function ContentCard({
                 </div>
               )}
             </div>
-            <Badge
-              className={`shrink-0 border ${tone.bg} ${tone.text} ${tone.border}`}
-              data-testid="card-stage-badge"
-            >
-              {stage}
-            </Badge>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <ContentStatusIcon status={contentStatus?.fetchStatus} hasUrl={!!asset.url} />
+              <Badge
+                className={`border ${tone.bg} ${tone.text} ${tone.border}`}
+                data-testid="card-stage-badge"
+              >
+                {stage}
+              </Badge>
+            </div>
           </div>
 
           {asset.url && (
@@ -982,6 +1046,102 @@ function ContentCard({
               </>
             )}
           </div>
+
+          {contentStatus && contentStatus.fetchStatus === "success" && contentStatus.contentSummary && (
+            <div className="mt-2 space-y-1.5" data-testid="card-content-preview">
+              <div className="text-[11px] text-muted-foreground leading-snug line-clamp-2" data-testid="card-content-summary">
+                {contentStatus.contentSummary}
+              </div>
+              {contentStatus.extractedTopics && contentStatus.extractedTopics.length > 0 && (
+                <div className="flex flex-wrap gap-1" data-testid="card-topic-pills">
+                  {contentStatus.extractedTopics.slice(0, 3).map((topic, i) => (
+                    <Badge key={i} variant="secondary" className="rounded-lg text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                      {topic}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {contentStatus.extractedCta && (
+                <Badge
+                  variant="secondary"
+                  className={`rounded-lg text-[9px] px-1.5 py-0 ${
+                    contentStatus.extractedCta.strength === "strong"
+                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                      : contentStatus.extractedCta.strength === "moderate"
+                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                  data-testid="card-cta-pill"
+                >
+                  CTA: {contentStatus.extractedCta.type.replace(/_/g, " ")}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {!contentStatus?.fetchStatus && asset.url && !compareMode && (
+            <div className="mt-2">
+              <button
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-muted-foreground/30 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (fetching || !asset.url) return;
+                  setFetching(true);
+                  try {
+                    const fullUrl = asset.url.startsWith("http") ? asset.url : `https://${asset.url}`;
+                    await authFetch("/api/content/fetch-url", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ assetId: asset.contentId, url: fullUrl }),
+                    });
+                    refreshStatus();
+                  } catch {}
+                  setFetching(false);
+                }}
+                disabled={fetching}
+                data-testid="button-fetch-content"
+              >
+                {fetching ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Download className="h-3 w-3" />
+                )}
+                {fetching ? "Fetching…" : "Fetch content"}
+              </button>
+            </div>
+          )}
+
+          {contentStatus?.fetchStatus === "not_stored" && asset.url && !compareMode && (
+            <div className="mt-2">
+              <button
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-muted-foreground/30 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (fetching || !asset.url) return;
+                  setFetching(true);
+                  try {
+                    const fullUrl = asset.url.startsWith("http") ? asset.url : `https://${asset.url}`;
+                    await authFetch("/api/content/fetch-url", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ assetId: asset.contentId, url: fullUrl }),
+                    });
+                    refreshStatus();
+                  } catch {}
+                  setFetching(false);
+                }}
+                disabled={fetching}
+                data-testid="button-fetch-content-not-stored"
+              >
+                {fetching ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Download className="h-3 w-3" />
+                )}
+                {fetching ? "Fetching…" : "Fetch content"}
+              </button>
+            </div>
+          )}
         </Card>
         <HoverInsightTooltip
           asset={asset}
@@ -1015,7 +1175,7 @@ function ContentCard({
       </div>
 
       {showDetail && (
-        <ContentDetailModal asset={asset} stage={stage} onClose={() => setShowDetail(false)} />
+        <ContentPreviewPanel asset={asset} stage={stage} onClose={() => setShowDetail(false)} />
       )}
     </>
   );
@@ -1194,6 +1354,26 @@ export default function ContentLibrary() {
   const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "" });
+  const qc = useQueryClient();
+
+  const { data: contentStatusMap } = useQuery<ContentStatusMap>({
+    queryKey: ["/api/content/status"],
+    queryFn: async () => {
+      const res = await authFetch("/api/content/status");
+      if (!res.ok) return {};
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const refreshContentStatus = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["/api/content/status"] });
+  }, [qc]);
+
+  const contentStatusCtx = {
+    statusMap: contentStatusMap || {},
+    refreshStatus: refreshContentStatus,
+  };
 
   const { data: filterOptions } = useQuery({
     queryKey: ["/api/assets/filter-options"],
@@ -1256,6 +1436,7 @@ export default function ContentLibrary() {
   };
 
   return (
+    <ContentStatusContext.Provider value={contentStatusCtx}>
     <CompareContext.Provider value={compareCtx}>
       <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
         <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
@@ -1401,5 +1582,7 @@ export default function ContentLibrary() {
         />
       )}
     </CompareContext.Provider>
+    </ContentStatusContext.Provider>
+    
   );
 }

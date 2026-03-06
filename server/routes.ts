@@ -17,11 +17,14 @@ import {
   destroySession,
   adminTokens,
 } from "./auth";
+import { registerContentRoutes } from "./content-routes";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  registerContentRoutes(app);
 
   app.post("/api/auth/login", loginLimiter, async (req: Request, res: Response) => {
     try {
@@ -1373,11 +1376,18 @@ Respond with ONLY valid JSON in this exact format:
       await storage.clearAssets();
       await storage.bulkInsertAssets(assets);
 
+      const contentPlaceholders = assets.map(a => ({
+        assetId: a.contentId,
+        sourceUrl: a.url || null,
+      }));
+      const newPlaceholders = await storage.createContentPlaceholders(contentPlaceholders);
+
       res.json({
         ingested: assets.length,
         totalRows: rows.length,
         skippedNoContentId,
         uniqueContentIds: assets.length,
+        newContentPlaceholders: newPlaceholders,
         stageBreakdown: {
           TOFU: assets.filter((a) => a.stage === "TOFU").length,
           MOFU: assets.filter((a) => a.stage === "MOFU").length,

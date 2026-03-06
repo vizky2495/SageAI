@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, pgEnum, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, pgEnum, real, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -168,3 +168,32 @@ export const insertFeedbackSchema = createInsertSchema(feedback).omit({
 });
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
+
+export const contentStored = pgTable("content_stored", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: text("asset_id").notNull().unique(),
+  contentText: text("content_text"),
+  contentSummary: text("content_summary"),
+  extractedTopics: jsonb("extracted_topics").$type<string[]>(),
+  extractedCta: jsonb("extracted_cta").$type<{ text: string; type: string; strength: string; location: string } | null>(),
+  contentStructure: jsonb("content_structure").$type<{ wordCount: number; sectionCount: number; pageCount: number; headings: string[] }>(),
+  messagingThemes: jsonb("messaging_themes").$type<string[]>(),
+  contentFormat: text("content_format"),
+  sourceType: text("source_type").notNull().default("not_stored"),
+  sourceUrl: text("source_url"),
+  storedFileBase64: text("stored_file_base64"),
+  thumbnailBase64: text("thumbnail_base64"),
+  originalFilename: text("original_filename"),
+  fileSizeBytes: integer("file_size_bytes"),
+  dateStored: timestamp("date_stored"),
+  dateLastUpdated: timestamp("date_last_updated"),
+  fetchStatus: text("fetch_status").notNull().default("not_stored"),
+  fetchNotes: text("fetch_notes"),
+  storedBy: text("stored_by").notNull().default("user"),
+});
+
+export const insertContentStoredSchema = createInsertSchema(contentStored).omit({
+  id: true,
+});
+export type InsertContentStored = z.infer<typeof insertContentStoredSchema>;
+export type ContentStored = typeof contentStored.$inferSelect;

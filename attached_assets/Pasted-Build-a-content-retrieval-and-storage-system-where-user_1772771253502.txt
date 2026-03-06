@@ -1,0 +1,376 @@
+Build a content retrieval and storage system where users manually fetch content from URLs or upload files. The AI agent does NOT fetch content automatically — the user controls when and how content enters the system. Once stored, content is permanent and independent from the engagement data Excel.
+
+PART 1: DATABASE ARCHITECTURE
+Create a permanent content storage table separate from engagement data:
+content_stored:
+  - asset_id (primary key, matches ID from engagement Excel)
+  - content_text (full extracted text)
+  - content_summary (AI-generated 2-3 sentence summary)
+  - extracted_topics (JSON array of key topics)
+  - extracted_cta (CTA text and type found in content)
+  - content_structure (JSON: headings, section count, word count, page count)
+  - messaging_themes (AI-extracted key value propositions)
+  - content_format ("pdf" | "docx" | "pptx" | "webpage_snapshot" | "image")
+  - source_type ("url_fetched" | "file_uploaded")
+  - source_url (URL used if fetched via URL)
+  - stored_file_path (path to permanently stored file)
+  - thumbnail_path (path to preview image/screenshot)
+  - original_filename (original name of uploaded file)
+  - file_size_bytes (size of stored file)
+  - date_stored (when content was first stored)
+  - date_last_updated (when content was last refreshed/re-uploaded)
+  - fetch_status ("success" | "partial" | "failed" | "gated")
+  - fetch_notes (human-readable notes about the fetch result)
+  - stored_by ("user" — always user-initiated)
+Rules:
+
+This table is NEVER modified when admin uploads a new engagement Excel
+When a new Excel has an asset_id that already exists in content_stored, the stored content stays linked automatically
+When a new Excel has a NEW asset_id, create a placeholder row with fetch_status = "not_stored" and source_url from Excel (if URL column exists)
+Content persists permanently even if the asset disappears from a future Excel upload
+File storage directory: /data/content_files/{asset_id}/ — must persist across app updates and redeployments
+
+
+PART 2: TWO METHODS FOR STORING CONTENT
+METHOD 1 — User provides a URL and clicks "Fetch"
+The user provides a URL, the system goes to that URL, downloads/scrapes the content, and stores it.
+Where this appears in the UI:
+A) On any content card in the library that has a URL but no stored content:
+
+Show a small "Fetch content" button or download icon on the card
+Clicking it triggers the fetch process using the URL already associated with that asset
+
+B) In the Content Comparison tool:
+
+When selecting an asset for comparison, if content isn't stored, show: "Content not available. Fetch from URL or upload file."
+"Fetch from URL" button uses the asset's existing URL
+User can also paste a different URL if the stored URL is wrong or outdated
+
+C) In the Content Preview panel:
+
+When a user opens card details and content isn't stored: "No content stored. Fetch from [URL] or upload the file."
+"Fetch" button + text field showing the URL (editable — user can change it before fetching)
+
+D) Bulk fetch option in library admin:
+
+Admin button: "Fetch content for all assets with URLs"
+Shows a confirmation: "This will fetch content from [X] URLs. This may take several minutes."
+Progress indicator: "Fetching: 47/258 complete... 3 failed"
+Rate limited: 1 fetch per 2 seconds
+
+How URL fetch works:
+Step 1 — User clicks "Fetch" or provides a URL and clicks "Go":
+
+Show loading state: "Fetching content from [URL]..."
+
+Step 2 — System determines content type:
+
+If URL returns a PDF (content-type: application/pdf or URL ends in .pdf):
+
+Download the PDF file
+Store at /data/content_files/{asset_id}/original.pdf
+Extract text using PDF parser
+Generate thumbnail from first page
+Extract headings, structure, page count
+
+
+If URL returns HTML (a webpage):
+
+Download the HTML content
+Store a snapshot at /data/content_files/{asset_id}/page_snapshot.html
+Take a screenshot if headless browser is available, or generate a simple preview
+Extract main content area text (strip navigation, footer, sidebar, cookie banners)
+Extract headings (h1-h4), paragraphs, meta description
+Detect forms/gates: if a form is found before main content, mark as "gated"
+Extract CTA elements: buttons, links with CTA-like text ("Request demo", "Download", "Contact us", "Register", "Sign up", "Get started", "Learn more", "Buy now", "Free trial")
+
+
+If URL is broken (404, 500, timeout after 15 seconds):
+
+Mark fetch_status = "failed"
+Show user: "Could not reach this URL. Check if it's correct or upload the file instead."
+
+
+If URL redirects:
+
+Follow up to 3 redirects, then fetch the final destination
+Store the final URL in source_url
+
+
+
+Step 3 — AI processing:
+After raw content is extracted, send it to the AI agent to generate:
+
+content_summary: 2-3 sentence summary of what the content is about
+extracted_topics: 5-10 key topics/themes as a JSON array
+messaging_themes: key value propositions or arguments made in the content
+extracted_cta: what the CTA says, where it appears, and how strong it is (strong/moderate/weak/none)
+content_structure: word count, number of sections, heading hierarchy
+
+Step 4 — Store everything:
+
+Save all extracted data + AI analysis to content_stored table
+Save files to persistent storage directory
+Update fetch_status to "success", "partial" (if content was limited), or "gated"
+Show user: "Content stored successfully. Extracted [X] words, [Y] topics, CTA: [detected/none]."
+
+
+METHOD 2 — User uploads a file directly
+The user uploads a PDF, DOCX, PPTX, or image file. The system extracts content and stores it.
+Where this appears in the UI:
+A) On any content card in the library:
+
+"Upload content" button (visible on cards with no stored content, or as an option to replace existing stored content)
+Clicking opens a file picker or shows a drag-and-drop zone
+
+B) In the Content Comparison tool:
+
+When selecting content for comparison, "Upload file" tab
+Drag-and-drop zone + file picker
+
+C) In the Content Preview panel:
+
+When content isn't stored: "Upload the file" button alongside the URL fetch option
+When content IS stored: "Replace with new file" option (for updating)
+
+D) In the chat:
+
+User can drag a file into the chat or click the paperclip icon
+If the user says "upload this to asset [ID]" or the AI can match it to an existing asset, link it
+If it's a new file not linked to any asset, store it as a new entry and ask for metadata (or auto-detect)
+
+Supported file types and how each is processed:
+PDF files:
+
+Store original at /data/content_files/{asset_id}/original.pdf
+Extract text using PDF parser (pdf-parse, pdfjs, or equivalent)
+Generate thumbnail from first page (render page 1 as a PNG image)
+Extract: headings, sections, page count, word count
+Detect CTA text patterns in the extracted text
+Set content_format = "pdf"
+
+DOCX files:
+
+Store original at /data/content_files/{asset_id}/original.docx
+Extract text using a DOCX parser (mammoth.js, docx-parser, or equivalent)
+Extract: headings, paragraphs, word count, section structure
+Generate a simple preview (first page text content rendered as an image or HTML)
+Detect CTA text patterns
+Set content_format = "docx"
+
+PPTX files:
+
+Store original at /data/content_files/{asset_id}/original.pptx
+Extract text from all slides using a PPTX parser
+Extract: slide titles, slide count, key bullet points, speaker notes if present
+Generate thumbnail from first slide
+Detect CTA text patterns
+Set content_format = "pptx"
+
+Image files (PNG, JPG):
+
+Store original at /data/content_files/{asset_id}/original.{ext}
+Use OCR if available to extract text from the image
+If no OCR: store the image as-is, set content_text to empty, add fetch_notes = "Image stored. Text extraction requires OCR."
+Use the image itself as the thumbnail
+Set content_format = "image"
+
+Upload flow:
+Step 1 — User selects or drops a file:
+
+Show file preview: filename, file size, file type icon
+If uploading to an existing asset: show the asset card it will be linked to
+If uploading as new content (from comparison tool or chat): ask user to link it to an existing asset ID or create a new entry
+
+Step 2 — Processing:
+
+Show: "Processing [filename]... Extracting content..."
+Extract text based on file type (see above)
+Run AI analysis: summary, topics, CTA, structure, messaging themes
+
+Step 3 — Store and confirm:
+
+Save file to permanent storage
+Save extracted data + AI analysis to content_stored
+Set source_type = "file_uploaded"
+Set fetch_status = "success"
+Show: "Content uploaded and analyzed. [X] words extracted, [Y] topics identified, CTA: [status]."
+
+
+PART 3: CONTENT LIBRARY CARD UPDATES
+Every content card now shows content availability status:
+Status indicators on each card (small icon in top-right corner of card):
+
+Green document icon = Content stored and analyzed. Tooltip: "Content available — click to preview"
+Gray document icon with down arrow = Has URL but content not yet fetched. Tooltip: "Content not stored — click to fetch from URL or upload"
+Gray document icon with no arrow = No URL, no content. Tooltip: "No content available — upload a file"
+Amber document icon = Partial or gated content. Tooltip: "Partial content stored — upload full file for complete analysis"
+Red document icon = Fetch was attempted but failed. Tooltip: "Fetch failed — try again or upload manually"
+
+Additional info on cards with stored content:
+Below the existing metrics (Pageviews, Avg Time, Downloads), add:
+
+A 1-2 line content summary in smaller muted text (truncated with "..." if too long)
+2-3 topic tags as small pills (extracted from content)
+CTA status: green pill "CTA: Request Demo" or amber pill "No CTA" or gray pill "CTA: Weak"
+
+
+PART 4: CONTENT PREVIEW PANEL
+When a user clicks on any content card, open a preview panel:
+If content IS stored:
+Slide-in panel from the right (500px wide) or modal:
+
+Top section — Visual preview (40% of panel height):
+
+For PDFs: embedded PDF viewer showing the actual document, scrollable, with page navigation. Or render first 2-3 pages as images if embedded viewer is not feasible.
+For webpages: screenshot/HTML snapshot of the page
+For DOCX/PPTX: rendered preview of first page or first slide
+For images: the image itself
+"Download original" button to download the stored file
+"Open original URL" link (if URL exists) to visit the live page
+
+
+Middle section — AI Analysis:
+
+Summary: 2-3 sentence AI-generated summary
+Topics covered: topic tags as pills
+CTA Analysis: what the CTA says, where it appears, strength rating (Strong / Moderate / Weak / None) with a brief explanation ("Strong: Clear value proposition with urgency — 'Start your free trial today'")
+Content structure: Word count | Sections: [X] | Pages: [Y] | Format: PDF
+Messaging themes: 2-3 key value propositions identified
+Date stored: "Content fetched on March 5, 2026" + "Refresh" button
+
+
+Bottom section — Actions:
+
+"Compare this content" → opens comparison tool with this asset pre-selected
+"Use in campaign plan" → opens campaign planner with this asset
+"Ask AI about this" → opens chat with this asset as context
+"Re-fetch from URL" → re-downloads content from the URL (replaces stored version after confirmation)
+"Upload new version" → file upload to replace current stored content
+
+
+
+If content is NOT stored:
+Same panel but the top section shows:
+
+If URL exists: a card showing the URL with two buttons:
+
+"Fetch content from URL" — large primary button, green. Clicking starts the fetch process with loading indicator inside the panel.
+"Or upload the file" — secondary button below
+Preview of the URL as a simple text link: "www.sage.com/en-ca/products/sage-50/"
+
+
+If no URL: a card showing:
+
+"No content or URL available for this asset"
+"Upload content file" — primary button with drag-and-drop zone
+
+
+
+The middle and bottom sections show:
+
+AI analysis: "Not available — content has not been stored yet"
+Engagement metrics still show (from Excel data) so the user sees the performance data even without content
+
+
+PART 5: CONTENT COMPARISON TOOL UPDATE
+Update the Content Comparison section to work with stored content:
+Two-panel comparison selector:
+Each panel (Content A and Content B) has two tabs:
+Tab 1 — "Select from library":
+
+Searchable dropdown of all library assets
+When an asset is selected, show:
+
+Asset card with key metrics
+Content status: "Content stored ✓" (green) or "Content not stored" (amber)
+If not stored and URL exists: "Fetch content" button inline
+If not stored and no URL: "Upload file" button inline
+The comparison can proceed with performance-only data if content isn't stored, but shows a note about what's missing
+
+
+
+Tab 2 — "Upload new content":
+
+Drag-and-drop zone + file picker
+Accepts PDF, DOCX, PPTX, images
+Metadata fields below the upload:
+
+Asset name (required)
+Content type (auto-detected from file, editable dropdown)
+Product (dropdown)
+Funnel stage (TOFU / MOFU / BOFU dropdown)
+Country (dropdown)
+Industry (free text or dropdown)
+
+
+"Add to library" checkbox (default: checked) — stores the file in content_stored and makes it available for future comparisons
+If unchecked: file is used for this comparison only, not permanently stored
+
+After both panels have content selected, show "Compare" button.
+Comparison runs differently based on what's available:
+Content AContent BWhat comparison showsHas engagement data + stored contentHas engagement data + stored contentFull comparison: Performance + Content Quality + Trend + StructureHas engagement data + stored contentNew upload (no engagement data)Content Quality + Trend + Structure. Performance is one-sided with predicted range for new content.Has engagement data only (no stored content)Has engagement data + stored contentPerformance comparison full. Content quality one-sided. Prompt to fetch/upload missing content.Has engagement data onlyHas engagement data onlyPerformance comparison only. Prompt: "Fetch or upload content for quality comparison."New uploadNew uploadContent Quality + Trend + Structure only. No performance data.
+
+PART 6: INTEGRATION WITH CHAT
+The chat agent should be aware of stored content:
+
+When a user asks about a specific asset, the AI should check if content is stored. If yes, use the stored content_summary, extracted_topics, and extracted_cta in its response — not just the engagement metrics.
+When content is stored, the AI can answer deeper questions: "What topics does this content cover?" / "Does this content mention compliance?" / "How strong is the CTA?"
+When content is NOT stored, the AI should note: "I only have performance metrics for this asset. For content-level analysis (topics, messaging, CTA), fetch the content from its URL or upload the file."
+When a user uploads a file in the chat:
+
+Process and extract content
+Ask: "Would you like to link this to an existing asset in the library?" with a searchable dropdown
+If linked: store in content_stored under that asset_id
+If not linked: store as a standalone entry for comparison purposes
+Confirm: "Content analyzed and stored. I found [X] topics, [CTA status]. What would you like to do with it?"
+
+
+
+
+PART 7: REFRESH AND UPDATE LOGIC
+Re-fetch from URL:
+
+User clicks "Re-fetch" or "Refresh" on a stored asset
+System re-downloads content from the same URL (or a new URL if the user provides one)
+Before overwriting, show: "This will replace the currently stored content. The previous version will not be recoverable. Continue?"
+On confirmation: re-process and update all fields in content_stored, update date_last_updated
+
+Replace via upload:
+
+User clicks "Upload new version" on a stored asset
+Uploads a new file which replaces the stored content
+Same confirmation prompt before overwriting
+Previous source_type might change (e.g., was "url_fetched", now "file_uploaded")
+
+Excel update behavior:
+
+When new Excel is uploaded by admin:
+
+Update ONLY the engagement data table
+For any new asset_ids not in content_stored: create a placeholder row with fetch_status = "not_stored"
+For existing asset_ids: engagement data updates, stored content untouched
+Show admin a summary after upload: "Excel processed: 258 assets updated. 12 new assets found (content not yet stored). 0 stored content affected."
+
+
+
+
+PART 8: STORAGE AND PERFORMANCE
+File storage:
+
+All files stored in persistent directory: /data/content_files/{asset_id}/
+Each asset folder contains: original file + thumbnail + metadata.json
+Use persistent storage that survives Replit redeployments (Replit's /data directory or connected database storage)
+
+Performance:
+
+Content extraction and AI analysis can take 5-15 seconds per asset. Always show loading states with progress indicators.
+For bulk fetch: process sequentially with 2-second delays between fetches. Show a progress bar.
+Cache AI-generated summaries and topics — don't re-analyze stored content unless the user explicitly refreshes.
+Thumbnails should be generated at a standard size (400px wide) for consistent card display.
+
+Storage limits:
+
+Show storage usage in admin: "Content store: [X] assets, [Y] MB used"
+Warn if approaching storage limits
+Allow admin to clear stored content for specific assets to free space

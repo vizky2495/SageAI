@@ -11,9 +11,12 @@ import {
   type UploadedAsset,
   type InsertUploadedAsset,
   uploadedAssets,
+  type ContentStored,
+  type InsertContentStored,
+  contentStored,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, and, or, sql, count } from "drizzle-orm";
+import { eq, desc, ilike, and, or, sql, count, inArray, isNull, ne } from "drizzle-orm";
 
 export interface IStorage {
   clearAssets(): Promise<void>;
@@ -48,6 +51,14 @@ export interface IStorage {
   }): Promise<UploadedAsset[]>;
   getUploadedAssetById(id: string): Promise<UploadedAsset | null>;
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
+  getContentByAssetId(assetId: string): Promise<ContentStored | null>;
+  upsertContent(data: InsertContentStored): Promise<ContentStored>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }>>;
+  deleteContent(assetId: string): Promise<void>;
+  getContentStats(): Promise<{ totalStored: number; totalSize: number }>;
+  createContentPlaceholders(assetIds: { assetId: string; sourceUrl?: string | null }[]): Promise<number>;
+  getAllStoredContent(): Promise<ContentStored[]>;
+  getUnfetchedWithUrls(): Promise<{ assetId: string; sourceUrl: string }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -209,6 +220,102 @@ export class DatabaseStorage implements IStorage {
   async updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null> {
     const [row] = await db.update(uploadedAssets).set(data as any).where(eq(uploadedAssets.id, id)).returning();
     return row ?? null;
+  }
+
+  async getContentByAssetId(assetId: string): Promise<ContentStored | null> {
+    const [row] = await db.select().from(contentStored).where(eq(contentStored.assetId, assetId));
+    return row ?? null;
+  }
+
+  async upsertContent(data: InsertContentStored): Promise<ContentStored> {
+    const existing = await this.getContentByAssetId(data.assetId);
+    if (existing) {
+      const [row] = await db
+        .update(contentStored)
+        .set({ ...data, dateLastUpdated: new Date() })
+        .where(eq(contentStored.assetId, data.assetId))
+        .returning();
+      return row;
+    }
+    const [row] = await db.insert(contentStored).values(data).returning();
+    return row;
+  }
+
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }>> {
+    const rows = await db
+      .select({
+        assetId: contentStored.assetId,
+        fetchStatus: contentStored.fetchStatus,
+        sourceUrl: contentStored.sourceUrl,
+        contentSummary: contentStored.contentSummary,
+        extractedTopics: contentStored.extractedTopics,
+        extractedCta: contentStored.extractedCta,
+      })
+      .from(contentStored);
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null }> = {};
+    for (const r of rows) {
+      map[r.assetId] = {
+        fetchStatus: r.fetchStatus,
+        sourceUrl: r.sourceUrl,
+        contentSummary: r.contentSummary,
+        extractedTopics: r.extractedTopics as string[] | null,
+        extractedCta: r.extractedCta as { text: string; type: string; strength: string; location: string } | null,
+      };
+    }
+    return map;
+  }
+
+  async deleteContent(assetId: string): Promise<void> {
+    await db.delete(contentStored).where(eq(contentStored.assetId, assetId));
+  }
+
+  async getContentStats(): Promise<{ totalStored: number; totalSize: number }> {
+    const [result] = await db
+      .select({
+        totalStored: count(),
+        totalSize: sql<number>`COALESCE(SUM(${contentStored.fileSizeBytes}), 0)`,
+      })
+      .from(contentStored)
+      .where(ne(contentStored.fetchStatus, "not_stored"));
+    return { totalStored: result.totalStored, totalSize: Number(result.totalSize) };
+  }
+
+  async createContentPlaceholders(assetIds: { assetId: string; sourceUrl?: string | null }[]): Promise<number> {
+    if (assetIds.length === 0) return 0;
+    const existing = await db
+      .select({ assetId: contentStored.assetId })
+      .from(contentStored)
+      .where(inArray(contentStored.assetId, assetIds.map(a => a.assetId)));
+    const existingSet = new Set(existing.map(e => e.assetId));
+    const newEntries = assetIds.filter(a => !existingSet.has(a.assetId));
+    if (newEntries.length === 0) return 0;
+    const batchSize = 100;
+    for (let i = 0; i < newEntries.length; i += batchSize) {
+      const batch = newEntries.slice(i, i + batchSize).map(a => ({
+        assetId: a.assetId,
+        fetchStatus: "not_stored",
+        sourceType: "not_stored",
+        sourceUrl: a.sourceUrl || null,
+        storedBy: "system",
+      }));
+      await db.insert(contentStored).values(batch);
+    }
+    return newEntries.length;
+  }
+
+  async getAllStoredContent(): Promise<ContentStored[]> {
+    return db.select().from(contentStored).where(ne(contentStored.fetchStatus, "not_stored")).orderBy(desc(contentStored.dateStored));
+  }
+
+  async getUnfetchedWithUrls(): Promise<{ assetId: string; sourceUrl: string }[]> {
+    const rows = await db
+      .select({
+        assetId: contentStored.assetId,
+        sourceUrl: contentStored.sourceUrl,
+      })
+      .from(contentStored)
+      .where(and(eq(contentStored.fetchStatus, "not_stored"), sql`${contentStored.sourceUrl} IS NOT NULL AND ${contentStored.sourceUrl} != ''`));
+    return rows.map(r => ({ assetId: r.assetId, sourceUrl: r.sourceUrl! }));
   }
 }
 

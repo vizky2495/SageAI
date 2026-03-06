@@ -3,15 +3,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
   Brain,
   CheckCircle2,
+  Database,
   FileUp,
+  HardDrive,
   Lock,
   Loader2,
   LogOut,
   Settings,
   Sparkles,
+  Trash2,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -301,7 +306,35 @@ export default function AdminPage() {
   const [currentAssets, setCurrentAssets] = useState<any[] | null>(null);
   const [loadingAssets, setLoadingAssets] = useState(false);
 
+  const [contentStats, setContentStats] = useState<{ totalStored: number; totalSize: number } | null>(null);
+  const [contentStatusMap, setContentStatusMap] = useState<Record<string, { fetchStatus: string; sourceUrl: string | null }> | null>(null);
+  const [loadingContentStats, setLoadingContentStats] = useState(false);
+  const [bulkFetchActive, setBulkFetchActive] = useState(false);
+  const [bulkFetchProgress, setBulkFetchProgress] = useState<{ completed: number; failed: number; total: number; current: string } | null>(null);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [unfetchedCount, setUnfetchedCount] = useState(0);
+  const [clearingAssetId, setClearingAssetId] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
+
+  const loadContentStats = useCallback(async () => {
+    setLoadingContentStats(true);
+    try {
+      const [statsRes, statusRes] = await Promise.all([
+        fetch("/api/content/stats", { headers: adminHeaders() }),
+        fetch("/api/content/status", { headers: adminHeaders() }),
+      ]);
+      if (statsRes.ok) setContentStats(await statsRes.json());
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setContentStatusMap(statusData);
+        const unfetched = Object.values(statusData as Record<string, { fetchStatus: string; sourceUrl: string | null }>)
+          .filter((v) => v.fetchStatus === "not_stored" && v.sourceUrl).length;
+        setUnfetchedCount(unfetched);
+      }
+    } catch {}
+    setLoadingContentStats(false);
+  }, []);
 
   const loadCurrentData = useCallback(async () => {
     setLoadingAssets(true);
@@ -313,7 +346,72 @@ export default function AdminPage() {
       }
     } catch {}
     setLoadingAssets(false);
-  }, []);
+    loadContentStats();
+  }, [loadContentStats]);
+
+  const handleBulkFetch = useCallback(async () => {
+    setShowBulkConfirm(false);
+    setBulkFetchActive(true);
+    setBulkFetchProgress(null);
+
+    try {
+      const unfetchedRes = await fetch("/api/content/unfetched-urls", { headers: adminHeaders() });
+      if (!unfetchedRes.ok) throw new Error("Failed to get unfetched URLs");
+      const unfetched: { assetId: string; sourceUrl: string }[] = await unfetchedRes.json();
+      if (unfetched.length === 0) {
+        setBulkFetchActive(false);
+        return;
+      }
+
+      const assets = unfetched.map((u) => ({ assetId: u.assetId, url: u.sourceUrl }));
+      const response = await fetch("/api/content/bulk-fetch", {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ assets }),
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.done) {
+                setBulkFetchProgress({ completed: data.completed, failed: data.failed, total: data.total, current: "" });
+              } else {
+                setBulkFetchProgress({ completed: data.completed, failed: data.failed, total: data.total, current: data.current });
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Bulk fetch error:", err);
+    }
+    setBulkFetchActive(false);
+    loadContentStats();
+  }, [loadContentStats]);
+
+  const handleClearContent = useCallback(async (assetId: string) => {
+    setClearingAssetId(assetId);
+    try {
+      await fetch(`/api/content/${encodeURIComponent(assetId)}`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      loadContentStats();
+    } catch {}
+    setClearingAssetId(null);
+  }, [loadContentStats]);
 
   const handleLogin = useCallback(async () => {
     setLoginLoading(true);
@@ -673,6 +771,217 @@ export default function AdminPage() {
               )}
             </Card>
           )}
+
+          <Card className="rounded-2xl border bg-card/70 p-6 shadow-sm backdrop-blur" data-testid="content-storage-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
+                <Database className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium">Content Storage</div>
+                <div className="text-xs text-muted-foreground">
+                  Manage stored content assets and AI-analyzed files
+                </div>
+              </div>
+            </div>
+
+            {loadingContentStats ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading content stats...
+              </div>
+            ) : contentStats ? (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                    <div className="text-lg font-[650]" data-testid="text-content-stored-count">{contentStats.totalStored.toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">Assets stored</div>
+                  </div>
+                  <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                    <div className="text-lg font-[650]" data-testid="text-content-storage-size">
+                      {contentStats.totalSize >= 1024 * 1024
+                        ? `${(contentStats.totalSize / (1024 * 1024)).toFixed(1)} MB`
+                        : contentStats.totalSize >= 1024
+                          ? `${(contentStats.totalSize / 1024).toFixed(1)} KB`
+                          : `${contentStats.totalSize} B`}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Storage used</div>
+                  </div>
+                  <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                    <div className="text-lg font-[650]" data-testid="text-unfetched-count">{unfetchedCount}</div>
+                    <div className="text-[10px] text-muted-foreground">Unfetched URLs</div>
+                  </div>
+                  <div className="rounded-xl border bg-card/60 p-2.5 text-center">
+                    <div className="text-lg font-[650]" data-testid="text-total-content-entries">
+                      {contentStatusMap ? Object.keys(contentStatusMap).length : 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Total entries</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {unfetchedCount > 0 && !bulkFetchActive && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => setShowBulkConfirm(true)}
+                      data-testid="button-bulk-fetch"
+                    >
+                      <Zap className="mr-2 h-4 w-4" />
+                      Fetch all unfetched URLs ({unfetchedCount})
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={loadContentStats}
+                    disabled={loadingContentStats}
+                    data-testid="button-refresh-stats"
+                  >
+                    <HardDrive className="mr-2 h-4 w-4" />
+                    Refresh stats
+                  </Button>
+                </div>
+
+                {showBulkConfirm && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4" data-testid="bulk-fetch-confirm">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">Confirm Bulk Fetch</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          This will fetch and analyze {unfetchedCount} URLs. Each URL is processed with a 2-second delay
+                          to respect rate limits. Estimated time: ~{Math.ceil(unfetchedCount * 2 / 60)} minutes.
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            className="rounded-xl"
+                            onClick={handleBulkFetch}
+                            data-testid="button-confirm-bulk-fetch"
+                          >
+                            <Zap className="mr-2 h-3 w-3" />
+                            Start fetching
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-xl"
+                            onClick={() => setShowBulkConfirm(false)}
+                            data-testid="button-cancel-bulk-fetch"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {bulkFetchActive && bulkFetchProgress && (
+                  <div className="rounded-xl border bg-muted/30 p-4" data-testid="bulk-fetch-progress">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
+                      <span className="text-sm font-medium">Fetching content...</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2 mb-2">
+                      <div
+                        className="bg-chart-1 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round(((bulkFetchProgress.completed + bulkFetchProgress.failed) / bulkFetchProgress.total) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{bulkFetchProgress.completed + bulkFetchProgress.failed} of {bulkFetchProgress.total}</span>
+                      <span>
+                        <span className="text-chart-1">{bulkFetchProgress.completed} succeeded</span>
+                        {bulkFetchProgress.failed > 0 && (
+                          <span className="text-destructive ml-2">{bulkFetchProgress.failed} failed</span>
+                        )}
+                      </span>
+                    </div>
+                    {bulkFetchProgress.current && (
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
+                        Current: {bulkFetchProgress.current}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!bulkFetchActive && bulkFetchProgress && (
+                  <div className="rounded-xl border border-chart-1/20 bg-chart-1/5 p-3 text-sm flex items-center gap-2" data-testid="bulk-fetch-complete">
+                    <CheckCircle2 className="h-4 w-4 text-chart-1" />
+                    Bulk fetch complete: {bulkFetchProgress.completed} succeeded, {bulkFetchProgress.failed} failed out of {bulkFetchProgress.total} total.
+                  </div>
+                )}
+
+                {contentStatusMap && Object.keys(contentStatusMap).length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs font-medium text-muted-foreground mb-2">Stored Content Assets</div>
+                    <div className="max-h-64 overflow-y-auto rounded-xl border bg-card/30">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-card border-b">
+                          <tr>
+                            <th className="text-left p-2 font-medium">Asset ID</th>
+                            <th className="text-left p-2 font-medium">Status</th>
+                            <th className="text-right p-2 font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(contentStatusMap)
+                            .filter(([, v]) => v.fetchStatus !== "not_stored")
+                            .map(([assetId, v]) => (
+                              <tr key={assetId} className="border-b last:border-0 hover:bg-muted/30" data-testid={`row-content-${assetId}`}>
+                                <td className="p-2 truncate max-w-[200px]" title={assetId}>{assetId}</td>
+                                <td className="p-2">
+                                  <Badge
+                                    variant="secondary"
+                                    className={`text-[10px] border ${
+                                      v.fetchStatus === "success"
+                                        ? "bg-chart-1/10 text-chart-1 border-chart-1/20"
+                                        : v.fetchStatus === "failed"
+                                          ? "bg-destructive/10 text-destructive border-destructive/20"
+                                          : v.fetchStatus === "partial" || v.fetchStatus === "gated"
+                                            ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                            : "bg-muted text-muted-foreground"
+                                    }`}
+                                  >
+                                    {v.fetchStatus}
+                                  </Badge>
+                                </td>
+                                <td className="p-2 text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleClearContent(assetId)}
+                                    disabled={clearingAssetId === assetId}
+                                    data-testid={`button-clear-content-${assetId}`}
+                                  >
+                                    {clearingAssetId === assetId ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                      {Object.values(contentStatusMap).filter((v) => v.fetchStatus !== "not_stored").length === 0 && (
+                        <div className="p-4 text-center text-xs text-muted-foreground">
+                          No content has been stored yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No content storage data available.</div>
+            )}
+          </Card>
 
           <Card className="rounded-2xl border bg-card/70 p-6 shadow-sm backdrop-blur" data-testid="upload-card">
             <div className="flex items-center gap-3 mb-4">

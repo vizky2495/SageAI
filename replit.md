@@ -52,6 +52,7 @@ Preferred communication style: Simple, everyday language.
 - **API Pattern**: RESTful JSON API (`/api/`) for data ingestion, analytics summaries, conversation management, and AI interaction.
 - **Data Ingestion**: Handles Excel uploads, AI-powered column mapping via Claude Opus, and ingestion of mapped data.
 - **Insights**: Provides structured JSON summaries for chatbot grounding. CIA and Librarian agents also receive campaign plan summaries (objective, product, market, channels, readiness scores) from the user's Campaign Planner conversations via `buildCampaignPlansSummary()`, enabling cross-agent awareness of planned campaigns.
+- **Content Storage System** (`server/content-routes.ts`): Full content retrieval and storage pipeline. Endpoints: `POST /api/content/fetch-url` (fetches URL, extracts text from PDF/HTML via pdfjs/cheerio, AI analysis), `POST /api/content/upload-file` (processes PDF/DOCX/PPTX/images, AI analysis), `GET /api/content/status` (status map for card indicators), `GET /api/content/:assetId` (full stored content), `DELETE /api/content/:assetId`, `POST /api/content/refresh` (re-fetch from URL), `POST /api/content/bulk-fetch` (admin SSE bulk fetch), `GET /api/content/stats`. AI analysis extracts summary, topics, CTA, structure, messaging themes via Claude. Files stored as base64 in PostgreSQL for persistence.
 - **Conversations**: CRUD operations for CIA Agent and Campaign Planner conversations, supporting SSE streaming for messages.
 - **Validation**: Zod schemas for data validation.
 - **Development**: Vite dev server integrated as Express middleware for HMR.
@@ -61,7 +62,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Type**: PostgreSQL (required via `DATABASE_URL`).
 - **ORM**: Drizzle ORM with `node-postgres` driver.
-- **Schema**: Defined in `shared/schema.ts`, including `assets_agg` (content performance data), `users`, `conversations`, and `messages` tables.
+- **Schema**: Defined in `shared/schema.ts`, including `assets_agg` (content performance data), `users`, `conversations`, `messages`, and `content_stored` (content retrieval & analysis) tables.
 - **Custom Enums**: `funnel_stage` (TOFU, MOFU, BOFU, UNKNOWN).
 - **Migrations**: Drizzle Kit for schema management.
 

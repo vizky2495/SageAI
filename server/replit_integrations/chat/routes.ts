@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./storage";
 import { buildInsightsSummary, type InsightsSummary } from "../../insights";
 import { requireAuth } from "../../auth";
+import { storage } from "../../storage";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -527,6 +528,42 @@ async function buildCampaignPlansSummary(userId: string): Promise<string | null>
 
 const MAX_CONTEXT_EXCHANGES = 4;
 
+async function buildContentStorageContext(userMessage: string): Promise<string | null> {
+  try {
+    const assetIdPatterns = userMessage.match(/[A-Z]{2}_[A-Z]+_[A-Z0-9_]+/g) || [];
+    const mentionedAssets = [...new Set(assetIdPatterns)];
+
+    if (mentionedAssets.length === 0) return null;
+
+    const contentParts: string[] = [];
+    for (const assetId of mentionedAssets.slice(0, 5)) {
+      const content = await storage.getContentByAssetId(assetId);
+      if (content && content.fetchStatus !== "not_stored") {
+        contentParts.push(
+          `--- Stored Content: ${assetId} ---\n` +
+          `Format: ${content.contentFormat || "unknown"}\n` +
+          `Summary: ${content.contentSummary || "N/A"}\n` +
+          `Topics: ${(content.extractedTopics || []).join(", ") || "N/A"}\n` +
+          `CTA: ${content.extractedCta ? `"${content.extractedCta.text}" (${content.extractedCta.type}, ${content.extractedCta.strength})` : "None detected"}\n` +
+          `Messaging Themes: ${(content.messagingThemes || []).join(", ") || "N/A"}\n` +
+          `Structure: ${content.contentStructure ? `${content.contentStructure.wordCount} words, ${content.contentStructure.sectionCount} sections` : "N/A"}\n` +
+          `Source: ${content.sourceType === "url_fetched" ? content.sourceUrl || "URL" : content.sourceType === "file_uploaded" ? content.originalFilename || "Uploaded file" : "Unknown"}`
+        );
+      } else {
+        contentParts.push(
+          `--- ${assetId} ---\nContent not stored. Only performance metrics are available for this asset. Suggest the user fetch or upload the content for deeper analysis.`
+        );
+      }
+    }
+
+    if (contentParts.length === 0) return null;
+    return `\n\n=== STORED CONTENT ANALYSIS ===\nThe following content has been retrieved and analyzed. Use this for content-quality questions (messaging, CTA, topics, structure). Performance metrics are in the main dataset above.\n${contentParts.join("\n\n")}`;
+  } catch (err) {
+    console.error("Content storage context error:", err);
+    return null;
+  }
+}
+
 const assetInsightCache = new Map<string, { insight: string; performance: string; timestamp: number }>();
 const ASSET_INSIGHT_TTL = 5 * 60 * 1000;
 
@@ -809,17 +846,27 @@ export function registerChatRoutes(app: Express): void {
         ? await buildCampaignPlansSummary(userId)
         : null;
 
+      const contentStorageCtx = (agentType === "cia" || agentType === "librarian")
+        ? await buildContentStorageContext(content)
+        : null;
+
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
         systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
         if (campaignContext) {
           systemPrompt += `\n\n=== CAMPAIGN PLANNING DATA ===\nThe following campaign plans have been created in the Campaign Planner. You can reference this data when users ask about planned campaigns, strategies, or content allocation.\n${campaignContext}`;
         }
+        if (contentStorageCtx) {
+          systemPrompt += contentStorageCtx;
+        }
       } else if (agentType === "librarian") {
         const librarianContext = buildPlannerContext(summary);
         systemPrompt = `${LIBRARIAN_PROMPT}\n\n${librarianContext}`;
         if (campaignContext) {
           systemPrompt += `\n${campaignContext}`;
+        }
+        if (contentStorageCtx) {
+          systemPrompt += contentStorageCtx;
         }
       } else {
         const plannerContext = buildPlannerContext(summary);
