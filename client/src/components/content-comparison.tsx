@@ -1450,6 +1450,29 @@ function ComparisonResults({
             <h3 className="text-sm font-semibold">Performance</h3>
             <SourceTag type="internal" />
           </div>
+          {comparisonData.lowEngagement ? (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-amber-400">Minimal Engagement Data</p>
+                  <p className="text-xs text-foreground/75 leading-relaxed">
+                    Both assets have minimal engagement (fewer than 10 total interactions each). Sample sizes are too small for meaningful percentage comparisons.
+                  </p>
+                  <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                    <div className="rounded-lg bg-muted/10 border border-border/20 p-2.5">
+                      <span className="text-[10px] font-semibold text-emerald-400 uppercase block mb-1">{nameA}</span>
+                      <span className="text-[10px] text-foreground/70">{formatNum(mA?.pageviews ?? 0)} views, {formatNum(mA?.downloads ?? 0)} downloads, {formatNum(mA?.leads ?? 0)} leads, {formatNum(mA?.sqos ?? 0)} SQOs{(mA?.avgTime ?? 0) > 0 ? `, ${formatNum(mA?.avgTime ?? 0)}s avg time` : ""}</span>
+                    </div>
+                    <div className="rounded-lg bg-muted/10 border border-border/20 p-2.5">
+                      <span className="text-[10px] font-semibold text-sky-400 uppercase block mb-1">{nameB}</span>
+                      <span className="text-[10px] text-foreground/70">{formatNum(mB?.pageviews ?? 0)} views, {formatNum(mB?.downloads ?? 0)} downloads, {formatNum(mB?.leads ?? 0)} leads, {formatNum(mB?.sqos ?? 0)} SQOs{(mB?.avgTime ?? 0) > 0 ? `, ${formatNum(mB?.avgTime ?? 0)}s avg time` : ""}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
@@ -1489,6 +1512,7 @@ function ComparisonResults({
               </tbody>
             </table>
           </div>
+          )}
         </Card>
       )}
 
@@ -1558,6 +1582,7 @@ interface FullComparisonResult {
   metricsB: MetricsWithData;
   performanceDisplay: "table" | "inline" | "none";
   performanceInlineSummary: string | null;
+  lowEngagement?: boolean;
   metadata: ComparisonMetadata;
 }
 

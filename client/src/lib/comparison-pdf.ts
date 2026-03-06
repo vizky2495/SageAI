@@ -52,6 +52,7 @@ interface FullComparisonResult {
   metricsB: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number; hasData: boolean };
   performanceDisplay?: "table" | "inline" | "none";
   performanceInlineSummary?: string | null;
+  lowEngagement?: boolean;
   metadata: {
     stageA: string; stageB: string; productA: string; productB: string;
     countryA: string; countryB: string; industryA: string; industryB: string;
@@ -167,7 +168,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     y += rowHeight;
   }
 
-  function drawTags(tags: string[], color: string, borderColor: string, label?: string) {
+  function drawTags(tags: string[], color: string, borderColor: string, label?: string, maxTotal = 10) {
     if (!tags || tags.length === 0) return;
     checkPage(10);
     let x = MARGIN;
@@ -178,11 +179,12 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       doc.text(label, x, y);
       x += doc.getTextWidth(label) + 3;
     }
+    const displayTags = tags.slice(0, maxTotal);
     const tagH = 4;
     const tagPad = 2;
     doc.setFontSize(5.5);
     doc.setFont("helvetica", "bold");
-    for (const tag of tags) {
+    for (const tag of displayTags) {
       const w = doc.getTextWidth(tag) + tagPad * 2;
       if (x + w > PAGE_W - MARGIN) {
         x = MARGIN + (label ? 15 : 0);
@@ -200,9 +202,16 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       x += w + 2;
     }
     y += tagH + 2;
+    if (tags.length > maxTotal) {
+      setColor(SAGE.muted);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "italic");
+      doc.text(`+${tags.length - maxTotal} more tags — see full list in Content Library`, MARGIN, y);
+      y += 4;
+    }
   }
 
-  function drawStructuredTags(structuredTags: StructuredKeywordTags, label?: string) {
+  function drawStructuredTags(structuredTags: StructuredKeywordTags, label?: string, maxTotal = 10) {
     const tagTypes: { key: keyof StructuredKeywordTags; typeLabel: string; bgColor: string; borderColor: string; textColor: string }[] = [
       { key: "topic_tags", typeLabel: "Topic", bgColor: SAGE.tagTopic, borderColor: "", textColor: SAGE.white },
       { key: "audience_tags", typeLabel: "Audience", bgColor: SAGE.tagAudience, borderColor: "", textColor: SAGE.white },
@@ -212,6 +221,9 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
     const hasAny = tagTypes.some(t => structuredTags[t.key].length > 0);
     if (!hasAny) return;
+
+    const totalTags = tagTypes.reduce((sum, t) => sum + structuredTags[t.key].length, 0);
+    let remaining = maxTotal;
 
     if (label) {
       checkPage(8);
@@ -223,8 +235,10 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     }
 
     for (const { key, typeLabel, bgColor, borderColor, textColor } of tagTypes) {
-      const tags = structuredTags[key];
-      if (tags.length === 0) continue;
+      const allTags = structuredTags[key];
+      if (allTags.length === 0 || remaining <= 0) continue;
+      const tags = allTags.slice(0, remaining);
+      remaining -= tags.length;
       checkPage(8);
       let x = MARGIN;
       setColor(SAGE.muted);
@@ -258,6 +272,14 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       }
       y += tagH + 2;
     }
+
+    if (totalTags > maxTotal) {
+      setColor(SAGE.muted);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "italic");
+      doc.text(`+${totalTags - maxTotal} more tags — see full list in Content Library`, MARGIN, y);
+      y += 4;
+    }
   }
 
   // === COVER PAGE ===
@@ -280,7 +302,16 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   setColor(SAGE.muted);
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
-  const subtitle = `${data.nameA} vs ${data.nameB}`;
+  function shortName(name: string): string {
+    let s = name.replace(/\s*\([^)]*\)\s*$/, "");
+    s = s.replace(/\s*GO\s*[,|]\s*TOP\s*[,|]\s*GNRC\s*/gi, "");
+    s = s.replace(/\s*[,|]\s*(English\s+)?Canada\s*/gi, "");
+    s = s.replace(/\s*[,|]\s*Australia\s*/gi, "");
+    s = s.trim().replace(/\s+/g, " ");
+    if (s.length > 40) s = s.slice(0, 40).trim() + "...";
+    return s;
+  }
+  const subtitle = `${shortName(data.nameA)} vs ${shortName(data.nameB)}`;
   const subtitleLines = doc.splitTextToSize(subtitle, CONTENT_W);
   subtitleLines.forEach((line: string) => { doc.text(line, MARGIN, y); y += 5; });
   y += 10;
@@ -559,29 +590,52 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sourceTag("Source: Internal Data");
     y += 2;
 
-    const perfWidths = [40, 40, 40, 40];
-    drawTableRow(["Metric", data.nameA, data.nameB, "Delta"], perfWidths, true, false);
+    if (data.lowEngagement) {
+      setFill(SAGE.calloutBg);
+      const noteText = `Both assets have minimal engagement (fewer than 10 total interactions each). Sample sizes are too small for meaningful percentage comparisons.`;
+      const noteLines = doc.splitTextToSize(noteText, CONTENT_W - 10);
+      const noteH = noteLines.length * 4 + 8;
+      doc.roundedRect(MARGIN, y, CONTENT_W, noteH, 2, 2, "F");
+      setColor(SAGE.sourceAmber);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text("Minimal Engagement Data", MARGIN + 5, y + 5);
+      setColor(SAGE.bodyText);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      noteLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 5, y + 10 + li * 4); });
+      y += noteH + 4;
 
-    const metrics = [
-      { label: "Pageviews", key: "pageviews" as const },
-      { label: "Downloads", key: "downloads" as const },
-      { label: "Leads", key: "leads" as const },
-      { label: "SQOs", key: "sqos" as const },
-      { label: "Avg Time (s)", key: "avgTime" as const },
-    ];
+      const summaryA = `${data.nameA}: ${data.metricsA.pageviews} views, ${data.metricsA.downloads} downloads, ${data.metricsA.leads} leads, ${data.metricsA.sqos} SQOs${data.metricsA.avgTime > 0 ? `, ${data.metricsA.avgTime}s avg time` : ""}`;
+      const summaryB = `${data.nameB}: ${data.metricsB.pageviews} views, ${data.metricsB.downloads} downloads, ${data.metricsB.leads} leads, ${data.metricsB.sqos} SQOs${data.metricsB.avgTime > 0 ? `, ${data.metricsB.avgTime}s avg time` : ""}`;
+      wrappedText(summaryA, SAGE.bodyText, 7.5, CONTENT_W, false);
+      y += 1;
+      wrappedText(summaryB, SAGE.bodyText, 7.5, CONTENT_W, false);
+    } else {
+      const perfWidths = [40, 40, 40, 40];
+      drawTableRow(["Metric", data.nameA, data.nameB, "Delta"], perfWidths, true, false);
 
-    metrics.forEach(({ label, key }, i) => {
-      const aVal = data.metricsA[key];
-      const bVal = data.metricsB[key];
-      const aStr = aVal.toLocaleString();
-      const bStr = bVal.toLocaleString();
-      let delta = "\u2014";
-      if (aVal > 0) {
-        const pct = Math.round(((bVal - aVal) / aVal) * 100);
-        delta = `${pct > 0 ? "+" : ""}${pct}%`;
-      }
-      drawTableRow([label, aStr, bStr, delta], perfWidths, false, i % 2 === 0);
-    });
+      const metrics = [
+        { label: "Pageviews", key: "pageviews" as const },
+        { label: "Downloads", key: "downloads" as const },
+        { label: "Leads", key: "leads" as const },
+        { label: "SQOs", key: "sqos" as const },
+        { label: "Avg Time (s)", key: "avgTime" as const },
+      ];
+
+      metrics.forEach(({ label, key }, i) => {
+        const aVal = data.metricsA[key];
+        const bVal = data.metricsB[key];
+        const aStr = aVal.toLocaleString();
+        const bStr = bVal.toLocaleString();
+        let delta = "\u2014";
+        if (aVal > 0) {
+          const pct = Math.round(((bVal - aVal) / aVal) * 100);
+          delta = `${pct > 0 ? "+" : ""}${pct}%`;
+        }
+        drawTableRow([label, aStr, bStr, delta], perfWidths, false, i % 2 === 0);
+      });
+    }
   } else if (perfDisplay === "inline") {
     checkPage(20);
     sectionTitle("Performance");

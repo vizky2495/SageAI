@@ -787,11 +787,25 @@ CONCISENESS RULES:
 - verdict: 1 paragraph max. The key conclusion only.
 - suggestions: Maximum 4 items, 1-2 sentences each.
 
+SUGGESTION RULES — CRITICAL:
+- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, or writing NEW content.
+- Suggestions must focus on: improving existing content, better deployment, metadata corrections, re-tagging, re-positioning, or which existing content to prioritize for campaigns.
+- Good: "Content A's narrative case study format is more effective for BOFU — prioritize it for ANZ campaigns."
+- Bad: "Develop a new case study mirroring Content A's structure." — this recommends creating new content, which is not allowed.
+
+METADATA DETECTION:
+- For each readable content, detect the actual country/region, product, and industry from the content text.
+- Return these in "detectedMetadata" so we can enrich empty/generic metadata fields.
+
 Return ONLY valid JSON:
 {
   "contentOverview": {
     "a": ${aReadable ? '{ "summary": "3-4 sentence overview combining coverage, audience, tone, structure" }' : 'null'},
     "b": ${bReadable ? '{ "summary": "3-4 sentence overview" }' : 'null'}
+  },
+  "detectedMetadata": {
+    "a": ${aReadable ? '{ "country": "detected country/region or null", "product": "detected product name or null", "industry": "detected industry or null" }' : 'null'},
+    "b": ${bReadable ? '{ "country": "detected country/region or null", "product": "detected product name or null", "industry": "detected industry or null" }' : 'null'}
   },
   "keywordTagsA": ${aReadable ? '["Specific Tag 1", "Specific Tag 2", "...8-15 tags from READING the content"]' : '[]'},
   "keywordTagsB": ${bReadable ? '["Specific Tag 1", "Specific Tag 2", "...8-15 tags"]' : '[]'},
@@ -859,6 +873,50 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const aReadable = !!aTextForAnalysis;
       const bReadable = !!bTextForAnalysis;
 
+      const detected = resonanceAnalysis?.detectedMetadata || {};
+      const isGenericVal = (v: string) => {
+        if (!v) return true;
+        const normalized = v.trim().toLowerCase();
+        return normalized === "" || normalized === "general" || normalized === "not specified" || normalized === "n/a" || normalized === "unknown";
+      };
+
+      let finalCountryA = countryA;
+      let finalCountryB = countryB;
+      let finalProductA = productA;
+      let finalProductB = productB;
+      let finalIndustryA = industryA;
+      let finalIndustryB = industryB;
+      const metadataEnrichments: string[] = [];
+
+      if (detected.a) {
+        if (isGenericVal(finalCountryA) && detected.a.country && detected.a.country !== "null") {
+          finalCountryA = `${detected.a.country} [Detected from content]`;
+          metadataEnrichments.push(`Country for ${nameA}: "${detected.a.country}"`);
+        }
+        if (isGenericVal(finalProductA) && detected.a.product && detected.a.product !== "null") {
+          finalProductA = `${detected.a.product} [Detected from content]`;
+          metadataEnrichments.push(`Product for ${nameA}: "${detected.a.product}"`);
+        }
+        if (isGenericVal(finalIndustryA) && detected.a.industry && detected.a.industry !== "null") {
+          finalIndustryA = `${detected.a.industry} [Detected from content]`;
+          metadataEnrichments.push(`Industry for ${nameA}: "${detected.a.industry}"`);
+        }
+      }
+      if (detected.b) {
+        if (isGenericVal(finalCountryB) && detected.b.country && detected.b.country !== "null") {
+          finalCountryB = `${detected.b.country} [Detected from content]`;
+          metadataEnrichments.push(`Country for ${nameB}: "${detected.b.country}"`);
+        }
+        if (isGenericVal(finalProductB) && detected.b.product && detected.b.product !== "null") {
+          finalProductB = `${detected.b.product} [Detected from content]`;
+          metadataEnrichments.push(`Product for ${nameB}: "${detected.b.product}"`);
+        }
+        if (isGenericVal(finalIndustryB) && detected.b.industry && detected.b.industry !== "null") {
+          finalIndustryB = `${detected.b.industry} [Detected from content]`;
+          metadataEnrichments.push(`Industry for ${nameB}: "${detected.b.industry}"`);
+        }
+      }
+
       const finalTagsA: StructuredKeywordTags = aReadable
         ? (resonanceAnalysis?.keywordTagsA
           ? { topic_tags: resonanceAnalysis.keywordTagsA, audience_tags: [], intent_tags: [], user_added_tags: [] }
@@ -897,7 +955,14 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       }
 
       let verdict = resonanceAnalysis?.verdict || "";
-      let suggestions = resonanceAnalysis?.suggestions || [];
+      let suggestions: { text: string; source: string }[] = resonanceAnalysis?.suggestions || [];
+
+      const createContentPatterns = [
+        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate)\b/i,
+        /\b(create|develop|build|write|produce|draft|generate|launch)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic)\b/i,
+        /\b(develop|create|produce|write)\b\s+(a|an|the)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article)/i,
+      ];
+      suggestions = suggestions.filter(s => !createContentPatterns.some(rx => rx.test(s.text)));
 
       if (!verdict) {
         if (!aReadable && !bReadable) {
@@ -915,6 +980,12 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         const unreadable = !aReadable ? nameA : nameB;
         suggestions.push({ text: `Re-upload ${unreadable} as a text-based PDF or DOCX to enable full analysis.`, source: "AI Recommendation" });
       }
+
+      if (metadataEnrichments.length > 0) {
+        const enrichedFields = metadataEnrichments.join(", ");
+        suggestions.push({ text: `Asset metadata shows generic values for fields that content analysis detected as specific: ${enrichedFields}. Update the asset tags for better campaign segmentation.`, source: "Content Analysis" });
+      }
+
       suggestions = suggestions.slice(0, 4);
 
       const performanceDisplay = (aHasMetrics && bHasMetrics) ? "table" : (aHasMetrics || bHasMetrics) ? "inline" : "none";
@@ -925,6 +996,10 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         const noName = aHasMetrics ? nameB : nameA;
         performanceInlineSummary = `${hasName}: ${hasM.pageviews} pageviews, ${hasM.leads} leads, ${hasM.sqos} SQOs, ${hasM.avgTime}s avg time. ${noName} has no engagement data.`;
       }
+
+      const aTotalEngagement = metricsA.pageviews + metricsA.downloads + metricsA.leads + metricsA.sqos;
+      const bTotalEngagement = metricsB.pageviews + metricsB.downloads + metricsB.leads + metricsB.sqos;
+      const lowEngagement = aTotalEngagement < 10 && bTotalEngagement < 10;
 
       res.json({
         nameA,
@@ -949,8 +1024,13 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         metricsB: { ...metricsB, hasData: bHasMetrics },
         performanceDisplay,
         performanceInlineSummary,
+        lowEngagement,
         metadata: {
-          stageA, stageB, productA, productB, countryA, countryB, industryA, industryB, typeA, typeB,
+          stageA, stageB,
+          productA: finalProductA, productB: finalProductB,
+          countryA: finalCountryA, countryB: finalCountryB,
+          industryA: finalIndustryA, industryB: finalIndustryB,
+          typeA, typeB,
           wordCountA: aStructure.wordCount || null,
           wordCountB: bStructure.wordCount || null,
           formatA: contentAStored?.contentFormat || typeA,
