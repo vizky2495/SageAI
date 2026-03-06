@@ -264,7 +264,11 @@ export default function PageChat({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [spotlightAnswerExpanded, setSpotlightAnswerExpanded] = useState(false);
-  const [windowHeight, setWindowHeight] = useState(60);
+  const [windowHeight, setWindowHeight] = useState(() => {
+    const saved = localStorage.getItem('cia-chat-height');
+    return saved ? parseFloat(saved) : 45;
+  });
+  const [hoverChatBtn, setHoverChatBtn] = useState(false);
   const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
   const [hoverTrigger, setHoverTrigger] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -282,6 +286,7 @@ export default function PageChat({
 
   useEffect(() => { scrollToBottom(); }, [msgs, streamingContent, scrollToBottom]);
   useEffect(() => { fetchConversations(); if (agent === "cia") fetchSuggestions(); }, []);
+  useEffect(() => { localStorage.setItem('cia-chat-height', String(windowHeight)); }, [windowHeight]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -292,8 +297,8 @@ export default function PageChat({
       }
       if (isResizing.current) {
         const h = (window.innerHeight - e.clientY) / window.innerHeight * 100;
-        setWindowHeight(Math.max(30, Math.min(90, h)));
-        setWindowPos(p => p ? { ...p, y: e.clientY } : null);
+        const minVh = Math.max(15, (200 / window.innerHeight) * 100);
+        setWindowHeight(Math.max(minVh, Math.min(80, h)));
       }
     }
     function onMouseUp() {
@@ -539,6 +544,13 @@ export default function PageChat({
     setTimeout(() => spotlightInputRef.current?.focus(), 150);
   }
 
+  function openFullChat() {
+    setMode("fullchat");
+    setSpotlightAnswerExpanded(false);
+    setShowSearchResults(false);
+    setTimeout(() => chatInputRef.current?.focus(), 200);
+  }
+
   function handleStarterClick(s: typeof STARTERS[0]) {
     if (s.action === "upload") {
       setInput(s.prompt);
@@ -579,6 +591,11 @@ export default function PageChat({
         e.preventDefault();
         if (mode !== "closed") closeAll();
         else openSpotlight();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        if (mode === "fullchat") closeAll();
+        else openFullChat();
       }
       if (e.key === "Escape" && mode !== "closed") closeAll();
     }
@@ -750,42 +767,81 @@ export default function PageChat({
     <>
       <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.pptx,.csv" multiple className="hidden" onChange={handleFileSelect} data-testid={`input-file-global-${agent}`} />
 
-      {mode === "closed" && (
-        <div
-          className="fixed bottom-6 right-6 z-40 group"
-          onMouseEnter={() => setHoverTrigger(true)}
-          onMouseLeave={() => setHoverTrigger(false)}
-          data-testid={`ai-trigger-${agent}`}
-        >
-          <motion.button
-            onClick={openSpotlight}
-            className="relative h-12 w-12 rounded-full flex items-center justify-center border border-[#00D657]/30 shadow-lg"
-            style={{ background: "rgba(10, 20, 15, 0.85)", backdropFilter: "blur(24px)" }}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.95 }}
-            data-testid={`btn-ai-trigger-${agent}`}
-          >
-            <motion.div
-              className="absolute inset-0 rounded-full border-2 border-[#00D657]/30"
-              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <span className="text-sm font-bold text-[#00D657]">AI</span>
-          </motion.button>
-          <AnimatePresence>
-            {hoverTrigger && (
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className="absolute right-14 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border border-[#00D657]/20"
-                style={{ background: "rgba(10, 20, 15, 0.9)", backdropFilter: "blur(16px)" }}
+      {!(mode === "fullchat" && isFullscreen) && (
+        <div className="fixed bottom-6 right-6 z-[55] flex flex-col items-center gap-3" data-testid={`floating-buttons-${agent}`}>
+          {mode === "closed" && (
+            <div
+              className="group relative"
+              onMouseEnter={() => setHoverTrigger(true)}
+              onMouseLeave={() => setHoverTrigger(false)}
+              data-testid={`ai-trigger-${agent}`}
+            >
+              <motion.button
+                onClick={openSpotlight}
+                className="relative h-12 w-12 rounded-full flex items-center justify-center border border-[#00D657]/30 shadow-lg"
+                style={{ background: "rgba(10, 20, 15, 0.85)", backdropFilter: "blur(24px)" }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
+                data-testid={`btn-ai-trigger-${agent}`}
               >
-                <span className="text-white/70">Press </span>
-                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[#00D657] text-[10px] font-mono ml-0.5">⌘K</kbd>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <motion.div
+                  className="absolute inset-0 rounded-full border-2 border-[#00D657]/30"
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <span className="text-sm font-bold text-[#00D657]">AI</span>
+              </motion.button>
+              <AnimatePresence>
+                {hoverTrigger && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="absolute right-14 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border border-[#00D657]/20"
+                    style={{ background: "rgba(10, 20, 15, 0.9)", backdropFilter: "blur(16px)" }}
+                  >
+                    <span className="text-white/70">Spotlight </span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[#00D657] text-[10px] font-mono ml-0.5">⌘K</kbd>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          <div
+            className="group/chat relative"
+            onMouseEnter={() => setHoverChatBtn(true)}
+            onMouseLeave={() => setHoverChatBtn(false)}
+          >
+            <motion.button
+              onClick={mode === "fullchat" ? closeAll : openFullChat}
+              className="relative h-12 w-12 rounded-full flex items-center justify-center border border-[#00D657]/30 shadow-lg"
+              style={{ background: "rgba(10, 20, 15, 0.85)", backdropFilter: "blur(24px)" }}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              data-testid={`btn-chat-trigger-${agent}`}
+            >
+              {mode === "fullchat" ? (
+                <Minimize2 className="h-4.5 w-4.5 text-[#00D657]" />
+              ) : (
+                <MessageSquare className="h-4.5 w-4.5 text-[#00D657]" />
+              )}
+            </motion.button>
+            <AnimatePresence>
+              {hoverChatBtn && (
+                <motion.div
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="absolute right-14 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border border-[#00D657]/20"
+                  style={{ background: "rgba(10, 20, 15, 0.9)", backdropFilter: "blur(16px)" }}
+                >
+                  <span className="text-white/70">{mode === "fullchat" ? "Close chat" : "Open chat"} </span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[#00D657] text-[10px] font-mono ml-0.5">⌘J</kbd>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 
@@ -798,7 +854,7 @@ export default function PageChat({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
               className="fixed inset-0 z-40"
-              style={{ backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+              style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
               onClick={closeAll}
               data-testid={`spotlight-overlay-${agent}`}
             />
@@ -815,9 +871,17 @@ export default function PageChat({
             >
               <div className="rounded-2xl border border-[#00D657]/20 shadow-2xl overflow-hidden" style={{ background: "rgba(10, 20, 15, 0.92)", backdropFilter: "blur(30px)" }}>
                 <div className="flex items-center gap-3 px-4 h-14 border-b border-[#00D657]/10">
-                  <div className="h-7 w-7 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
-                    <Sparkles className="h-3.5 w-3.5 text-black" />
-                  </div>
+                  <button
+                    onClick={openFullChat}
+                    className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity"
+                    title="Open full chat"
+                    data-testid={`btn-spotlight-agent-${agent}`}
+                  >
+                    <div className="h-7 w-7 rounded-full bg-[#00D657] flex items-center justify-center shrink-0">
+                      <Sparkles className="h-3.5 w-3.5 text-black" />
+                    </div>
+                    <span className="text-xs font-medium text-white/50 hidden sm:inline">{agentName}</span>
+                  </button>
                   <input
                     ref={spotlightInputRef}
                     type="text"
@@ -830,6 +894,9 @@ export default function PageChat({
                     autoFocus
                   />
                   <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={openFullChat} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Open full chat" data-testid={`btn-spotlight-openchat-${agent}`}>
+                      <MessageSquare className="h-4 w-4 text-white/40" />
+                    </button>
                     <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" data-testid={`btn-spotlight-attach-${agent}`}>
                       <Paperclip className="h-4 w-4 text-white/40" />
                     </button>
@@ -954,29 +1021,18 @@ export default function PageChat({
         {mode === "fullchat" && (
           <>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40"
-              style={{ backgroundColor: "rgba(0,0,0,0.25)", backdropFilter: "blur(4px)" }}
-              onClick={closeAll}
-              data-testid={`fullchat-overlay-${agent}`}
-            />
-
-            <motion.div
               initial={{ opacity: 0, y: 60 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 60 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
               className={fullChatWindowClass}
-              style={{ ...fullChatWindowStyle, background: "rgba(15, 15, 15, 0.97)", backdropFilter: "blur(30px)" }}
+              style={{ ...fullChatWindowStyle, background: "rgba(10, 12, 10, 0.95)", boxShadow: "0 -4px 20px rgba(0, 0, 0, 0.5)" }}
               data-chat-window
               data-testid={`fullchat-window-${agent}`}
             >
               {!isFullscreen && (
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-3 cursor-ns-resize z-10 flex items-center justify-center group" onMouseDown={handleResizeStart} data-testid={`resize-handle-${agent}`}>
-                  <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#00D657]/40 transition-colors" />
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-5 cursor-ns-resize z-10 flex items-center justify-center group" onMouseDown={handleResizeStart} data-testid={`resize-handle-${agent}`}>
+                  <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#00D657]/50 transition-colors" />
                 </div>
               )}
 

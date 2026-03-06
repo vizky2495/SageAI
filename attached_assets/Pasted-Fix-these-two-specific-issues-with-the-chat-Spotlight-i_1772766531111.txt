@@ -1,0 +1,66 @@
+Fix these two specific issues with the chat/Spotlight interaction:
+
+FIX 1: ADD A VISIBLE "OPEN CHAT" BUTTON ALONGSIDE THE SPOTLIGHT
+Currently the chat only opens when the user types a question in the Spotlight bar. Users need a way to open the full chat directly without typing anything. Add these entry points:
+Option A — Add a chat icon button inside the Spotlight bar:
+
+Inside the Spotlight command bar, add a small chat bubble icon button to the left of the paperclip icon
+When clicked, it opens the full chat panel directly (bottom slide-up panel) without requiring any text input
+Tooltip on hover: "Open full chat"
+
+Option B — Add a persistent floating chat button:
+
+In addition to the Spotlight bar, add a small floating button in the bottom-right corner (48px green glassmorphic circle with a chat bubble icon)
+Clicking this button opens the full chat panel directly
+This button is always visible on every page, even when the Spotlight is closed
+When the chat is already open, this button changes to a minimize icon
+
+Implement BOTH options so users have two ways to open the chat:
+
+Spotlight bar chat icon → for users who are already looking at the Spotlight
+Floating button → for users who want to jump straight into chat from anywhere
+
+Also add these direct open triggers:
+
+Keyboard shortcut: ⌘J / Ctrl+J opens the full chat directly (separate from ⌘K which opens Spotlight)
+Show this shortcut hint next to the floating button on hover: "⌘J"
+Clicking the "CIA Agent" label or avatar in the Spotlight bar also opens the full chat
+
+
+FIX 2: REMOVE OR DRASTICALLY REDUCE THE BACKGROUND BLUR
+The current blur makes the entire page behind the chat unreadable. Users need to see their data while chatting — that's the whole point of the inline approach. Fix this for both Spotlight and the chat panel:
+For the Spotlight overlay (Image 1):
+
+Current state: heavy blur + dark overlay making the Analytics page completely unreadable
+Fix: Remove the backdrop blur entirely. Use only a very light dark overlay: rgba(0, 0, 0, 0.3) maximum — the user should be able to clearly read the data behind the Spotlight
+The Spotlight bar itself can keep its glassmorphic blur (that's fine — it's a small element), but the PAGE BEHIND it should not be blurred
+The content behind should be dimmed just enough to create contrast for the Spotlight, but fully legible
+
+For the full chat panel (Image 2 — bottom slide-up):
+
+Current state: the top half of the page is heavily blurred and unreadable when chat is open
+Fix: NO blur on the page content above the chat panel. Zero. None.
+The chat panel should have a solid or semi-transparent background for itself (rgba(10, 12, 10, 0.95)) so chat text is readable
+But the page content ABOVE the chat panel should remain completely clear and interactive
+The user should be able to:
+
+Read the dashboard data above while chatting
+Click on content cards above to add them as context to the chat
+Scroll the page content above independently of the chat
+Reference the numbers they see on screen while asking the AI about them
+
+
+Add a subtle shadow at the top edge of the chat panel (box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5)) to visually separate it from the content above — this provides separation without blocking visibility
+
+The principle: the chat assists the workflow, it does not replace or hide it. The user's data must always be visible.
+
+FIX 3: MAKE THE CHAT PANEL RESIZABLE
+Since users need to see both the chat and the content above, let them control the split:
+
+Add a drag handle at the top edge of the chat panel (a small horizontal line, 40px wide, centered)
+Users can drag this handle up or down to resize the chat panel height
+Minimum height: 200px (just the input bar + 2-3 messages visible)
+Maximum height: 80% of viewport
+Default height: 45% of viewport — this gives roughly equal space to content and chat
+The page content above should reflow or scroll to accommodate the chat panel height
+Remember the user's preferred height in local state so it persists during the session
