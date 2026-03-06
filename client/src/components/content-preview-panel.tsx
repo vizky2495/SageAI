@@ -31,8 +31,28 @@ import {
   Target,
   Megaphone,
   Info,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import type { AssetAgg } from "@shared/schema";
+
+function normalizeKeywordTags(raw: StructuredKeywordTags | string[] | null | undefined): StructuredKeywordTags {
+  if (!raw) return { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+  if (Array.isArray(raw)) return { topic_tags: raw, audience_tags: [], intent_tags: [], user_added_tags: [] };
+  return {
+    topic_tags: raw.topic_tags || [],
+    audience_tags: raw.audience_tags || [],
+    intent_tags: raw.intent_tags || [],
+    user_added_tags: raw.user_added_tags || [],
+  };
+}
+
+interface StructuredKeywordTags {
+  topic_tags: string[];
+  audience_tags: string[];
+  intent_tags: string[];
+  user_added_tags: string[];
+}
 
 interface ContentData {
   id: string;
@@ -42,6 +62,7 @@ interface ContentData {
   extractedCta: { text: string; type: string; strength: string; location: string } | null;
   contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null;
   messagingThemes: string[] | null;
+  keywordTags: StructuredKeywordTags | string[] | null;
   contentFormat: string | null;
   sourceType: string | null;
   sourceUrl: string | null;
@@ -236,6 +257,12 @@ export default function ContentPreviewPanel({
                   </div>
                 </section>
               )}
+
+              <KeywordTagsSection
+                content={content}
+                assetId={asset.contentId}
+                queryClient={queryClient}
+              />
 
               {content.extractedCta && (
                 <section>
@@ -486,6 +513,247 @@ function EngagementMetrics({ asset }: { asset: AssetAgg }) {
             <div className="text-sm font-bold">{m.value}</div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function KeywordTagsSection({
+  content,
+  assetId,
+  queryClient,
+}: {
+  content: ContentData;
+  assetId: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const tags = normalizeKeywordTags(content.keywordTags);
+  const totalTags = tags.topic_tags.length + tags.audience_tags.length + tags.intent_tags.length + tags.user_added_tags.length;
+  const [editing, setEditing] = useState(false);
+  const [editTags, setEditTags] = useState<StructuredKeywordTags>(tags);
+  const [newTag, setNewTag] = useState("");
+
+  const saveMutation = useMutation({
+    mutationFn: async (updatedTags: StructuredKeywordTags) => {
+      const res = await authFetch(`/api/content/${encodeURIComponent(assetId)}/tags`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedTags),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-detail", assetId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tags/summary"] });
+      setEditing(false);
+    },
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(`/api/content/${encodeURIComponent(assetId)}/regenerate-tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-detail", assetId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tags/summary"] });
+    },
+  });
+
+  const handleStartEdit = () => {
+    setEditTags(normalizeKeywordTags(content.keywordTags));
+    setNewTag("");
+    setEditing(true);
+  };
+
+  const handleRemoveTag = (type: keyof StructuredKeywordTags, index: number) => {
+    setEditTags(prev => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleAddUserTag = () => {
+    const trimmed = newTag.trim();
+    if (!trimmed) return;
+    if (editTags.user_added_tags.includes(trimmed)) return;
+    setEditTags(prev => ({
+      ...prev,
+      user_added_tags: [...prev.user_added_tags, trimmed],
+    }));
+    setNewTag("");
+  };
+
+  if (totalTags === 0 && !editing) {
+    return (
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <SectionHeader icon={<Tag className="h-3.5 w-3.5" />} label="Keyword Tags" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => regenerateMutation.mutate()}
+            disabled={regenerateMutation.isPending}
+            data-testid="button-regenerate-tags"
+          >
+            {regenerateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            Generate tags
+          </Button>
+        </div>
+        <div className="text-xs text-muted-foreground">No keyword tags generated yet</div>
+      </section>
+    );
+  }
+
+  const tagGroups: { key: keyof StructuredKeywordTags; label: string; bgClass: string; textClass: string; borderClass: string }[] = [
+    { key: "topic_tags", label: "Topics", bgClass: "bg-[#006362]", textClass: "text-white", borderClass: "" },
+    { key: "audience_tags", label: "Audience", bgClass: "bg-[#00A65C]", textClass: "text-white", borderClass: "" },
+    { key: "intent_tags", label: "Intent", bgClass: "bg-transparent", textClass: "text-[#00D657]", borderClass: "border border-[#00D657]" },
+    { key: "user_added_tags", label: "Custom", bgClass: "bg-primary/15", textClass: "text-primary", borderClass: "border border-primary/30" },
+  ];
+
+  if (editing) {
+    return (
+      <section data-testid="keyword-tags-edit-section">
+        <div className="flex items-center justify-between mb-2">
+          <SectionHeader icon={<Tag className="h-3.5 w-3.5" />} label="Edit Tags" />
+          <div className="flex gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => setEditing(false)}
+              data-testid="button-cancel-edit-tags"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-6 text-xs gap-1"
+              onClick={() => saveMutation.mutate(editTags)}
+              disabled={saveMutation.isPending}
+              data-testid="button-save-tags"
+            >
+              {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+              Save
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {tagGroups.map(({ key, label, bgClass, textClass, borderClass }) => (
+            <div key={key}>
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {editTags[key].map((tag, i) => (
+                  <Badge
+                    key={`${key}-${i}`}
+                    className={`rounded-lg text-xs ${bgClass} ${textClass} ${borderClass} pr-1 gap-1`}
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-full hover:bg-white/20 p-0.5"
+                      onClick={() => handleRemoveTag(key, i)}
+                      data-testid={`button-remove-tag-${key}-${i}`}
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                ))}
+                {editTags[key].length === 0 && (
+                  <span className="text-[10px] text-muted-foreground italic">No {label.toLowerCase()} tags</span>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Add custom tag</div>
+            <div className="flex gap-1.5">
+              <Input
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddUserTag(); } }}
+                placeholder="Type a custom tag..."
+                className="h-7 text-xs"
+                data-testid="input-add-custom-tag"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 gap-1 text-xs"
+                onClick={handleAddUserTag}
+                disabled={!newTag.trim()}
+                data-testid="button-add-custom-tag"
+              >
+                <Plus className="h-3 w-3" />
+                Add
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section data-testid="keyword-tags-section">
+      <div className="flex items-center justify-between mb-2">
+        <SectionHeader icon={<Tag className="h-3.5 w-3.5" />} label="Keyword Tags" />
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleStartEdit}
+            data-testid="button-edit-tags"
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => regenerateMutation.mutate()}
+            disabled={regenerateMutation.isPending}
+            data-testid="button-regenerate-tags"
+          >
+            {regenerateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            Regenerate
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {tagGroups.map(({ key, label, bgClass, textClass, borderClass }) => {
+          if (tags[key].length === 0) return null;
+          return (
+            <div key={key}>
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {tags[key].map((tag, i) => (
+                  <Badge
+                    key={`${key}-${i}`}
+                    className={`rounded-lg text-xs ${bgClass} ${textClass} ${borderClass}`}
+                    data-testid={`tag-${key}-${i}`}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

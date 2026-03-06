@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Plus,
   Upload,
+  Tag,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -918,12 +919,14 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
 function ContentCard({
   asset,
   stage,
+  search,
   inlineChatActive,
   onOpenInlineChat,
   onCloseInlineChat,
 }: {
   asset: AssetAgg;
   stage: string;
+  search?: string;
   inlineChatActive: boolean;
   onOpenInlineChat: (assetId: string) => void;
   onCloseInlineChat: () => void;
@@ -1218,18 +1221,46 @@ function ContentCard({
                   intent: "bg-transparent text-[#00D657] border-[#00D657]/60",
                   user: "bg-purple-500/15 text-purple-300 border-purple-500/30",
                 };
-                const visible = allTagsTyped.slice(0, 5);
+                const tagTypeLabels = { topic: "Topic", audience: "Audience", intent: "Intent", user: "Custom" };
+                const searchLower = search?.toLowerCase() || "";
+                const matchingTags = searchLower
+                  ? allTagsTyped.filter((item) => item.tag.toLowerCase().includes(searchLower))
+                  : [];
+                const sortedTags = searchLower
+                  ? [...allTagsTyped].sort((a, b) => {
+                      const aMatch = a.tag.toLowerCase().includes(searchLower) ? -1 : 0;
+                      const bMatch = b.tag.toLowerCase().includes(searchLower) ? -1 : 0;
+                      return aMatch - bMatch;
+                    })
+                  : allTagsTyped;
+                const visible = sortedTags.slice(0, 5);
                 const overflow = allTagsTyped.length - 5;
                 return (
-                  <div className="flex flex-wrap gap-1 mt-1" data-testid="card-keyword-tags">
-                    {visible.map((item, i) => (
-                      <Badge key={i} variant="outline" className={`rounded-full text-[8px] px-1.5 py-0 font-medium border ${tagStyles[item.type]}`}>
-                        {item.tag}
-                      </Badge>
-                    ))}
-                    {overflow > 0 && (
-                      <span className="text-[8px] text-muted-foreground self-center">+{overflow}</span>
+                  <div className="mt-1" data-testid="card-keyword-tags">
+                    {matchingTags.length > 0 && (
+                      <div className="text-[8px] text-[#00D657]/80 mb-0.5" data-testid="text-tag-match">
+                        Matched: {tagTypeLabels[matchingTags[0].type]} — {matchingTags[0].tag}
+                      </div>
                     )}
+                    <div className="flex flex-wrap gap-1">
+                      {visible.map((item, i) => {
+                        const isMatch = searchLower && item.tag.toLowerCase().includes(searchLower);
+                        return (
+                          <Badge
+                            key={i}
+                            variant="outline"
+                            className={`rounded-full text-[8px] px-1.5 py-0 font-medium border ${tagStyles[item.type]} ${
+                              isMatch ? "ring-1 ring-[#00D657] shadow-[0_0_6px_rgba(0,214,87,0.4)]" : ""
+                            }`}
+                          >
+                            {item.tag}
+                          </Badge>
+                        );
+                      })}
+                      {overflow > 0 && (
+                        <span className="text-[8px] text-muted-foreground self-center">+{overflow}</span>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -1287,6 +1318,7 @@ function StageCarousel({
   stage,
   search,
   filters,
+  tagFilter,
   activeInlineChatId,
   onOpenInlineChat,
   onCloseInlineChat,
@@ -1294,6 +1326,7 @@ function StageCarousel({
   stage: "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
   search: string;
   filters: Filters;
+  tagFilter?: string[];
   activeInlineChatId: string | null;
   onOpenInlineChat: (assetId: string) => void;
   onCloseInlineChat: () => void;
@@ -1309,7 +1342,7 @@ function StageCarousel({
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["/api/assets", stage, search, filters],
+    queryKey: ["/api/assets", stage, search, filters, tagFilter],
     queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({
         stage,
@@ -1322,6 +1355,7 @@ function StageCarousel({
       if (filters.campaign) params.set("campaign", filters.campaign);
       if (filters.industry) params.set("industry", filters.industry);
       if (filters.contentAvailability) params.set("contentAvailability", filters.contentAvailability);
+      if (tagFilter && tagFilter.length > 0) params.set("tagFilter", tagFilter.join(","));
       const res = await authFetch(`/api/assets?${params}`);
       if (!res.ok) throw new Error("Failed to fetch assets");
       return res.json() as Promise<{ data: AssetAgg[]; total: number }>;
@@ -1422,6 +1456,7 @@ function StageCarousel({
             key={asset.id}
             asset={asset}
             stage={stage}
+            search={search}
             inlineChatActive={activeInlineChatId === asset.contentId}
             onOpenInlineChat={onOpenInlineChat}
             onCloseInlineChat={onCloseInlineChat}
@@ -1494,10 +1529,29 @@ export default function ContentLibrary() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const { data: tagSummary } = useQuery<{
+    topic_tags: Record<string, number>;
+    audience_tags: Record<string, number>;
+    intent_tags: Record<string, number>;
+    user_added_tags: Record<string, number>;
+    total_assets_with_tags: number;
+    total_assets: number;
+  }>({
+    queryKey: ["/api/tags/summary"],
+    queryFn: async () => {
+      const res = await authFetch("/api/tags/summary");
+      if (!res.ok) return { topic_tags: {}, audience_tags: {}, intent_tags: {}, user_added_tags: {}, total_assets_with_tags: 0, total_assets: 0 };
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length + selectedTags.length;
 
   const clearFilters = useCallback(() => {
     setFilters({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
+    setSelectedTags([]);
+    setTagTypeFilter("all");
   }, []);
 
   const [compareMode, setCompareMode] = useState(false);
@@ -1701,10 +1755,95 @@ export default function ContentLibrary() {
           </div>
         )}
 
-        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        {tagSummary && Object.keys(tagSummary.topic_tags).length + Object.keys(tagSummary.audience_tags).length + Object.keys(tagSummary.intent_tags).length > 0 && (
+          <Card className="rounded-2xl border bg-card/80 p-3 shadow-sm" data-testid="tag-filter-bar">
+            <div className="flex items-center gap-2 mb-2">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="flex gap-1">
+                {(["all", "topic", "audience", "intent"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTagTypeFilter(t)}
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                      tagTypeFilter === t
+                        ? "bg-[#00D657] text-black"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    }`}
+                    data-testid={`button-tag-type-${t}`}
+                  >
+                    {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {selectedTags.length > 0 && (
+                <button
+                  onClick={() => setSelectedTags([])}
+                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                  data-testid="button-clear-tags"
+                >
+                  Clear tags
+                </button>
+              )}
+              <span className="text-[10px] text-muted-foreground ml-auto">
+                Tags on {tagSummary.total_assets_with_tags} of {tagSummary.total_assets} assets
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto" data-testid="tag-filter-pills">
+              {(() => {
+                const tagStyles = {
+                  topic: { bg: "bg-[#006362]", activeBg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
+                  audience: { bg: "bg-[#00A65C]", activeBg: "bg-[#00A65C]", text: "text-white", border: "border-[#00A65C]/60" },
+                  intent: { bg: "bg-transparent", activeBg: "bg-[#00D657]/20", text: "text-[#00D657]", border: "border-[#00D657]/60" },
+                  user: { bg: "bg-purple-500/15", activeBg: "bg-purple-500/30", text: "text-purple-300", border: "border-purple-500/30" },
+                };
+                const entries: { tag: string; count: number; type: "topic" | "audience" | "intent" | "user" }[] = [];
+                if (tagTypeFilter === "all" || tagTypeFilter === "topic") {
+                  Object.entries(tagSummary.topic_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "topic" }));
+                }
+                if (tagTypeFilter === "all" || tagTypeFilter === "audience") {
+                  Object.entries(tagSummary.audience_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "audience" }));
+                }
+                if (tagTypeFilter === "all" || tagTypeFilter === "intent") {
+                  Object.entries(tagSummary.intent_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "intent" }));
+                }
+                if (tagTypeFilter === "all") {
+                  Object.entries(tagSummary.user_added_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "user" }));
+                }
+                entries.sort((a, b) => b.count - a.count);
+                return entries.slice(0, 40).map((item) => {
+                  const isActive = selectedTags.includes(item.tag);
+                  const s = tagStyles[item.type];
+                  return (
+                    <button
+                      key={`${item.type}-${item.tag}`}
+                      onClick={() => {
+                        setSelectedTags((prev) =>
+                          prev.includes(item.tag)
+                            ? prev.filter((t) => t !== item.tag)
+                            : [...prev, item.tag]
+                        );
+                      }}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                        isActive
+                          ? `${s.activeBg} ${s.text} ${s.border} ring-1 ring-[#00D657]/40`
+                          : `${s.bg} ${s.text} ${s.border} opacity-70 hover:opacity-100`
+                      }`}
+                      data-testid={`button-tag-${item.type}-${item.tag}`}
+                    >
+                      {item.tag}
+                      <span className="opacity-60">×{item.count}</span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </Card>
+        )}
+
+        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
       </div>
 
       {comparisonPair && (

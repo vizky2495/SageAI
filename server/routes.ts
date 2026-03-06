@@ -870,10 +870,10 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
           : bStructuredTags)
         : { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
 
-      if (aReadable && aStructuredTags.topic_tags.length > 0) {
+      if (aReadable && flattenKeywordTags(aStructuredTags).length > 0) {
         Object.assign(finalTagsA, aStructuredTags);
       }
-      if (bReadable && bStructuredTags.topic_tags.length > 0) {
+      if (bReadable && flattenKeywordTags(bStructuredTags).length > 0) {
         Object.assign(finalTagsB, bStructuredTags);
       }
 
@@ -882,6 +882,19 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const sharedTags = flatA.filter((t: string) => flatB.some((bt: string) => bt.toLowerCase() === t.toLowerCase()));
       const uniqueTagsA = flatA.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
       const uniqueTagsB = flatB.filter((t: string) => !sharedTags.some((st: string) => st.toLowerCase() === t.toLowerCase()));
+
+      const structuredSharedTags: StructuredKeywordTags = { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+      const structuredUniqueTagsA: StructuredKeywordTags = { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+      const structuredUniqueTagsB: StructuredKeywordTags = { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+      for (const tagType of ['topic_tags', 'audience_tags', 'intent_tags', 'user_added_tags'] as const) {
+        const aTags = finalTagsA[tagType];
+        const bTags = finalTagsB[tagType];
+        const bLower = bTags.map(t => t.toLowerCase());
+        const aLower = aTags.map(t => t.toLowerCase());
+        structuredSharedTags[tagType] = aTags.filter(t => bLower.includes(t.toLowerCase()));
+        structuredUniqueTagsA[tagType] = aTags.filter(t => !bLower.includes(t.toLowerCase()));
+        structuredUniqueTagsB[tagType] = bTags.filter(t => !aLower.includes(t.toLowerCase()));
+      }
 
       let verdict = resonanceAnalysis?.verdict || "";
       let suggestions = resonanceAnalysis?.suggestions || [];
@@ -927,6 +940,9 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         sharedTags,
         uniqueTagsA,
         uniqueTagsB,
+        structuredSharedTags,
+        structuredUniqueTagsA,
+        structuredUniqueTagsB,
         verdict,
         suggestions,
         metricsA: { ...metricsA, hasData: aHasMetrics },

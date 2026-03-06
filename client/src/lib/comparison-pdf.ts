@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
 
 const SAGE = {
   black: "#000000",
@@ -18,6 +19,10 @@ const SAGE = {
   tagTeal: "#0D9488",
   tagJade: "#059669",
   tagShared: "#00D657",
+  tagTopic: "#006362",
+  tagAudience: "#00A65C",
+  tagIntent: "#00D657",
+  tagUser: "#666666",
 };
 
 const MARGIN = 20;
@@ -33,11 +38,14 @@ interface FullComparisonResult {
   keyTopics?: { a: { topic: string; detail: string }[] | null; b: { topic: string; detail: string }[] | null; comparisonInsight: string } | null;
   whatMakesItWork?: { a: any[] | null; b: any[] | null } | null;
   whatCouldBeImproved?: { a: any[] | null; b: any[] | null } | null;
-  keywordTagsA?: string[];
-  keywordTagsB?: string[];
+  keywordTagsA?: StructuredKeywordTags | string[];
+  keywordTagsB?: StructuredKeywordTags | string[];
   sharedTags?: string[];
   uniqueTagsA?: string[];
   uniqueTagsB?: string[];
+  structuredSharedTags?: StructuredKeywordTags;
+  structuredUniqueTagsA?: StructuredKeywordTags;
+  structuredUniqueTagsB?: StructuredKeywordTags;
   verdict: string;
   suggestions: { text: string; source: string }[];
   metricsA: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number; hasData: boolean };
@@ -194,6 +202,64 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     y += tagH + 2;
   }
 
+  function drawStructuredTags(structuredTags: StructuredKeywordTags, label?: string) {
+    const tagTypes: { key: keyof StructuredKeywordTags; typeLabel: string; bgColor: string; borderColor: string; textColor: string }[] = [
+      { key: "topic_tags", typeLabel: "Topic", bgColor: SAGE.tagTopic, borderColor: "", textColor: SAGE.white },
+      { key: "audience_tags", typeLabel: "Audience", bgColor: SAGE.tagAudience, borderColor: "", textColor: SAGE.white },
+      { key: "intent_tags", typeLabel: "Intent", bgColor: "transparent", borderColor: SAGE.tagIntent, textColor: SAGE.tagIntent },
+      { key: "user_added_tags", typeLabel: "Custom", bgColor: SAGE.tagUser, borderColor: "", textColor: SAGE.white },
+    ];
+
+    const hasAny = tagTypes.some(t => structuredTags[t.key].length > 0);
+    if (!hasAny) return;
+
+    if (label) {
+      checkPage(8);
+      setColor(SAGE.muted);
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "normal");
+      doc.text(label, MARGIN, y);
+      y += 4;
+    }
+
+    for (const { key, typeLabel, bgColor, borderColor, textColor } of tagTypes) {
+      const tags = structuredTags[key];
+      if (tags.length === 0) continue;
+      checkPage(8);
+      let x = MARGIN;
+      setColor(SAGE.muted);
+      doc.setFontSize(5);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${typeLabel}:`, x, y);
+      x += doc.getTextWidth(`${typeLabel}:`) + 2;
+
+      const tagH = 4;
+      const tagPad = 2;
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "bold");
+      for (const tag of tags) {
+        const w = doc.getTextWidth(tag) + tagPad * 2;
+        if (x + w > PAGE_W - MARGIN) {
+          x = MARGIN + 15;
+          y += tagH + 1.5;
+          checkPage(tagH + 2);
+        }
+        if (bgColor !== "transparent") {
+          setFill(bgColor);
+          doc.roundedRect(x, y - 3, w, tagH, 1, 1, "F");
+        }
+        if (borderColor) {
+          doc.setDrawColor(...hexToRgb(borderColor));
+          doc.roundedRect(x, y - 3, w, tagH, 1, 1, "S");
+        }
+        setColor(textColor);
+        doc.text(tag, x + tagPad, y - 0.5);
+        x += w + 2;
+      }
+      y += tagH + 2;
+    }
+  }
+
   // === COVER PAGE ===
   newPage();
   try {
@@ -240,8 +306,13 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sourceTag("Source: Content Analysis");
     y += 2;
 
-    [{ name: data.nameA, ov: data.contentOverview!.a, tags: data.uniqueTagsA || [], tagColor: SAGE.tagTeal },
-     { name: data.nameB, ov: data.contentOverview!.b, tags: data.uniqueTagsB || [], tagColor: SAGE.tagJade }].forEach(({ name, ov, tags, tagColor }) => {
+    const structUniqueA = normalizeKeywordTags(data.structuredUniqueTagsA || (Array.isArray(data.keywordTagsA) ? data.keywordTagsA : data.keywordTagsA));
+    const structUniqueB = normalizeKeywordTags(data.structuredUniqueTagsB || (Array.isArray(data.keywordTagsB) ? data.keywordTagsB : data.keywordTagsB));
+    const structShared = normalizeKeywordTags(data.structuredSharedTags);
+    const hasStructured = flattenKeywordTags(structUniqueA).length > 0 || flattenKeywordTags(structUniqueB).length > 0 || flattenKeywordTags(structShared).length > 0;
+
+    [{ name: data.nameA, ov: data.contentOverview!.a, tags: data.uniqueTagsA || [], tagColor: SAGE.tagTeal, structTags: structUniqueA },
+     { name: data.nameB, ov: data.contentOverview!.b, tags: data.uniqueTagsB || [], tagColor: SAGE.tagJade, structTags: structUniqueB }].forEach(({ name, ov, tags, tagColor, structTags }) => {
       if (!ov) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
@@ -250,16 +321,23 @@ export function generateComparisonPdf(data: FullComparisonResult) {
         wrappedText(ov.summary, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
         y += 1.5;
       }
-      if (tags.length > 0) {
+      if (hasStructured) {
+        y += 1;
+        drawStructuredTags(structTags, "Tags:");
+      } else if (tags.length > 0) {
         y += 1;
         drawTags(tags, tagColor, "", "Tags: ");
       }
       y += 3;
     });
 
-    const sTags = data.sharedTags || [];
-    if (sTags.length > 0) {
-      drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared tags: ");
+    if (hasStructured && flattenKeywordTags(structShared).length > 0) {
+      drawStructuredTags(structShared, "Shared tags:");
+    } else {
+      const sTags = data.sharedTags || [];
+      if (sTags.length > 0) {
+        drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared tags: ");
+      }
     }
 
     const meta = data.metadata;
@@ -366,8 +444,17 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     const sTags = data.sharedTags || [];
     const uTagsA = data.uniqueTagsA || [];
     const uTagsB = data.uniqueTagsB || [];
+    const sStructShared = normalizeKeywordTags(data.structuredSharedTags);
+    const sStructA = normalizeKeywordTags(data.structuredUniqueTagsA || (Array.isArray(data.keywordTagsA) ? data.keywordTagsA : data.keywordTagsA));
+    const sStructB = normalizeKeywordTags(data.structuredUniqueTagsB || (Array.isArray(data.keywordTagsB) ? data.keywordTagsB : data.keywordTagsB));
+    const sHasStructured = flattenKeywordTags(sStructShared).length > 0 || flattenKeywordTags(sStructA).length > 0 || flattenKeywordTags(sStructB).length > 0;
 
-    if (sTags.length > 0 || uTagsA.length > 0 || uTagsB.length > 0) {
+    if (sHasStructured) {
+      if (flattenKeywordTags(sStructShared).length > 0) drawStructuredTags(sStructShared, "Shared:");
+      if (flattenKeywordTags(sStructA).length > 0) drawStructuredTags(sStructA, `Only ${data.nameA}:`);
+      if (flattenKeywordTags(sStructB).length > 0) drawStructuredTags(sStructB, `Only ${data.nameB}:`);
+      y += 2;
+    } else if (sTags.length > 0 || uTagsA.length > 0 || uTagsB.length > 0) {
       if (sTags.length) drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared: ");
       if (uTagsA.length) drawTags(uTagsA, SAGE.tagTeal, "", `Only ${data.nameA}: `);
       if (uTagsB.length) drawTags(uTagsB, SAGE.tagJade, "", `Only ${data.nameB}: `);

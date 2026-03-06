@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
@@ -1096,6 +1097,21 @@ function ResonanceBadge({ rating }: { rating: string }) {
   return <Badge className={`${color} border text-[10px] font-semibold`}>{rating}</Badge>;
 }
 
+const TAG_TYPE_STYLES = {
+  topic: "bg-[#006362] text-white border-[#006362]/60",
+  audience: "bg-[#00A65C] text-white border-[#00A65C]/60",
+  intent: "bg-transparent text-[#00D657] border-[#00D657]",
+  user: "bg-gray-600/30 text-gray-300 border-gray-500/40",
+  shared: "bg-[#00D657]/20 text-[#00D657] border-[#00D657]/40",
+};
+
+const TAG_TYPE_LABELS: Record<string, string> = {
+  topic: "Topic",
+  audience: "Audience",
+  intent: "Intent",
+  user: "Custom",
+};
+
 function KeywordTagPills({ tags, type }: { tags: string[]; type: "a" | "b" | "shared" }) {
   if (!tags || tags.length === 0) return null;
   const colorMap = { a: "bg-teal-500/20 text-teal-300 border-teal-500/30", b: "bg-emerald-600/20 text-emerald-300 border-emerald-600/30", shared: "bg-[#00D657]/20 text-[#00D657] border-[#00D657]/40" };
@@ -1105,6 +1121,34 @@ function KeywordTagPills({ tags, type }: { tags: string[]; type: "a" | "b" | "sh
         <span key={i} className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${colorMap[type]}`}>
           {tag}{type === "shared" && <span className="ml-1 text-[8px] opacity-70">shared</span>}
         </span>
+      ))}
+    </div>
+  );
+}
+
+function StructuredTagPills({ structuredTags, label }: { structuredTags: StructuredKeywordTags; label?: string }) {
+  const allEmpty = structuredTags.topic_tags.length === 0 && structuredTags.audience_tags.length === 0 && structuredTags.intent_tags.length === 0 && structuredTags.user_added_tags.length === 0;
+  if (allEmpty) return null;
+
+  const groups: { key: string; tags: string[]; style: string; typeLabel: string }[] = [
+    { key: "topic", tags: structuredTags.topic_tags, style: TAG_TYPE_STYLES.topic, typeLabel: TAG_TYPE_LABELS.topic },
+    { key: "audience", tags: structuredTags.audience_tags, style: TAG_TYPE_STYLES.audience, typeLabel: TAG_TYPE_LABELS.audience },
+    { key: "intent", tags: structuredTags.intent_tags, style: TAG_TYPE_STYLES.intent, typeLabel: TAG_TYPE_LABELS.intent },
+    { key: "user", tags: structuredTags.user_added_tags, style: TAG_TYPE_STYLES.user, typeLabel: TAG_TYPE_LABELS.user },
+  ].filter(g => g.tags.length > 0);
+
+  return (
+    <div className="space-y-1.5" data-testid="structured-tag-pills">
+      {label && <span className="text-[10px] text-muted-foreground font-medium">{label}</span>}
+      {groups.map(({ key, tags, style, typeLabel }) => (
+        <div key={key} className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wider min-w-[52px]">{typeLabel}:</span>
+          {tags.map((tag, i) => (
+            <span key={i} className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${style}`} data-testid={`tag-${key}-${i}`}>
+              {tag}
+            </span>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -1138,6 +1182,10 @@ function ComparisonResults({
   const tagsA = comparisonData.uniqueTagsA || [];
   const tagsB = comparisonData.uniqueTagsB || [];
   const sharedTagsList = comparisonData.sharedTags || [];
+  const structuredTagsA = normalizeKeywordTags(comparisonData.structuredUniqueTagsA || (Array.isArray(comparisonData.keywordTagsA) ? comparisonData.keywordTagsA : comparisonData.keywordTagsA));
+  const structuredTagsB = normalizeKeywordTags(comparisonData.structuredUniqueTagsB || (Array.isArray(comparisonData.keywordTagsB) ? comparisonData.keywordTagsB : comparisonData.keywordTagsB));
+  const structuredShared = normalizeKeywordTags(comparisonData.structuredSharedTags);
+  const hasStructuredTags = flattenKeywordTags(structuredTagsA).length > 0 || flattenKeywordTags(structuredTagsB).length > 0 || flattenKeywordTags(structuredShared).length > 0;
 
   const displayVal = (v: string | undefined | null) => v || "Not specified";
 
@@ -1152,15 +1200,15 @@ function ComparisonResults({
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, data: overview.a, color: "emerald", tags: tagsA, tagType: "a" as const, hasContent: meta.aHasContent, metaItems: [
+            {[{ label: nameA, data: overview.a, color: "emerald", structTags: structuredTagsA, flatTags: tagsA, tagType: "a" as const, hasContent: meta.aHasContent, metaItems: [
               { k: "Stage", v: meta.stageA }, { k: "Product", v: meta.productA }, { k: "Country", v: displayVal(meta.countryA) },
               { k: "Industry", v: displayVal(meta.industryA) }, { k: "Format", v: displayVal(meta.formatA) },
               { k: "Words", v: meta.wordCountA ? `${meta.wordCountA.toLocaleString()}` : "Not specified" },
-            ]}, { label: nameB, data: overview.b, color: "sky", tags: tagsB, tagType: "b" as const, hasContent: meta.bHasContent, metaItems: [
+            ]}, { label: nameB, data: overview.b, color: "sky", structTags: structuredTagsB, flatTags: tagsB, tagType: "b" as const, hasContent: meta.bHasContent, metaItems: [
               { k: "Stage", v: meta.stageB }, { k: "Product", v: meta.productB }, { k: "Country", v: displayVal(meta.countryB) },
               { k: "Industry", v: displayVal(meta.industryB) }, { k: "Format", v: displayVal(meta.formatB) },
               { k: "Words", v: meta.wordCountB ? `${meta.wordCountB.toLocaleString()}` : "Not specified" },
-            ]}].map(({ label, data, color, tags, tagType, hasContent, metaItems }) => (
+            ]}].map(({ label, data, color, structTags, flatTags, tagType, hasContent, metaItems }) => (
               <div key={label} className={`rounded-xl border border-${color}-500/20 bg-${color}-500/5 p-4 space-y-2.5`}>
                 <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
                 {data?.summary ? (
@@ -1168,13 +1216,18 @@ function ComparisonResults({
                 ) : !hasContent ? (
                   <p className="text-xs text-amber-400/80 italic">Content not readable — text could not be extracted. Re-upload as text-based PDF or DOCX.</p>
                 ) : null}
-                {tags.length > 0 && (
+                {hasStructuredTags ? (
                   <div>
-                    <KeywordTagPills tags={tags} type={tagType} />
+                    <StructuredTagPills structuredTags={structTags} />
+                    {flattenKeywordTags(structuredShared).length > 0 && <div className="mt-1.5"><StructuredTagPills structuredTags={structuredShared} label="Shared" /></div>}
+                  </div>
+                ) : flatTags.length > 0 ? (
+                  <div>
+                    <KeywordTagPills tags={flatTags} type={tagType} />
                     {sharedTagsList.length > 0 && <div className="mt-1.5"><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
                   </div>
-                )}
-                {!hasContent && tags.length === 0 && (
+                ) : null}
+                {!hasContent && flatTags.length === 0 && !hasStructuredTags && (
                   <p className="text-[10px] text-muted-foreground italic">Tags: Not available — content not readable</p>
                 )}
                 <div className="pt-2 border-t border-border/20">
@@ -1281,11 +1334,21 @@ function ComparisonResults({
             <h3 className="text-sm font-semibold">Shared vs Different</h3>
             <SourceTag type="content" />
           </div>
-          {(sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
+          {(sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0 || hasStructuredTags) && (
             <div className="mb-3 rounded-lg bg-muted/10 border border-border/30 p-3">
-              {sharedTagsList.length > 0 && <div className="mb-1.5"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-              {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only {nameA}:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
-              {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only {nameB}:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
+              {hasStructuredTags ? (
+                <div className="space-y-2">
+                  {flattenKeywordTags(structuredShared).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Shared tags:</span><StructuredTagPills structuredTags={structuredShared} /></div>}
+                  {flattenKeywordTags(structuredTagsA).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only {nameA}:</span><StructuredTagPills structuredTags={structuredTagsA} /></div>}
+                  {flattenKeywordTags(structuredTagsB).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only {nameB}:</span><StructuredTagPills structuredTags={structuredTagsB} /></div>}
+                </div>
+              ) : (
+                <>
+                  {sharedTagsList.length > 0 && <div className="mb-1.5"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
+                  {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only {nameA}:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
+                  {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only {nameB}:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
+                </>
+              )}
             </div>
           )}
           <div className="grid sm:grid-cols-2 gap-3">
@@ -1481,11 +1544,14 @@ interface FullComparisonResult {
   keyTopics: { a: KeyTopicItem[] | null; b: KeyTopicItem[] | null; comparisonInsight: string } | null;
   whatMakesItWork: { a: WhatMakesItWorkItem[] | null; b: WhatMakesItWorkItem[] | null } | null;
   whatCouldBeImproved: { a: WhatCouldBeImprovedItem[] | null; b: WhatCouldBeImprovedItem[] | null } | null;
-  keywordTagsA: string[];
-  keywordTagsB: string[];
+  keywordTagsA: StructuredKeywordTags | string[];
+  keywordTagsB: StructuredKeywordTags | string[];
   sharedTags: string[];
   uniqueTagsA: string[];
   uniqueTagsB: string[];
+  structuredSharedTags?: StructuredKeywordTags;
+  structuredUniqueTagsA?: StructuredKeywordTags;
+  structuredUniqueTagsB?: StructuredKeywordTags;
   verdict: string;
   suggestions: Suggestion[];
   metricsA: MetricsWithData;

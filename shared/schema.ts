@@ -177,13 +177,21 @@ export interface StructuredKeywordTags {
 }
 
 export function normalizeKeywordTags(raw: StructuredKeywordTags | string[] | null | undefined): StructuredKeywordTags {
-  if (!raw) return { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
-  if (Array.isArray(raw)) return { topic_tags: raw, audience_tags: [], intent_tags: [], user_added_tags: [] };
+  const empty: StructuredKeywordTags = { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
+  if (!raw) return empty;
+  if (Array.isArray(raw)) {
+    return { ...empty, topic_tags: raw.filter((v): v is string => typeof v === "string").map(s => s.trim()).filter(Boolean) };
+  }
+  if (typeof raw !== "object") return empty;
+  const ensureArr = (val: unknown): string[] => {
+    if (!Array.isArray(val)) return [];
+    return val.filter((v): v is string => typeof v === "string").map(s => s.trim()).filter(Boolean);
+  };
   return {
-    topic_tags: raw.topic_tags || [],
-    audience_tags: raw.audience_tags || [],
-    intent_tags: raw.intent_tags || [],
-    user_added_tags: raw.user_added_tags || [],
+    topic_tags: ensureArr(raw.topic_tags),
+    audience_tags: ensureArr(raw.audience_tags),
+    intent_tags: ensureArr(raw.intent_tags),
+    user_added_tags: ensureArr(raw.user_added_tags),
   };
 }
 

@@ -314,6 +314,9 @@ export default function AdminPage() {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [unfetchedCount, setUnfetchedCount] = useState(0);
   const [clearingAssetId, setClearingAssetId] = useState<string | null>(null);
+  const [regenTagsActive, setRegenTagsActive] = useState(false);
+  const [regenTagsProgress, setRegenTagsProgress] = useState<{ completed: number; failed: number; total: number; current: string } | null>(null);
+  const [showRegenTagsConfirm, setShowRegenTagsConfirm] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -400,6 +403,49 @@ export default function AdminPage() {
     setBulkFetchActive(false);
     loadContentStats();
   }, [loadContentStats]);
+
+  const handleRegenTags = useCallback(async () => {
+    setShowRegenTagsConfirm(false);
+    setRegenTagsActive(true);
+    setRegenTagsProgress(null);
+
+    try {
+      const response = await fetch("/api/content/regenerate-all-tags", {
+        method: "POST",
+        headers: adminHeaders(),
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.done) {
+                setRegenTagsProgress({ completed: data.completed, failed: data.failed, total: data.total, current: "" });
+              } else {
+                setRegenTagsProgress({ completed: data.completed, failed: data.failed, total: data.total, current: data.current });
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Regenerate tags error:", err);
+    }
+    setRegenTagsActive(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/tags/summary"] });
+    loadContentStats();
+  }, [loadContentStats, queryClient]);
 
   const handleClearContent = useCallback(async (assetId: string) => {
     setClearingAssetId(assetId);
@@ -980,6 +1026,110 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">No content storage data available.</div>
+            )}
+          </Card>
+
+          <Card className="rounded-2xl border bg-card/70 p-6 shadow-sm backdrop-blur" data-testid="regen-tags-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border bg-card">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium">Re-generate Tags</div>
+                <div className="text-xs text-muted-foreground">
+                  Re-run the improved AI tag prompt against all stored content. User-added tags are preserved.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {!regenTagsActive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => setShowRegenTagsConfirm(true)}
+                  disabled={!contentStats || contentStats.totalStored === 0}
+                  data-testid="button-regen-tags"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Re-generate tags for all analyzed content
+                </Button>
+              )}
+            </div>
+
+            {showRegenTagsConfirm && (
+              <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4" data-testid="regen-tags-confirm">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Confirm Tag Regeneration</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      This will re-analyze all stored content and regenerate keyword tags using the improved AI prompt.
+                      Each asset is processed with a 1.5-second delay. User-added tags will be preserved.
+                      {contentStats && (
+                        <span> Estimated time: ~{Math.ceil(contentStats.totalStored * 1.5 / 60)} minutes for {contentStats.totalStored} assets.</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={handleRegenTags}
+                        data-testid="button-confirm-regen-tags"
+                      >
+                        <Sparkles className="mr-2 h-3 w-3" />
+                        Start regeneration
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => setShowRegenTagsConfirm(false)}
+                        data-testid="button-cancel-regen-tags"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {regenTagsActive && regenTagsProgress && (
+              <div className="mt-4 rounded-xl border bg-muted/30 p-4" data-testid="regen-tags-progress">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-chart-2" />
+                  <span className="text-sm font-medium">Regenerating tags: {regenTagsProgress.completed + regenTagsProgress.failed}/{regenTagsProgress.total} complete</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 mb-2">
+                  <div
+                    className="bg-chart-2 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round(((regenTagsProgress.completed + regenTagsProgress.failed) / regenTagsProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{regenTagsProgress.completed + regenTagsProgress.failed} of {regenTagsProgress.total}</span>
+                  <span>
+                    <span className="text-chart-2">{regenTagsProgress.completed} succeeded</span>
+                    {regenTagsProgress.failed > 0 && (
+                      <span className="text-destructive ml-2">{regenTagsProgress.failed} failed</span>
+                    )}
+                  </span>
+                </div>
+                {regenTagsProgress.current && (
+                  <div className="text-xs text-muted-foreground mt-1 truncate">
+                    Current: {regenTagsProgress.current}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!regenTagsActive && regenTagsProgress && (
+              <div className="mt-4 rounded-xl border border-chart-2/20 bg-chart-2/5 p-3 text-sm flex items-center gap-2" data-testid="regen-tags-complete">
+                <CheckCircle2 className="h-4 w-4 text-chart-2" />
+                Tag regeneration complete: {regenTagsProgress.completed} succeeded, {regenTagsProgress.failed} failed out of {regenTagsProgress.total} total.
+              </div>
             )}
           </Card>
 

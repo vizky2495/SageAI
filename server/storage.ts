@@ -57,7 +57,7 @@ export interface IStorage {
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
   getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags }>>;
-  getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> }>;
+  getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }>;
   updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
   deleteContent(assetId: string): Promise<void>;
   getContentStats(): Promise<{ totalStored: number; totalSize: number }>;
@@ -301,13 +301,20 @@ export class DatabaseStorage implements IStorage {
     return map;
   }
 
-  async getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> }> {
+  async getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }> {
     const rows = await db.select({ keywordTags: contentStored.keywordTags }).from(contentStored);
-    const result: { topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number> } = {
-      topic_tags: {}, audience_tags: {}, intent_tags: {}, user_added_tags: {},
+    const result = {
+      topic_tags: {} as Record<string, number>,
+      audience_tags: {} as Record<string, number>,
+      intent_tags: {} as Record<string, number>,
+      user_added_tags: {} as Record<string, number>,
+      total_assets_with_tags: 0,
+      total_assets: rows.length,
     };
     for (const r of rows) {
       const tags = normalizeKeywordTags(r.keywordTags as any);
+      const hasAny = tags.topic_tags.length + tags.audience_tags.length + tags.intent_tags.length + tags.user_added_tags.length > 0;
+      if (hasAny) result.total_assets_with_tags++;
       for (const type of ["topic_tags", "audience_tags", "intent_tags", "user_added_tags"] as const) {
         for (const tag of tags[type]) {
           result[type][tag] = (result[type][tag] || 0) + 1;

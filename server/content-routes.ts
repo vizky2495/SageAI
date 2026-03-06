@@ -247,6 +247,7 @@ async function fetchAndStoreUrl(assetId: string, url: string, storedBy = "user")
     cta: null,
     structure: { wordCount: 0, sectionCount: 0, pageCount: 1, headings: [] },
     messagingThemes: [],
+    keywordTags: { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] },
   };
 
   if (isPdf && analysis.structure) {
@@ -381,6 +382,7 @@ export function registerContentRoutes(app: Express): void {
             cta: null,
             structure: { wordCount: 0, sectionCount: 0, pageCount: 1, headings: [] },
             messagingThemes: [],
+            keywordTags: { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] },
           };
 
       const stored = await storage.upsertContent({
@@ -582,15 +584,19 @@ export function registerContentRoutes(app: Express): void {
   app.put("/api/content/:assetId/tags", requireAuth, async (req: Request, res: Response) => {
     try {
       const { assetId } = req.params;
-      const tags = req.body as StructuredKeywordTags;
-      if (!tags || !Array.isArray(tags.topic_tags)) {
+      const tags = req.body;
+      if (!tags || typeof tags !== "object") {
         return res.status(400).json({ message: "Invalid tags structure" });
       }
+      const ensureStringArray = (val: unknown): string[] => {
+        if (!Array.isArray(val)) return [];
+        return val.filter((v): v is string => typeof v === "string").map(s => s.trim()).filter(Boolean);
+      };
       await storage.updateAssetTags(assetId, {
-        topic_tags: tags.topic_tags || [],
-        audience_tags: tags.audience_tags || [],
-        intent_tags: tags.intent_tags || [],
-        user_added_tags: tags.user_added_tags || [],
+        topic_tags: ensureStringArray(tags.topic_tags),
+        audience_tags: ensureStringArray(tags.audience_tags),
+        intent_tags: ensureStringArray(tags.intent_tags),
+        user_added_tags: ensureStringArray(tags.user_added_tags),
       });
       res.json({ success: true });
     } catch (err: any) {
