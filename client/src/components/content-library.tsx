@@ -1,10 +1,17 @@
 import { useState, useRef, useCallback, useEffect, createContext, useContext } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { authFetch } from "@/lib/queryClient";
 import {
   ChevronLeft,
@@ -20,6 +27,8 @@ import {
   Loader2,
   Send,
   ArrowRight,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
@@ -1012,15 +1021,24 @@ function ContentCard({
   );
 }
 
+interface Filters {
+  product: string;
+  channel: string;
+  campaign: string;
+  industry: string;
+}
+
 function StageCarousel({
   stage,
   search,
+  filters,
   activeInlineChatId,
   onOpenInlineChat,
   onCloseInlineChat,
 }: {
   stage: "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
   search: string;
+  filters: Filters;
   activeInlineChatId: string | null;
   onOpenInlineChat: (assetId: string) => void;
   onCloseInlineChat: () => void;
@@ -1036,7 +1054,7 @@ function StageCarousel({
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["/api/assets", stage, search],
+    queryKey: ["/api/assets", stage, search, filters],
     queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({
         stage,
@@ -1044,6 +1062,10 @@ function StageCarousel({
         offset: String(pageParam),
       });
       if (search) params.set("search", search);
+      if (filters.product) params.set("product", filters.product);
+      if (filters.channel) params.set("channel", filters.channel);
+      if (filters.campaign) params.set("campaign", filters.campaign);
+      if (filters.industry) params.set("industry", filters.industry);
       const res = await authFetch(`/api/assets?${params}`);
       if (!res.ok) throw new Error("Failed to fetch assets");
       return res.json() as Promise<{ data: AssetAgg[]; total: number }>;
@@ -1170,6 +1192,24 @@ export default function ContentLibrary() {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, navigate] = useLocation();
   const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "" });
+
+  const { data: filterOptions } = useQuery({
+    queryKey: ["/api/assets/filter-options"],
+    queryFn: async () => {
+      const res = await authFetch("/api/assets/filter-options");
+      if (!res.ok) throw new Error("Failed to fetch filter options");
+      return res.json() as Promise<{ products: string[]; channels: string[]; campaigns: string[]; industries: string[] }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+
+  const clearFilters = useCallback(() => {
+    setFilters({ product: "", channel: "", campaign: "", industry: "" });
+  }, []);
 
   const [compareMode, setCompareMode] = useState(false);
   const [selectedCard, setSelectedCard] = useState<{ asset: AssetAgg; stage: string } | null>(null);
@@ -1242,6 +1282,33 @@ export default function ContentLibrary() {
                 </button>
               )}
             </div>
+            <Button
+              variant={showFilters || activeFilterCount > 0 ? "default" : "outline"}
+              size="sm"
+              className={`h-9 gap-1.5 rounded-xl text-xs ${activeFilterCount > 0 ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+              onClick={() => setShowFilters((p) => !p)}
+              data-testid="button-toggle-filters"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge className="ml-0.5 h-4 min-w-4 rounded-full bg-white/20 px-1 text-[10px] text-white" data-testid="badge-active-filters">
+                  {activeFilterCount}
+                </Badge>
+              )}
+              <ChevronDown className={`h-3 w-3 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+            </Button>
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs text-muted-foreground hover:text-foreground"
+                onClick={clearFilters}
+                data-testid="button-clear-filters"
+              >
+                Clear all
+              </Button>
+            )}
             {compareMode && (
               <div className="flex items-center gap-2 ml-auto">
                 <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
@@ -1260,12 +1327,60 @@ export default function ContentLibrary() {
               </div>
             )}
           </div>
+          {showFilters && (
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="filter-panel">
+              <Select value={filters.product} onValueChange={(v) => setFilters((f) => ({ ...f, product: v === "__all__" ? "" : v }))}>
+                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-product">
+                  <SelectValue placeholder="Product" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Products</SelectItem>
+                  {filterOptions?.products.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.campaign} onValueChange={(v) => setFilters((f) => ({ ...f, campaign: v === "__all__" ? "" : v }))}>
+                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-campaign">
+                  <SelectValue placeholder="Campaign" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Campaigns</SelectItem>
+                  {filterOptions?.campaigns.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.channel} onValueChange={(v) => setFilters((f) => ({ ...f, channel: v === "__all__" ? "" : v }))}>
+                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-channel">
+                  <SelectValue placeholder="Channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Channels</SelectItem>
+                  {filterOptions?.channels.map((ch) => (
+                    <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.industry} onValueChange={(v) => setFilters((f) => ({ ...f, industry: v === "__all__" ? "" : v }))}>
+                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-industry">
+                  <SelectValue placeholder="Industry" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Industries</SelectItem>
+                  {filterOptions?.industries.map((ind) => (
+                    <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </Card>
 
-        <StageCarousel stage="TOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="MOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="BOFU" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="UNKNOWN" search={debouncedSearch} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
       </div>
 
       {comparisonPair && (

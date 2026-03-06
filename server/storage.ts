@@ -21,9 +21,14 @@ export interface IStorage {
   getAssets(opts: {
     stage: string;
     search?: string;
+    product?: string;
+    channel?: string;
+    campaign?: string;
+    industry?: string;
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }>;
+  getAssetFilterOptions(): Promise<{ products: string[]; channels: string[]; campaigns: string[]; industries: string[] }>;
   getAllAssets(): Promise<AssetAgg[]>;
   createFeedback(item: InsertFeedback): Promise<Feedback>;
   getFeedback(opts: { type?: string; status?: string }): Promise<Feedback[]>;
@@ -61,12 +66,28 @@ export class DatabaseStorage implements IStorage {
   async getAssets(opts: {
     stage: string;
     search?: string;
+    product?: string;
+    channel?: string;
+    campaign?: string;
+    industry?: string;
     limit: number;
     offset: number;
   }): Promise<{ data: AssetAgg[]; total: number }> {
     const conditions = [eq(assetsAgg.stage, opts.stage as any)];
     if (opts.search) {
       conditions.push(ilike(assetsAgg.contentId, `%${opts.search}%`));
+    }
+    if (opts.product) {
+      conditions.push(eq(assetsAgg.productFranchise, opts.product));
+    }
+    if (opts.channel) {
+      conditions.push(eq(assetsAgg.utmChannel, opts.channel));
+    }
+    if (opts.campaign) {
+      conditions.push(eq(assetsAgg.campaignName, opts.campaign));
+    }
+    if (opts.industry) {
+      conditions.push(eq(assetsAgg.productCategory, opts.industry));
     }
 
     const where = conditions.length === 1 ? conditions[0] : and(...conditions);
@@ -95,6 +116,16 @@ export class DatabaseStorage implements IStorage {
     ]);
 
     return { data, total };
+  }
+
+  async getAssetFilterOptions(): Promise<{ products: string[]; channels: string[]; campaigns: string[]; industries: string[] }> {
+    const [products, channels, campaigns, industries] = await Promise.all([
+      db.selectDistinct({ value: assetsAgg.productFranchise }).from(assetsAgg).then(rows => rows.map(r => r.value).filter(Boolean).sort() as string[]),
+      db.selectDistinct({ value: assetsAgg.utmChannel }).from(assetsAgg).then(rows => rows.map(r => r.value).filter(Boolean).sort() as string[]),
+      db.selectDistinct({ value: assetsAgg.campaignName }).from(assetsAgg).then(rows => rows.map(r => r.value).filter(Boolean).sort() as string[]),
+      db.selectDistinct({ value: assetsAgg.productCategory }).from(assetsAgg).then(rows => rows.map(r => r.value).filter(Boolean).sort() as string[]),
+    ]);
+    return { products, channels, campaigns, industries };
   }
   async getAllAssets(): Promise<AssetAgg[]> {
     return db.select().from(assetsAgg).orderBy(desc(assetsAgg.pageviewsSum));
