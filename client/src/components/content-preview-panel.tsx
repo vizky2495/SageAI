@@ -32,6 +32,7 @@ import {
   Users,
   Target,
   Megaphone,
+  Info,
 } from "lucide-react";
 import type { AssetAgg } from "@shared/schema";
 
@@ -288,6 +289,12 @@ export default function ContentPreviewPanel({
 
               <Separator />
 
+              <AssetDetails asset={asset} stage={stage} />
+
+              <EngagementMetrics asset={asset} />
+
+              <Separator />
+
               <div className="flex flex-wrap gap-2">
                 {content.hasFile && (
                   <Button
@@ -331,6 +338,7 @@ export default function ContentPreviewPanel({
           ) : (
             <NotStoredView
               asset={asset}
+              stage={stage}
               fetchUrl={fetchUrl}
               setFetchUrl={setFetchUrl}
               onFetch={() => fetchMutation.mutate(fetchUrl)}
@@ -383,6 +391,51 @@ function StatBox({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-sm font-bold">{value}</div>
     </div>
+  );
+}
+
+function AssetDetails({ asset, stage }: { asset: AssetAgg; stage: string }) {
+  const rows: { label: string; value: string | null | undefined }[] = [
+    { label: "Content ID", value: asset.contentId },
+    { label: "Stage", value: stage },
+    { label: "Campaign Name", value: asset.campaignName || asset.name },
+    { label: "Product", value: asset.productFranchise },
+    { label: "Category", value: asset.productCategory },
+    { label: "Channel", value: asset.utmChannel },
+    { label: "Medium", value: asset.utmMedium },
+    { label: "Campaign", value: asset.utmCampaign },
+    { label: "Term", value: asset.utmTerm },
+    { label: "UTM Content", value: asset.utmContent },
+    { label: "CTA", value: asset.cta },
+    { label: "Objective", value: asset.objective },
+    { label: "Form Name", value: asset.formName },
+    { label: "Content Type", value: asset.typecampaignmember },
+    { label: "Campaign ID", value: asset.campaignId },
+    { label: "Date", value: asset.dateStamp },
+  ].filter((r) => r.value);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section>
+      <SectionHeader icon={<Info className="h-3.5 w-3.5" />} label="Asset Details" />
+      <div className="space-y-1.5" data-testid="asset-details">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-start gap-2 text-xs">
+            <span className="shrink-0 w-[100px] text-muted-foreground">{r.label}</span>
+            <span className="font-medium break-all text-foreground/90">
+              {r.label === "Content ID" && asset.url ? (
+                <a href={asset.url.startsWith("http") ? asset.url : `https://${asset.url}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  {r.value}
+                </a>
+              ) : (
+                r.value
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -442,6 +495,7 @@ function EngagementMetrics({ asset }: { asset: AssetAgg }) {
 
 function NotStoredView({
   asset,
+  stage,
   fetchUrl,
   setFetchUrl,
   onFetch,
@@ -453,6 +507,7 @@ function NotStoredView({
   handleDrop,
 }: {
   asset: AssetAgg;
+  stage: string;
   fetchUrl: string;
   setFetchUrl: (v: string) => void;
   onFetch: () => void;
@@ -545,6 +600,8 @@ function NotStoredView({
       </div>
 
       <Separator />
+
+      <AssetDetails asset={asset} stage={stage} />
 
       <EngagementMetrics asset={asset} />
 
