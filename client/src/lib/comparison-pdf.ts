@@ -53,6 +53,9 @@ interface FullComparisonResult {
   performanceDisplay?: "table" | "inline" | "none";
   performanceInlineSummary?: string | null;
   lowEngagement?: boolean;
+  isDuplicate?: boolean;
+  duplicateMessage?: string;
+  metadataIssues?: { asset: string; field: string; tagged: string; issue: string }[];
   metadata: {
     stageA: string; stageB: string; productA: string; productB: string;
     countryA: string; countryB: string; industryA: string; industryB: string;
@@ -329,10 +332,33 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   doc.setFont("helvetica", "bold");
   doc.text("SAGE", MARGIN + 2, 268.5);
 
+  // === DUPLICATE ALERT ===
+  if (data.isDuplicate && data.duplicateMessage) {
+    newPage();
+    const alertText = data.duplicateMessage;
+    const alertLines = doc.splitTextToSize(alertText, CONTENT_W - 14);
+    const alertH = alertLines.length * 4.5 + 14;
+    setFill("#3D2800");
+    doc.roundedRect(MARGIN, y, CONTENT_W, alertH, 2, 2, "F");
+    doc.setDrawColor(...hexToRgb("#F5A623"));
+    doc.setLineWidth(0.8);
+    doc.line(MARGIN, y, MARGIN, y + alertH);
+    doc.setLineWidth(0.2);
+    setColor("#F5A623");
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("DUPLICATE CONTENT DETECTED", MARGIN + 7, y + 6);
+    setColor(SAGE.bodyText);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    alertLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 7, y + 12 + li * 4.5); });
+    y += alertH + 6;
+  }
+
   // === CONTENT OVERVIEW ===
   const hasOverview = data.contentOverview && (data.contentOverview.a || data.contentOverview.b);
   if (hasOverview) {
-    newPage();
+    if (!data.isDuplicate) newPage();
     sectionTitle("Content Overview");
     sourceTag("Source: Content Analysis");
     y += 2;
@@ -387,11 +413,39 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       ["Industry", dv(meta.industryA), dv(meta.industryB)],
     ];
     metaRows.forEach((row, i) => drawTableRow(row, metaWidths, false, i % 2 === 0));
+
+    const metaIssues = data.metadataIssues || [];
+    if (metaIssues.length > 0) {
+      y += 3;
+      checkPage(12 + metaIssues.length * 5);
+      setFill("#3D2800");
+      const issueTexts = metaIssues.map(mi => `${mi.asset}: ${mi.field} tag says "${mi.tagged}" — ${mi.issue}`);
+      const allIssueLines: string[] = [];
+      issueTexts.forEach(t => {
+        const lines = doc.splitTextToSize(`• ${t}`, CONTENT_W - 14);
+        allIssueLines.push(...lines);
+      });
+      const issueH = allIssueLines.length * 4 + 12;
+      doc.roundedRect(MARGIN, y, CONTENT_W, issueH, 2, 2, "F");
+      doc.setDrawColor(...hexToRgb("#F5A623"));
+      doc.setLineWidth(0.5);
+      doc.line(MARGIN, y, MARGIN, y + issueH);
+      doc.setLineWidth(0.2);
+      setColor("#F5A623");
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Metadata issues detected: ${metaIssues.length} field${metaIssues.length !== 1 ? "s" : ""} may be incorrect`, MARGIN + 5, y + 5);
+      setColor(SAGE.bodyText);
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "normal");
+      allIssueLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 5, y + 10 + li * 4); });
+      y += issueH + 3;
+    }
   }
 
   // === KEY TOPICS ===
   const kt = data.keyTopics;
-  if (kt && (kt.a?.length || kt.b?.length)) {
+  if (!data.isDuplicate && kt && (kt.a?.length || kt.b?.length)) {
     newPage();
     sectionTitle("Key Topics");
     sourceTag("Source: Content Analysis");
@@ -420,7 +474,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   }
 
   // === AUDIENCE RESONANCE ASSESSMENT ===
-  if (data.resonanceAssessment && (data.resonanceAssessment.a || data.resonanceAssessment.b)) {
+  if (!data.isDuplicate && data.resonanceAssessment && (data.resonanceAssessment.a || data.resonanceAssessment.b)) {
     newPage();
     sectionTitle("Audience Resonance");
     sourceTag("Source: Content Analysis");
@@ -466,7 +520,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
   // === WHAT'S SHARED, WHAT'S DIFFERENT ===
   const hasTagData = (data.sharedTags?.length || data.uniqueTagsA?.length || data.uniqueTagsB?.length);
-  if (data.sharedAndDifferent && (data.sharedAndDifferent.overlap?.length || data.sharedAndDifferent.divergence?.length || hasTagData)) {
+  if (!data.isDuplicate && data.sharedAndDifferent && (data.sharedAndDifferent.overlap?.length || data.sharedAndDifferent.divergence?.length || hasTagData)) {
     newPage();
     sectionTitle("Shared vs Different");
     sourceTag("Source: Content Analysis");
@@ -516,7 +570,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
   // === WHAT WORKS / COULD BE IMPROVED ===
   const wmw = data.whatMakesItWork;
-  if (wmw && (wmw.a?.length || wmw.b?.length)) {
+  if (!data.isDuplicate && wmw && (wmw.a?.length || wmw.b?.length)) {
     newPage();
     sectionTitle("What Works");
     y += 2;
@@ -538,7 +592,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   }
 
   const wci = data.whatCouldBeImproved;
-  if (wci && (wci.a?.length || wci.b?.length)) {
+  if (!data.isDuplicate && wci && (wci.a?.length || wci.b?.length)) {
     checkPage(40);
     sectionTitle("Could Be Improved");
     y += 2;

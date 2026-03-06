@@ -19,7 +19,7 @@ Preferred communication style: Simple, everyday language.
 -   **Core Pages**:
     -   **Hub**: Landing page for navigation.
     -   **Content Performance & Deep Dive Analytics**: Dashboards for KPI overview, funnel insights, filtering, and CTA/channel analysis.
-    -   **Content Library**: For content browsing, search, and AI-powered comparison. Includes content availability indicators, upload functionality, content coverage metrics, and detailed preview panels (with AI analysis for uploaded content). The Content Comparison feature uses a 4-dimension Content Resonance framework for in-depth analysis, generating comparison reports and integrating with the Campaign Planner.
+    -   **Content Library**: For content browsing, search, and AI-powered comparison. Includes content availability indicators, upload functionality, content coverage metrics, and detailed preview panels (with AI analysis for uploaded content). The Content Comparison feature uses a 4-dimension Content Resonance framework for in-depth analysis, generating comparison reports and integrating with the Campaign Planner. Features **duplicate detection** (90%+ text overlap triggers a prominent alert banner, shortened report skipping redundant sections), and a **metadata health indicator** flagging fields where AI analysis found "Weak" resonance (product/stage/country/industry mismatches).
     -   **Campaign Planner**: An AI-driven tool for generating campaign strategies based on structured briefs. Features guided intake, campaign history, and plan summary dashboards with PDF export.
     -   **Feedback & My Reports & Admin**: Standard pages for user feedback, customizable reports, and administrative tasks like data upload and AI column mapping.
 

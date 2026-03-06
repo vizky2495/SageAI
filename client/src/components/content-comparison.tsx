@@ -32,6 +32,7 @@ import {
   CheckCircle,
   ExternalLink,
   Rocket,
+  ShieldAlert,
 } from "lucide-react";
 
 interface Classification {
@@ -1188,9 +1189,23 @@ function ComparisonResults({
   const hasStructuredTags = flattenKeywordTags(structuredTagsA).length > 0 || flattenKeywordTags(structuredTagsB).length > 0 || flattenKeywordTags(structuredShared).length > 0;
 
   const displayVal = (v: string | undefined | null) => v || "Not specified";
+  const isDup = comparisonData.isDuplicate;
+  const metaIssues = comparisonData.metadataIssues || [];
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-4">
+
+      {isDup && comparisonData.duplicateMessage && (
+        <Card className="rounded-2xl border-l-4 border-l-amber-500 border border-amber-500/30 bg-amber-500/10 p-5 backdrop-blur" data-testid="duplicate-alert">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-bold text-amber-400 mb-1">Duplicate Content Detected</h3>
+              <p className="text-xs text-foreground/85 leading-relaxed">{comparisonData.duplicateMessage}</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {overview && (overview.a || overview.b) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="content-overview">
@@ -1243,10 +1258,26 @@ function ComparisonResults({
               </div>
             ))}
           </div>
+
+          {metaIssues.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3" data-testid="metadata-health">
+              <div className="flex items-center gap-1.5 mb-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-[10px] font-semibold text-amber-400 uppercase">Metadata issues detected: {metaIssues.length} field{metaIssues.length !== 1 ? "s" : ""} may be incorrect</span>
+              </div>
+              <div className="space-y-1">
+                {metaIssues.map((mi, idx) => (
+                  <p key={idx} className="text-[10px] text-foreground/75 leading-relaxed pl-5">
+                    <span className="font-medium text-foreground/85">{mi.asset}</span> — {mi.field} tag says "{mi.tagged}" but {mi.issue.toLowerCase().startsWith("tagged") ? mi.issue.slice(mi.issue.indexOf(" ") + 1) : mi.issue.toLowerCase()}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
-      {keyTopics && (keyTopics.a?.length || keyTopics.b?.length) ? (
+      {!isDup && keyTopics && (keyTopics.a?.length || keyTopics.b?.length) ? (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="key-topics">
           <div className="flex items-center gap-2 mb-3">
             <Layers className="h-4 w-4 text-primary" />
@@ -1280,7 +1311,7 @@ function ComparisonResults({
         </Card>
       ) : null}
 
-      {resonance && (resonance.a || resonance.b) && (
+      {!isDup && resonance && (resonance.a || resonance.b) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="resonance-assessment">
           <div className="flex items-center gap-2 mb-3">
             <Target className="h-4 w-4 text-primary" />
@@ -1327,7 +1358,7 @@ function ComparisonResults({
         </Card>
       )}
 
-      {shared && (shared.overlap?.length || shared.divergence?.length || sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
+      {!isDup && shared && (shared.overlap?.length || shared.divergence?.length || sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="shared-different">
           <div className="flex items-center gap-2 mb-3">
             <ArrowLeftRight className="h-4 w-4 text-primary" />
@@ -1372,7 +1403,7 @@ function ComparisonResults({
         </Card>
       )}
 
-      {whatWorks && (whatWorks.a?.length || whatWorks.b?.length) ? (
+      {!isDup && whatWorks && (whatWorks.a?.length || whatWorks.b?.length) ? (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="what-makes-it-work">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-primary" />
@@ -1393,7 +1424,7 @@ function ComparisonResults({
         </Card>
       ) : null}
 
-      {whatImprove && (whatImprove.a?.length || whatImprove.b?.length) ? (
+      {!isDup && whatImprove && (whatImprove.a?.length || whatImprove.b?.length) ? (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="what-could-be-improved">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="h-4 w-4 text-amber-400" />
