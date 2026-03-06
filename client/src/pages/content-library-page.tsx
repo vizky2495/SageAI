@@ -2,7 +2,6 @@ import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import ContentLibrary from "@/components/content-library";
 import ContentComparison from "@/components/content-comparison";
-import AiInsightsBar from "@/components/ai-insights-bar";
 import { motion } from "framer-motion";
 import { Library } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -44,9 +43,7 @@ export default function ContentLibraryPage() {
             </div>
           </header>
 
-          <AiInsightsBar page="content-library" />
-
-          <div className="mb-4 mt-4">
+          <div className="mb-4">
             <ContentComparison />
           </div>
           <ContentLibrary />
