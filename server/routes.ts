@@ -665,7 +665,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
     try {
       const { contentA, contentB } = req.body as {
         contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
-        contentB: { name: string; stage: string; product: string; contentType: string; industry: string; topic: string; text?: string; hasExistingAnalysis?: boolean };
+        contentB: { name: string; contentId?: string; stage: string; product: string; contentType: string; industry: string; topic: string; text?: string; hasExistingAnalysis?: boolean; metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
       };
 
       if (!contentA || !contentB) {
@@ -680,159 +680,6 @@ No explanation, no markdown, no extra text. Only JSON.`,
         topic: contentB.topic || contentB.name,
         confidence: 1.0,
       };
-
-      if (contentB.hasExistingAnalysis) {
-        function toReadableNameEarly(raw: string): string {
-          if (!raw || raw.length < 5) return raw;
-          const parts = raw.split("_");
-          if (parts.length < 4) return raw;
-          const regionMap: Record<string, string> = { US: "US", UK: "UK", CA: "Canada", CAEN: "English Canada", CAFR: "French Canada", DE: "Germany", FR: "France", AU: "Australia", ZA: "South Africa" };
-          const stageMap: Record<string, string> = { TOFU: "TOFU", MOFU: "MOFU", BOFU: "BOFU" };
-          let region = "", stage = "";
-          const chunks: string[] = [];
-          for (const p of parts.slice(2)) {
-            if (regionMap[p]) { region = regionMap[p]; continue; }
-            if (stageMap[p]) { stage = stageMap[p]; continue; }
-            if (/^[A-Z]{2,4}$/.test(p) && p.length <= 4) continue;
-            if (/^\d{4}/.test(p)) { chunks.push(p.replace(/^\d+/, "")); continue; }
-            chunks.push(p);
-          }
-          const name = chunks.join(" ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").replace(/\|/g, ", ").trim();
-          if (!name) return raw;
-          const suffix = [region, stage].filter(Boolean).join(", ");
-          return suffix ? `${name} (${suffix})` : name;
-        }
-        const nameAEarly = toReadableNameEarly(contentA.name);
-        const nameBEarly = toReadableNameEarly(contentB.name);
-
-        let contentAStoredEarly: any = null;
-        try { contentAStoredEarly = await storage.getContentByAssetId(contentA.contentId); } catch {}
-        const aHasContentEarly = contentAStoredEarly?.fetchStatus === "success";
-        const bHasContentEarly = true;
-
-        let dataSourceNoteEarly = "";
-        if (aHasContentEarly && bHasContentEarly) {
-          dataSourceNoteEarly = "This comparison includes performance metrics [Source: Internal Data] and content quality analysis [Source: Content Analysis].";
-        } else {
-          dataSourceNoteEarly = `Performance comparison is complete for both assets. Content quality analysis is available for ${nameBEarly} only. Upload content for ${nameAEarly} to enable full comparison.`;
-        }
-
-        let verdict = "";
-        try {
-          const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-          const primaryMetric = classification.stage === "BOFU" ? "SQOs" : classification.stage === "MOFU" ? "leads" : "pageviews";
-          const msg = await anthropic.messages.create({
-            model: "claude-sonnet-4-5",
-            max_tokens: 400,
-            system: `You are a senior content strategist for Sage. Compare a baseline content asset (Content A, with real performance data) against a new content asset (Content B). Provide a data-driven comparison verdict in 3-5 sentences. Include: which content has stronger potential, specific metric deltas, and one actionable recommendation. Use the human-readable asset names provided, not raw IDs. End with a data source note about what data this comparison is based on.`,
-            messages: [{
-              role: "user",
-              content: `BASELINE (Content A): ${nameAEarly} | ${contentA.stage} | Views: ${contentA.metrics.pageviews} | Leads: ${contentA.metrics.leads} | SQOs: ${contentA.metrics.sqos} | Content uploaded: ${aHasContentEarly ? "Yes" : "No"}\n\nNEW CONTENT (Content B): ${nameBEarly} | ${classification.stage} | ${classification.contentType} | ${classification.product} | Content uploaded: Yes\n\nPrimary metric for ${classification.stage} stage: ${primaryMetric}\n\nDATA SOURCE NOTE (include at end): ${dataSourceNoteEarly}`,
-            }],
-          });
-          verdict = ((msg.content[0] as any).text || "").trim();
-        } catch (verdictErr) {
-          console.error("Verdict-only generation failed:", verdictErr);
-          verdict = `Compare ${nameAEarly} (${contentA.metrics.pageviews} views, ${contentA.metrics.leads} leads) against ${nameBEarly} to evaluate relative performance potential. ${dataSourceNoteEarly}`;
-        }
-        return res.json({ verdict });
-      }
-
-      let matchedAssets: any[] = [];
-      let aggregateBenchmarks: any = null;
-
-      try {
-        const allAssets = await storage.getAllAssets();
-        const sameStage = allAssets.filter(a => a.stage === classification.stage);
-        const sameStagePool = sameStage.length >= 5 ? sameStage : allAssets.filter(a => a.stage !== "UNKNOWN");
-
-        const primaryMetricKey: Record<string, string> = { TOFU: "pageviewsSum", MOFU: "uniqueLeads", BOFU: "sqoCount" };
-        const metricKey = primaryMetricKey[classification.stage] || "pageviewsSum";
-
-        const metricValues = sameStagePool.map(a => (a as any)[metricKey] || 0).sort((x: number, y: number) => x - y);
-        const q75Index = Math.floor(metricValues.length * 0.75);
-        const q75Threshold = metricValues.length > 0 ? metricValues[q75Index] : 0;
-        const topPerformers = sameStagePool.filter(a => ((a as any)[metricKey] || 0) >= q75Threshold);
-
-        const pool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
-
-        const classTopicWords: Set<string> = new Set(
-          (classification.topic || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3)
-        );
-        const classProductWords: Set<string> = new Set(
-          (classification.product || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 2)
-        );
-
-        const scored = pool.map(a => {
-          let productScore = 0;
-          if (classification.product !== "General") {
-            const assetProductFields = [a.productFranchise, a.productCategory].filter(Boolean).join(" ").toLowerCase();
-            if (assetProductFields) {
-              for (const pw of classProductWords) {
-                if (assetProductFields.includes(pw)) { productScore = 1; break; }
-              }
-            }
-          }
-
-          let topicScore = 0;
-          if (classTopicWords.size > 0) {
-            const assetWords: Set<string> = new Set(
-              [a.name, a.objective, a.cta, a.campaignName, a.contentId, a.productCategory]
-                .filter(Boolean).join(" ").toLowerCase().split(/[\s_\-]+/).filter(w => w.length > 3)
-            );
-            const overlap = Array.from(classTopicWords).filter(w => assetWords.has(w)).length;
-            topicScore = classTopicWords.size > 0 ? Math.min(overlap / classTopicWords.size, 1) : 0;
-          }
-
-          const relevance = productScore * 0.5 + topicScore * 0.5;
-          return { asset: a, relevance };
-        });
-
-        scored.sort((a, b) => b.relevance - a.relevance);
-        matchedAssets = scored.slice(0, 5).map(s => ({
-          contentId: s.asset.contentId,
-          name: s.asset.name,
-          stage: s.asset.stage,
-          type: s.asset.typecampaignmember,
-          product: s.asset.productFranchise,
-          channel: s.asset.utmChannel,
-          cta: s.asset.cta,
-          pageviews: s.asset.pageviewsSum || 0,
-          downloads: s.asset.downloadsSum || 0,
-          leads: s.asset.uniqueLeads || 0,
-          sqos: s.asset.sqoCount || 0,
-          avgTime: s.asset.timeAvg || 0,
-          relevanceScore: Math.round(s.relevance * 100),
-        }));
-
-        const stats = (arr: number[]) => {
-          if (arr.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
-          const sorted = [...arr].sort((a, b) => a - b);
-          const sum = sorted.reduce((a, b) => a + b, 0);
-          const mean = sum / sorted.length;
-          const mid = Math.floor(sorted.length / 2);
-          const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-          return { min: sorted[0], max: sorted[sorted.length - 1], mean: Math.round(mean * 10) / 10, median };
-        };
-
-        const benchmarkPool = topPerformers.length >= 3 ? topPerformers : sameStagePool;
-        aggregateBenchmarks = {
-          sampleSize: benchmarkPool.length,
-          totalPoolSize: sameStagePool.length,
-          pageviews: stats(benchmarkPool.map(a => a.pageviewsSum || 0)),
-          downloads: stats(benchmarkPool.map(a => a.downloadsSum || 0)),
-          leads: stats(benchmarkPool.map(a => a.uniqueLeads || 0)),
-          sqos: stats(benchmarkPool.map(a => a.sqoCount || 0)),
-          timeOnPage: stats(benchmarkPool.map(a => a.timeAvg || 0)),
-          avgCtaCount: benchmarkPool.length > 0
-            ? Math.round(benchmarkPool.map(a => a.cta ? a.cta.split(/[,;|]/).filter((s: string) => s.trim()).length : 0).reduce((a: number, b: number) => a + b, 0) / benchmarkPool.length * 10) / 10
-            : 0,
-        };
-      } catch (benchErr) {
-        console.error("Full comparison benchmark lookup failed:", benchErr);
-      }
-
-      const analysis = generateFallbackAnalysis(classification, matchedAssets, aggregateBenchmarks, 0, 0);
 
       function toReadableName(raw: string): string {
         if (!raw || raw.length < 5) return raw;
@@ -862,79 +709,207 @@ No explanation, no markdown, no extra text. Only JSON.`,
       let contentBStored: any = null;
       try {
         contentAStored = await storage.getContentByAssetId(contentA.contentId);
+      } catch {}
+      try {
         if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId);
       } catch {}
       const aHasContent = contentAStored?.fetchStatus === "success";
       const bHasContent = contentBStored?.fetchStatus === "success" || !!contentB.text;
 
-      let dataSourceNote = "";
-      if (aHasContent && bHasContent) {
-        dataSourceNote = "This comparison includes performance metrics [Source: Internal Data] and content quality analysis [Source: Content Analysis].";
-      } else if (aHasContent || bHasContent) {
-        const withContent = aHasContent ? nameA : nameB;
-        const without = aHasContent ? nameB : nameA;
-        dataSourceNote = `Performance comparison is complete for both assets. Content quality analysis is available for ${withContent} only. Upload content for ${without} to enable full comparison.`;
-      } else {
-        dataSourceNote = "This comparison is based on performance metrics only [Source: Internal Data]. Upload content files for both assets to also compare content quality, topics, and messaging.";
+      const aTextForAnalysis = contentAStored?.contentText || "";
+      const bTextForAnalysis = contentBStored?.contentText || contentB.text || "";
+      const bothHaveContent = !!(aTextForAnalysis && bTextForAnalysis);
+
+      const metricsA = contentA.metrics;
+      const metricsB = contentB.metrics || { pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 };
+      const aHasMetrics = metricsA.pageviews > 0 || metricsA.downloads > 0 || metricsA.leads > 0 || metricsA.sqos > 0;
+      const bHasMetrics = metricsB.pageviews > 0 || metricsB.downloads > 0 || metricsB.leads > 0 || metricsB.sqos > 0;
+
+      let contentAnalysis: any = null;
+
+      if (bothHaveContent) {
+        try {
+          const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+
+          const aStructure = contentAStored?.contentStructure || {};
+          const bStructure = contentBStored?.contentStructure || {};
+          const aTopics = contentAStored?.extractedTopics || [];
+          const bTopics = contentBStored?.extractedTopics || [];
+          const aCta = contentAStored?.extractedCta;
+          const bCta = contentBStored?.extractedCta;
+          const aSummary = contentAStored?.contentSummary || "";
+          const bSummary = contentBStored?.contentSummary || "";
+          const aThemes = contentAStored?.messagingThemes || [];
+          const bThemes = contentBStored?.messagingThemes || [];
+
+          const analysisMsg = await anthropic.messages.create({
+            model: "claude-sonnet-4-5",
+            max_tokens: 3000,
+            system: `You are a senior content analyst. You will receive the full text of two content assets (Content A and Content B). Analyze them and return a JSON object with detailed content-to-content comparison. Be specific — cite section numbers, word counts, and exact details from the content. Do NOT fabricate or project any performance numbers. Only describe what is actually in the content.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "topicCoverage": [
+    { "topic": "string", "contentA": "string describing coverage or 'Not covered'", "contentB": "string describing coverage or 'Not covered'" }
+  ],
+  "sharedContent": [
+    { "topic": "string", "comparison": "string explaining how each piece handles it differently" }
+  ],
+  "uniqueToA": [
+    { "topic": "string", "assessment": "string — is this a strength or gap, and why" }
+  ],
+  "uniqueToB": [
+    { "topic": "string", "assessment": "string — is this a strength or gap, and why" }
+  ],
+  "messaging": {
+    "primaryAudienceA": "string",
+    "primaryAudienceB": "string",
+    "toneA": "string",
+    "toneB": "string",
+    "depthA": "string",
+    "depthB": "string",
+    "languageA": "string",
+    "languageB": "string",
+    "readingLevelA": "string",
+    "readingLevelB": "string"
+  },
+  "ctaComparison": {
+    "ctaPresentA": true/false,
+    "ctaPresentB": true/false,
+    "ctaTextA": "exact CTA text found or 'None found'",
+    "ctaTextB": "exact CTA text found or 'None found'",
+    "ctaTypeA": "Soft/Medium/Strong or 'N/A'",
+    "ctaTypeB": "Soft/Medium/Strong or 'N/A'",
+    "ctaPlacementA": "where in the document",
+    "ctaPlacementB": "where in the document",
+    "ctaStrengthAssessmentA": "AI assessment with reasoning",
+    "ctaStrengthAssessmentB": "AI assessment with reasoning"
+  },
+  "structureComparison": {
+    "formatA": "string",
+    "formatB": "string",
+    "wordCountA": number,
+    "wordCountB": number,
+    "sectionsA": "string describing section structure",
+    "sectionsB": "string describing section structure",
+    "visualsA": "string describing visual elements",
+    "visualsB": "string describing visual elements",
+    "readabilityA": "string",
+    "readabilityB": "string"
+  },
+  "suggestions": [
+    { "text": "string — specific actionable recommendation grounded in analysis", "source": "AI Recommendation" }
+  ]
+}`,
+            messages: [{
+              role: "user",
+              content: `CONTENT A — "${nameA}":
+Summary: ${aSummary}
+Known topics: ${aTopics.join(", ") || "none extracted"}
+Known CTA: ${aCta ? `${aCta.text} (${aCta.type}, ${aCta.strength})` : "none extracted"}
+Known themes: ${aThemes.join(", ") || "none"}
+Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages, ${aStructure.sectionCount || "?"} sections
+Format: ${contentAStored?.contentFormat || contentA.type || "Unknown"}
+Headings: ${(aStructure.headings || []).join("; ") || "none"}
+
+Full text (first 4000 chars):
+${aTextForAnalysis.slice(0, 4000)}
+
+---
+
+CONTENT B — "${nameB}":
+Summary: ${bSummary}
+Known topics: ${bTopics.join(", ") || "none extracted"}
+Known CTA: ${bCta ? `${bCta.text} (${bCta.type}, ${bCta.strength})` : "none extracted"}
+Known themes: ${bThemes.join(", ") || "none"}
+Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages, ${bStructure.sectionCount || "?"} sections
+Format: ${contentBStored?.contentFormat || classification.contentType || "Unknown"}
+Headings: ${(bStructure.headings || []).join("; ") || "none"}
+
+Full text (first 4000 chars):
+${bTextForAnalysis.slice(0, 4000)}`,
+            }],
+          });
+
+          const analysisText = ((analysisMsg.content[0] as any).text || "").trim();
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            contentAnalysis = JSON.parse(jsonMatch[0]);
+          }
+        } catch (analysisErr) {
+          console.error("Content analysis generation failed:", analysisErr);
+        }
+      }
+
+      let sourceTags: string[] = [];
+      if (aHasMetrics || bHasMetrics) sourceTags.push("[Source: Internal Data — engagement metrics]");
+      if (bothHaveContent) sourceTags.push("[Source: Content Analysis — from uploaded files]");
+      else if (aHasContent || bHasContent) {
+        const side = aHasContent ? nameA : nameB;
+        sourceTags.push(`[Source: Content Analysis — ${side} only]`);
       }
 
       let verdict = "";
       try {
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-        const primaryMetric = classification.stage === "BOFU" ? "SQOs" : classification.stage === "MOFU" ? "leads" : "pageviews";
-        const msg = await anthropic.messages.create({
+        const verdictMsg = await anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 400,
-          system: `You are a senior content strategist for Sage. Compare a baseline content asset (Content A, with real performance data) against a new/candidate content asset (Content B, with projected performance). Provide a data-driven comparison verdict in 3-5 sentences. Include: which content has stronger potential, specific metric deltas, and one actionable recommendation. Use actual numbers from the data provided. Use the human-readable asset names provided, not raw IDs. End with a data source note about what data this comparison is based on.`,
+          max_tokens: 800,
+          system: `You are a senior content strategist for Sage. Write a factual comparison verdict based ONLY on the data provided. 
+
+RULES:
+- Do NOT assign readiness scores or project performance numbers
+- Do NOT fabricate any metrics — if an asset has zero engagement data, say "no engagement data yet"
+- DO describe what each content piece covers based on the content analysis provided
+- DO cite real engagement numbers with [Source: Internal Data] tags
+- DO cite content observations with [Source: Content Analysis] tags
+- DO end with 2-3 specific suggestions tagged [Source: AI Recommendation]
+- Use the human-readable asset names, not raw IDs
+- Write in a clear, factual tone. 4-8 sentences for the main verdict, then suggestions as bullet points.`,
           messages: [{
             role: "user",
-            content: `BASELINE (Content A):
-Name: ${nameA}
-Stage: ${contentA.stage}
-Product: ${contentA.product || "N/A"}
-Type: ${contentA.type || "N/A"}
-Pageviews: ${contentA.metrics.pageviews}
-Downloads: ${contentA.metrics.downloads}
-Leads: ${contentA.metrics.leads}
-SQOs: ${contentA.metrics.sqos}
-Avg Time: ${contentA.metrics.avgTime}s
+            content: `CONTENT A — "${nameA}":
+Stage: ${contentA.stage} | Product: ${contentA.product || "N/A"} | Type: ${contentA.type || "N/A"}
+Engagement: Pageviews: ${metricsA.pageviews}, Downloads: ${metricsA.downloads}, Leads: ${metricsA.leads}, SQOs: ${metricsA.sqos}, Avg Time: ${metricsA.avgTime}s
+Has engagement data: ${aHasMetrics ? "Yes" : "No"}
 Content uploaded: ${aHasContent ? "Yes" : "No"}
+${aHasContent ? `Content summary: ${contentAStored?.contentSummary || "N/A"}` : ""}
 
-NEW CONTENT (Content B):
-Name: ${nameB}
-Stage: ${classification.stage}
-Type: ${classification.contentType}
-Product: ${classification.product}
-Industry: ${classification.industry}
+CONTENT B — "${nameB}":
+Stage: ${classification.stage} | Product: ${classification.product} | Type: ${classification.contentType}
+Engagement: Pageviews: ${metricsB.pageviews}, Downloads: ${metricsB.downloads}, Leads: ${metricsB.leads}, SQOs: ${metricsB.sqos}, Avg Time: ${metricsB.avgTime}s
+Has engagement data: ${bHasMetrics ? "Yes" : "No"}
 Content uploaded: ${bHasContent ? "Yes" : "No"}
+${bHasContent ? `Content summary: ${contentBStored?.contentSummary || contentB.text?.slice(0, 200) || "N/A"}` : ""}
 
-Stage benchmarks (${classification.stage}):
-${aggregateBenchmarks ? `Median ${primaryMetric}: ${aggregateBenchmarks[primaryMetric === "SQOs" ? "sqos" : primaryMetric].median}, Top performers reach: ${aggregateBenchmarks[primaryMetric === "SQOs" ? "sqos" : primaryMetric].max}` : "No benchmark data available."}
-
-Readiness Score: ${analysis.readinessScore}/100
-Projected ${primaryMetric}: ${analysis.performanceForecast.projectedRange[0]}-${analysis.performanceForecast.projectedRange[1]}
-
-DATA SOURCE NOTE (include at end of verdict): ${dataSourceNote}`,
+${contentAnalysis ? `CONTENT ANALYSIS AVAILABLE:
+Topic overlap: ${contentAnalysis.sharedContent?.length || 0} shared topics
+Unique to A: ${contentAnalysis.uniqueToA?.length || 0} topics
+Unique to B: ${contentAnalysis.uniqueToB?.length || 0} topics
+Tone A: ${contentAnalysis.messaging?.toneA || "N/A"}
+Tone B: ${contentAnalysis.messaging?.toneB || "N/A"}` : "No content analysis available — content files not uploaded for both assets."}`,
           }],
         });
-        verdict = ((msg.content[0] as any).text || "").trim();
+        verdict = ((verdictMsg.content[0] as any).text || "").trim();
       } catch (verdictErr) {
         console.error("Verdict generation failed:", verdictErr);
-        const primaryMetric = classification.stage === "BOFU" ? "sqos" : classification.stage === "MOFU" ? "leads" : "pageviews";
-        const aVal = contentA.metrics[primaryMetric as keyof typeof contentA.metrics] || 0;
-        const bProjected = Math.round((analysis.performanceForecast.projectedRange[0] + analysis.performanceForecast.projectedRange[1]) / 2);
-        verdict = `${nameB} has a readiness score of ${analysis.readinessScore}/100 with projected ${primaryMetric} of ${analysis.performanceForecast.projectedRange[0]}-${analysis.performanceForecast.projectedRange[1]}. ${nameA} currently has ${aVal} ${primaryMetric}. ${bProjected > aVal ? `${nameB} shows potential to outperform the baseline.` : `${nameA} currently leads — ${nameB} needs optimization to close the gap.`} ${dataSourceNote}`;
+        const parts = [`${nameA} (${contentA.stage}) vs ${nameB} (${classification.stage}).`];
+        if (aHasMetrics) parts.push(`${nameA} has ${metricsA.pageviews} pageviews, ${metricsA.leads} leads, ${metricsA.sqos} SQOs. [Source: Internal Data]`);
+        else parts.push(`${nameA} has no engagement data yet.`);
+        if (bHasMetrics) parts.push(`${nameB} has ${metricsB.pageviews} pageviews, ${metricsB.leads} leads, ${metricsB.sqos} SQOs. [Source: Internal Data]`);
+        else parts.push(`${nameB} has no engagement data yet — performance comparison will be available once deployed.`);
+        if (bothHaveContent) parts.push("Both assets have uploaded content — see the Content Analysis section below for detailed comparison. [Source: Content Analysis]");
+        verdict = parts.join(" ");
       }
 
       res.json({
         verdict,
-        benchmarks: matchedAssets,
-        aggregateBenchmarks,
-        analysis: {
-          ...analysis,
-          isFallbackAnalysis: false,
-        },
         classification,
+        contentAnalysis,
+        metricsA: { ...metricsA, hasData: aHasMetrics },
+        metricsB: { ...metricsB, hasData: bHasMetrics },
+        nameA,
+        nameB,
       });
     } catch (error: any) {
       console.error("Full comparison error:", error);

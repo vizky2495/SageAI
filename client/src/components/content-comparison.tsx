@@ -20,9 +20,7 @@ import {
   Layers,
   Target,
   Lightbulb,
-  RefreshCw,
   Zap,
-  ShieldCheck,
   Search,
   Database,
   Check,
@@ -42,70 +40,84 @@ interface Classification {
   confidence: number;
 }
 
-interface Benchmark {
-  contentId: string;
-  name: string;
-  stage: string;
-  type: string;
-  product: string;
-  channel: string;
-  cta: string;
+interface TopicCoverageItem {
+  topic: string;
+  contentA: string;
+  contentB: string;
+}
+
+interface SharedContentItem {
+  topic: string;
+  comparison: string;
+}
+
+interface UniqueContentItem {
+  topic: string;
+  assessment: string;
+}
+
+interface MessagingComparison {
+  primaryAudienceA: string;
+  primaryAudienceB: string;
+  toneA: string;
+  toneB: string;
+  depthA: string;
+  depthB: string;
+  languageA: string;
+  languageB: string;
+  readingLevelA: string;
+  readingLevelB: string;
+}
+
+interface CtaComparison {
+  ctaPresentA: boolean;
+  ctaPresentB: boolean;
+  ctaTextA: string;
+  ctaTextB: string;
+  ctaTypeA: string;
+  ctaTypeB: string;
+  ctaPlacementA: string;
+  ctaPlacementB: string;
+  ctaStrengthAssessmentA: string;
+  ctaStrengthAssessmentB: string;
+}
+
+interface StructureComparison {
+  formatA: string;
+  formatB: string;
+  wordCountA: number;
+  wordCountB: number;
+  sectionsA: string;
+  sectionsB: string;
+  visualsA: string;
+  visualsB: string;
+  readabilityA: string;
+  readabilityB: string;
+}
+
+interface Suggestion {
+  text: string;
+  source: string;
+}
+
+interface ContentAnalysis {
+  topicCoverage: TopicCoverageItem[];
+  sharedContent: SharedContentItem[];
+  uniqueToA: UniqueContentItem[];
+  uniqueToB: UniqueContentItem[];
+  messaging: MessagingComparison;
+  ctaComparison: CtaComparison;
+  structureComparison: StructureComparison;
+  suggestions: Suggestion[];
+}
+
+interface MetricsWithData {
   pageviews: number;
   downloads: number;
   leads: number;
   sqos: number;
   avgTime: number;
-  relevanceScore: number;
-}
-
-interface MetricStats {
-  min: number;
-  max: number;
-  mean: number;
-  median: number;
-}
-
-interface AggregateBenchmarks {
-  sampleSize: number;
-  totalPoolSize: number;
-  pageviews: MetricStats;
-  downloads: MetricStats;
-  leads: MetricStats;
-  sqos: MetricStats;
-  timeOnPage: MetricStats;
-  avgCtaCount: number;
-}
-
-interface Recommendation {
-  priority: number;
-  text: string;
-  contentId: string;
-}
-
-interface ReusabilityItem {
-  contentId: string;
-  overlap: number;
-  cannibalizationRisk: string;
-  repurposingOpportunity: string;
-}
-
-interface Analysis {
-  isFallbackAnalysis: boolean;
-  readinessScore: number;
-  readinessBreakdown: {
-    structure: number;
-    ctas: number;
-    topicDepth: number;
-    format: number;
-  };
-  performanceForecast: {
-    metric: string;
-    projectedRange: [number, number];
-    confidence: string;
-  };
-  recommendations: Recommendation[];
-  reusability: ReusabilityItem[];
-  topAction: string;
+  hasData: boolean;
 }
 
 interface PdfResult {
@@ -115,10 +127,8 @@ interface PdfResult {
   text: string;
   classification: Classification;
   isFallback: boolean;
-  benchmarks: Benchmark[];
-  aggregateBenchmarks: AggregateBenchmarks | null;
-  analysis: Analysis | null;
   contentId?: string;
+  metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number };
 }
 
 interface AssetPickerItem {
@@ -243,57 +253,6 @@ const CONTENT_APPROACHES: { value: ContentApproach; label: string; icon: typeof 
 function formatNum(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   return n.toLocaleString();
-}
-
-function ReadinessRing({ score, size = 64 }: { score: number; size?: number }) {
-  const radius = (size - 8) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-  const color = score >= 70 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-rose-400";
-  const strokeColor = score >= 70 ? "stroke-emerald-400" : score >= 40 ? "stroke-amber-400" : "stroke-rose-400";
-
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="currentColor"
-          className="text-muted/20" strokeWidth={4}
-        />
-        <motion.circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" strokeWidth={4}
-          className={strokeColor}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1, ease: "easeOut" }}
-        />
-      </svg>
-      <span className={`absolute text-sm font-bold ${color}`} data-testid="text-readiness-score">
-        {score}
-      </span>
-    </div>
-  );
-}
-
-function BreakdownBar({ label, value }: { label: string; value: number }) {
-  const color = value >= 70 ? "bg-emerald-400" : value >= 40 ? "bg-amber-400" : "bg-rose-400";
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-muted-foreground w-16 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${value}%` }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className={`h-full rounded-full ${color}`}
-        />
-      </div>
-      <span className="text-[10px] font-semibold tabular-nums w-7 text-right">{value}</span>
-    </div>
-  );
 }
 
 function MetricPill({ label, value, accent }: { label: string; value: number; accent?: string }) {
@@ -559,14 +518,6 @@ function UploadAndSavePanel({
               <div><span className="text-muted-foreground">Product:</span> <span className="font-medium">{pdfResult.classification.product}</span></div>
               <div><span className="text-muted-foreground">Pages:</span> <span className="font-medium">{pdfResult.pageCount}</span></div>
             </div>
-            {pdfResult.analysis && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[11px] text-muted-foreground">Readiness:</span>
-                <span className={`text-sm font-bold ${pdfResult.analysis.readinessScore >= 70 ? "text-emerald-400" : pdfResult.analysis.readinessScore >= 40 ? "text-amber-400" : "text-rose-400"}`}>
-                  {pdfResult.analysis.readinessScore}/100
-                </span>
-              </div>
-            )}
           </div>
 
           {!savedToLibrary && (
@@ -797,9 +748,6 @@ function ManualEntryPanel({
           confidence: 1.0,
         },
         isFallback: true,
-        benchmarks: [],
-        aggregateBenchmarks: null,
-        analysis: null,
       };
       onSubmit(manualResult, true);
     } catch (err: any) {
@@ -1132,28 +1080,19 @@ function ComparisonResults({
   contentA,
   comparisonData,
   isLoadingVerdict,
-  contentInfoA,
-  contentInfoB,
 }: {
   contentA: { name: string; stage: string; product: string | null; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
   comparisonData: FullComparisonResult;
   isLoadingVerdict?: boolean;
-  contentInfoA?: ContentInfo | null;
-  contentInfoB?: ContentInfo | null;
 }) {
-  const bAnalysis = comparisonData.analysis;
-  const aMetrics = contentA.metrics;
   const bClassification = comparisonData.classification;
+  const mA = comparisonData.metricsA;
+  const mB = comparisonData.metricsB;
+  const ca = comparisonData.contentAnalysis;
 
   const primaryMetric = bClassification.stage === "BOFU" ? "sqos" : bClassification.stage === "MOFU" ? "leads" : "pageviews";
-  const bForecast = bAnalysis?.performanceForecast;
-  const bProjectedMid = bForecast ? Math.round((bForecast.projectedRange[0] + bForecast.projectedRange[1]) / 2) : 0;
-
-  const riskColors: Record<string, string> = {
-    low: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    medium: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    high: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-  };
+  const nameA = comparisonData.nameA || parseHumanReadableName(contentA.name);
+  const nameB = comparisonData.nameB || parseHumanReadableName(bClassification.topic || bClassification.contentType || "Content B");
 
   return (
     <motion.div
@@ -1171,11 +1110,11 @@ function ComparisonResults({
             <h3 className="text-sm font-semibold">AI Comparison Verdict</h3>
           </div>
           {comparisonData.verdict ? (
-            <p className="text-sm leading-relaxed text-foreground/90" data-testid="text-verdict">{comparisonData.verdict}</p>
+            <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line" data-testid="text-verdict">{comparisonData.verdict}</div>
           ) : (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Generating AI verdict...
+              Analyzing content and generating verdict...
             </div>
           )}
         </Card>
@@ -1190,34 +1129,32 @@ function ComparisonResults({
           </Badge>
         </div>
 
-        <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden mb-4">
+        <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden mb-3">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border/20 bg-muted/20">
                 <th className="text-left px-4 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Metric</th>
-                <th className="text-right px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">Baseline (Actual)</th>
-                <th className="text-right px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">New Content (Projected)</th>
+                <th className="text-right px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">Content A (Actual)</th>
+                <th className="text-right px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">Content B (Actual)</th>
                 <th className="text-right px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Delta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/10">
               {([
-                { key: "pageviews", label: "Pageviews" },
-                { key: "downloads", label: "Downloads" },
-                { key: "leads", label: "Leads" },
-                { key: "sqos", label: "SQOs" },
-                { key: "avgTime", label: "Avg Time (s)" },
-              ] as const).map(({ key, label }) => {
-                const aVal = aMetrics[key];
-                let bVal = 0;
-                if (bForecast && key === primaryMetric) {
-                  bVal = bProjectedMid;
-                } else if (comparisonData.aggregateBenchmarks) {
-                  const benchKey = key === "avgTime" ? "timeOnPage" : key;
-                  bVal = Math.round((comparisonData.aggregateBenchmarks as any)[benchKey]?.median || 0);
-                }
-                const delta = aVal > 0 ? Math.round(((bVal - aVal) / aVal) * 100) : 0;
-                const deltaColor = delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-muted-foreground";
+                { key: "pageviews" as const, label: "Pageviews" },
+                { key: "downloads" as const, label: "Downloads" },
+                { key: "leads" as const, label: "Leads" },
+                { key: "sqos" as const, label: "SQOs" },
+                { key: "avgTime" as const, label: "Avg Time (s)" },
+              ]).map(({ key, label }) => {
+                const aVal = mA?.[key] ?? contentA.metrics[key] ?? 0;
+                const bVal = mB?.[key] ?? 0;
+                const aHas = mA?.hasData ?? (contentA.metrics.pageviews > 0 || contentA.metrics.leads > 0);
+                const bHas = mB?.hasData ?? false;
+
+                const bothHaveData = aHas && bHas;
+                const delta = bothHaveData && aVal > 0 ? Math.round(((bVal - aVal) / aVal) * 100) : null;
+                const deltaColor = delta !== null ? (delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-muted-foreground") : "text-muted-foreground/50";
 
                 return (
                   <tr key={key} className={key === primaryMetric ? "bg-primary/5" : ""}>
@@ -1227,15 +1164,14 @@ function ComparisonResults({
                         <Badge variant="outline" className="text-[8px] ml-1.5 text-primary border-primary/30">primary</Badge>
                       )}
                     </td>
-                    <td className="text-right px-3 py-2 tabular-nums font-semibold">{formatNum(aVal)}</td>
                     <td className="text-right px-3 py-2 tabular-nums font-semibold">
-                      {bForecast && key === primaryMetric
-                        ? `${formatNum(bForecast.projectedRange[0])}–${formatNum(bForecast.projectedRange[1])}`
-                        : formatNum(bVal)
-                      }
+                      {aHas ? formatNum(aVal) : <span className="text-muted-foreground/50 font-normal italic">No data</span>}
+                    </td>
+                    <td className="text-right px-3 py-2 tabular-nums font-semibold">
+                      {bHas ? formatNum(bVal) : <span className="text-muted-foreground/50 font-normal italic">No data</span>}
                     </td>
                     <td className={`text-right px-3 py-2 tabular-nums font-semibold ${deltaColor}`}>
-                      {delta > 0 ? "+" : ""}{delta}%
+                      {delta !== null ? `${delta > 0 ? "+" : ""}${delta}%` : "—"}
                     </td>
                   </tr>
                 );
@@ -1244,319 +1180,286 @@ function ComparisonResults({
           </table>
         </div>
 
+        {(!mA?.hasData || !mB?.hasData) && (
+          <div className="rounded-lg bg-muted/10 border border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
+            {!mB?.hasData && mA?.hasData && (
+              <span>Content B has no engagement history. Performance comparison will be available once this content is deployed and generates data. <span className="text-muted-foreground/60">[Source: Internal Data]</span></span>
+            )}
+            {!mA?.hasData && mB?.hasData && (
+              <span>Content A has no engagement history. Performance comparison will be available once this content is deployed and generates data. <span className="text-muted-foreground/60">[Source: Internal Data]</span></span>
+            )}
+            {!mA?.hasData && !mB?.hasData && (
+              <span>Neither asset has engagement data yet. Performance comparison will be available once content is deployed and generates data.</span>
+            )}
+          </div>
+        )}
+
         {contentA.stage !== bClassification.stage && (
-          <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2.5 mb-4">
+          <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2.5 mt-3">
             <Layers className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-[11px] text-amber-300/80 leading-relaxed">
-              Baseline is {contentA.stage} while new content is {bClassification.stage}. Projections are based on {bClassification.stage} stage benchmarks.
+              Content A is {contentA.stage} while Content B is {bClassification.stage}. These assets target different funnel stages.
             </p>
           </div>
         )}
       </Card>
 
-      {bAnalysis && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="analysis-card">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">New Content Analysis</h3>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-xl bg-muted/10 border border-border/30 p-4">
-              <div className="flex items-start gap-4">
-                <ReadinessRing score={bAnalysis.readinessScore} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Campaign Readiness</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <BreakdownBar label="Structure" value={bAnalysis.readinessBreakdown.structure} />
-                    <BreakdownBar label="CTAs" value={bAnalysis.readinessBreakdown.ctas} />
-                    <BreakdownBar label="Topic" value={bAnalysis.readinessBreakdown.topicDepth} />
-                    <BreakdownBar label="Format" value={bAnalysis.readinessBreakdown.format} />
-                  </div>
-                </div>
+      {ca && (
+        <>
+          {ca.topicCoverage && ca.topicCoverage.length > 0 && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="topic-coverage">
+              <div className="flex items-center gap-2 mb-3">
+                <Layers className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Topic Coverage Comparison</h3>
+                <span className="text-[9px] text-muted-foreground/60 ml-auto">[Source: Content Analysis]</span>
               </div>
-            </div>
-
-            {bForecast && (
-              <div className="rounded-xl bg-muted/10 border border-border/30 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Performance Forecast</span>
-                  <Badge variant="outline" className={`text-[9px] ml-auto ${
-                    bForecast.confidence === "high" ? "text-emerald-400 border-emerald-500/30" :
-                    bForecast.confidence === "medium" ? "text-amber-400 border-amber-500/30" :
-                    "text-muted-foreground"
-                  }`}>
-                    {bForecast.confidence} confidence
-                  </Badge>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold tabular-nums">
-                    {bForecast.projectedRange[0].toLocaleString()} — {bForecast.projectedRange[1].toLocaleString()}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    projected {bForecast.metric}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {bAnalysis.recommendations.length > 0 && (
-              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b border-border/30">
-                  <Lightbulb className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recommendations</span>
-                </div>
-                <div className="divide-y divide-border/20">
-                  {bAnalysis.recommendations.sort((a, b) => a.priority - b.priority).map((r, i) => (
-                    <div key={i} className="px-4 py-2.5 flex items-start gap-2.5">
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full h-5 w-5 flex items-center justify-center shrink-0 mt-0.5">
-                        {r.priority}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs leading-relaxed">{r.text}</p>
-                        <Badge variant="outline" className="text-[9px] mt-1 text-muted-foreground">{r.contentId}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {bAnalysis.reusability.length > 0 && (
-              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b border-border/30">
-                  <RefreshCw className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Reusability Assessment</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border/20">
-                        <th className="text-left px-4 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content ID</th>
-                        <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Overlap</th>
-                        <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Cannibalization</th>
-                        <th className="text-center px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Repurpose</th>
+              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden mb-3">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/20 bg-muted/20">
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Topic</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    {ca.topicCoverage.map((item, i) => (
+                      <tr key={i}>
+                        <td className="px-3 py-2 font-medium">{item.topic}</td>
+                        <td className="px-3 py-2">
+                          <span className={item.contentA.toLowerCase().includes("not covered") ? "text-muted-foreground/50 italic" : "text-foreground/80"}>
+                            {item.contentA.toLowerCase().includes("not covered") ? <span className="flex items-center gap-1"><X className="h-3 w-3 text-rose-400/60" /> Not covered</span> : <span className="flex items-start gap-1"><Check className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" /> {item.contentA}</span>}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={item.contentB.toLowerCase().includes("not covered") ? "text-muted-foreground/50 italic" : "text-foreground/80"}>
+                            {item.contentB.toLowerCase().includes("not covered") ? <span className="flex items-center gap-1"><X className="h-3 w-3 text-rose-400/60" /> Not covered</span> : <span className="flex items-start gap-1"><Check className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" /> {item.contentB}</span>}
+                          </span>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {bAnalysis.reusability.map((r, i) => (
-                        <tr key={i} className="border-b border-border/10 last:border-0">
-                          <td className="px-4 py-1.5 font-medium max-w-[140px] truncate">{r.contentId}</td>
-                          <td className="text-center px-2 py-1.5 tabular-nums">{r.overlap}%</td>
-                          <td className="text-center px-2 py-1.5">
-                            <Badge variant="outline" className={`text-[9px] border ${riskColors[r.cannibalizationRisk] || ""}`}>
-                              {r.cannibalizationRisk}
-                            </Badge>
-                          </td>
-                          <td className="text-center px-2 py-1.5">
-                            <Badge variant="outline" className={`text-[9px] border ${riskColors[r.repurposingOpportunity] || ""}`}>
-                              {r.repurposingOpportunity}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </Card>
+          )}
 
-            <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2.5">
-              <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="text-xs font-medium leading-relaxed" data-testid="text-top-action">
-                {bAnalysis.topAction}
-              </p>
-            </div>
-          </div>
-        </Card>
-      )}
+          {((ca.sharedContent && ca.sharedContent.length > 0) || (ca.uniqueToA && ca.uniqueToA.length > 0) || (ca.uniqueToB && ca.uniqueToB.length > 0)) && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="content-overlap">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Shared & Unique Content</h3>
+                <span className="text-[9px] text-muted-foreground/60 ml-auto">[Source: Content Analysis]</span>
+              </div>
 
-      {comparisonData.benchmarks.length > 0 && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="matching-content-card">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top Matching Content from Dataset</span>
-            <Badge variant="outline" className="text-[9px] ml-auto">{comparisonData.benchmarks.length} matches</Badge>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border/20">
-                  <th className="text-left px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Content</th>
-                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Match</th>
-                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Views</th>
-                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">Leads</th>
-                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase">SQOs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonData.benchmarks.map((b, i) => (
-                  <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-muted/10 transition-colors">
-                    <td className="px-3 py-1.5 max-w-[180px] truncate" title={b.name || b.contentId}>
-                      {b.name || b.contentId}
-                    </td>
-                    <td className="text-right px-2 py-1.5">
-                      <Badge variant="outline" className={`text-[9px] tabular-nums ${b.relevanceScore >= 50 ? "text-emerald-400 border-emerald-500/30" : "text-muted-foreground"}`}>
-                        {b.relevanceScore}%
-                      </Badge>
-                    </td>
-                    <td className="text-right px-2 py-1.5 tabular-nums">{b.pageviews.toLocaleString()}</td>
-                    <td className="text-right px-2 py-1.5 tabular-nums">{b.leads.toLocaleString()}</td>
-                    <td className="text-right px-2 py-1.5 tabular-nums">{b.sqos.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {comparisonData.aggregateBenchmarks && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="aggregate-benchmarks">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stage Benchmarks</span>
-            <Badge variant="outline" className="text-[9px] ml-auto">
-              {comparisonData.aggregateBenchmarks.sampleSize} of {comparisonData.aggregateBenchmarks.totalPoolSize} assets
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { key: "pageviews", label: "Pageviews" },
-              { key: "downloads", label: "Downloads" },
-              { key: "leads", label: "Leads" },
-              { key: "sqos", label: "SQOs" },
-              { key: "timeOnPage", label: "Avg Time on Page" },
-            ] as const).map(({ key, label }) => {
-              const stats = comparisonData.aggregateBenchmarks![key];
-              return (
-                <div key={key} className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">{label}</span>
-                  <div className="grid grid-cols-4 gap-1 text-[10px]">
-                    <div><span className="text-muted-foreground/60">Min</span><br/><span className="font-semibold tabular-nums">{stats.min.toLocaleString()}</span></div>
-                    <div><span className="text-muted-foreground/60">Max</span><br/><span className="font-semibold tabular-nums">{stats.max.toLocaleString()}</span></div>
-                    <div><span className="text-muted-foreground/60">Mean</span><br/><span className="font-semibold tabular-nums">{stats.mean.toLocaleString()}</span></div>
-                    <div><span className="text-muted-foreground/60">Median</span><br/><span className="font-semibold tabular-nums">{stats.median.toLocaleString()}</span></div>
+              {ca.sharedContent && ca.sharedContent.length > 0 && (
+                <div className="mb-4">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Shared Topics</span>
+                  <div className="space-y-2">
+                    {ca.sharedContent.map((item, i) => (
+                      <div key={i} className="rounded-lg bg-muted/10 border border-border/30 p-3">
+                        <span className="text-xs font-semibold text-foreground/90 block mb-1">{item.topic}</span>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{item.comparison}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              );
-            })}
-            <div className="rounded-lg bg-muted/20 border border-border/30 p-2.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Avg CTA Count</span>
-              <span className="text-sm font-bold tabular-nums">{comparisonData.aggregateBenchmarks.avgCtaCount}</span>
-            </div>
-          </div>
-        </Card>
-      )}
+              )}
 
-      <ContentQualitySection
-        nameA={contentA.name}
-        nameB={comparisonData.classification.contentType || "New Content"}
-        contentInfoA={contentInfoA}
-        contentInfoB={contentInfoB}
-      />
-    </motion.div>
-  );
-}
-
-function ContentQualitySection({
-  nameA,
-  nameB,
-  contentInfoA,
-  contentInfoB,
-}: {
-  nameA: string;
-  nameB: string;
-  contentInfoA?: ContentInfo | null;
-  contentInfoB?: ContentInfo | null;
-}) {
-  const aAvailable = contentInfoA?.fetchStatus === "success";
-  const bAvailable = contentInfoB?.fetchStatus === "success";
-
-  if (!aAvailable && !bAvailable) {
-    return (
-      <Card className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-5 backdrop-blur" data-testid="quality-comparison-empty">
-        <div className="flex items-center gap-2 mb-2">
-          <Layers className="h-4 w-4 text-muted-foreground/50" />
-          <h3 className="text-sm font-semibold text-muted-foreground">Content Quality Comparison</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">Upload content files for both assets to enable side-by-side quality comparison of topics, messaging, CTA strength, and structure.</p>
-      </Card>
-    );
-  }
-
-  const renderSide = (label: string, info: ContentInfo | null | undefined, available: boolean) => (
-    <div className="space-y-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-      {available && info ? (
-        <div className="space-y-2">
-          {info.contentSummary && (
-            <div>
-              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">Summary</span>
-              <p className="text-[11px] text-foreground/80 line-clamp-3">{info.contentSummary}</p>
-            </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {ca.uniqueToA && ca.uniqueToA.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 block mb-2">Unique to {nameA}</span>
+                    <div className="space-y-1.5">
+                      {ca.uniqueToA.map((item, i) => (
+                        <div key={i} className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-2.5">
+                          <span className="text-xs font-medium text-foreground/90">{item.topic}</span>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.assessment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {ca.uniqueToB && ca.uniqueToB.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-sky-400 block mb-2">Unique to {nameB}</span>
+                    <div className="space-y-1.5">
+                      {ca.uniqueToB.map((item, i) => (
+                        <div key={i} className="rounded-lg bg-sky-500/5 border border-sky-500/15 p-2.5">
+                          <span className="text-xs font-medium text-foreground/90">{item.topic}</span>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.assessment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           )}
-          {info.extractedTopics && info.extractedTopics.length > 0 && (
-            <div>
-              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">Topics</span>
-              <div className="flex flex-wrap gap-1">
-                {info.extractedTopics.map((t, i) => (
-                  <span key={i} className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[9px]">{t}</span>
+
+          {ca.messaging && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="messaging-comparison">
+              <div className="flex items-center gap-2 mb-3">
+                <Lightbulb className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Messaging & Tone Comparison</h3>
+                <span className="text-[9px] text-muted-foreground/60 ml-auto">[Source: Content Analysis]</span>
+              </div>
+              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/20 bg-muted/20">
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Aspect</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    {[
+                      { label: "Primary Audience", a: ca.messaging.primaryAudienceA, b: ca.messaging.primaryAudienceB },
+                      { label: "Tone", a: ca.messaging.toneA, b: ca.messaging.toneB },
+                      { label: "Depth", a: ca.messaging.depthA, b: ca.messaging.depthB },
+                      { label: "Language", a: ca.messaging.languageA, b: ca.messaging.languageB },
+                      { label: "Reading Level", a: ca.messaging.readingLevelA, b: ca.messaging.readingLevelB },
+                    ].map(({ label, a, b }) => (
+                      <tr key={label}>
+                        <td className="px-3 py-2 font-medium">{label}</td>
+                        <td className="px-3 py-2 text-foreground/80">{a}</td>
+                        <td className="px-3 py-2 text-foreground/80">{b}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {ca.ctaComparison && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="cta-comparison">
+              <div className="flex items-center gap-2 mb-3">
+                <Target className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">CTA Comparison</h3>
+                <span className="text-[9px] text-muted-foreground/60 ml-auto">[Source: Content Analysis]</span>
+              </div>
+              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/20 bg-muted/20">
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Aspect</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    <tr>
+                      <td className="px-3 py-2 font-medium">CTA Present</td>
+                      <td className="px-3 py-2">{ca.ctaComparison.ctaPresentA ? <span className="text-emerald-400">Yes</span> : <span className="text-muted-foreground/50">No</span>}</td>
+                      <td className="px-3 py-2">{ca.ctaComparison.ctaPresentB ? <span className="text-emerald-400">Yes</span> : <span className="text-muted-foreground/50">No</span>}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 font-medium">CTA Text</td>
+                      <td className="px-3 py-2 text-foreground/80 italic">"{ca.ctaComparison.ctaTextA}"</td>
+                      <td className="px-3 py-2 text-foreground/80 italic">"{ca.ctaComparison.ctaTextB}"</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 font-medium">CTA Type</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaTypeA}</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaTypeB}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 font-medium">Placement</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaPlacementA}</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaPlacementB}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 font-medium">Strength</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaStrengthAssessmentA}</td>
+                      <td className="px-3 py-2 text-foreground/80">{ca.ctaComparison.ctaStrengthAssessmentB}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {ca.structureComparison && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="structure-comparison">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Structure Comparison</h3>
+                <span className="text-[9px] text-muted-foreground/60 ml-auto">[Source: Content Analysis]</span>
+              </div>
+              <div className="rounded-xl bg-muted/10 border border-border/30 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/20 bg-muted/20">
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Aspect</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    {[
+                      { label: "Format", a: ca.structureComparison.formatA, b: ca.structureComparison.formatB },
+                      { label: "Word Count", a: ca.structureComparison.wordCountA?.toLocaleString() || "N/A", b: ca.structureComparison.wordCountB?.toLocaleString() || "N/A" },
+                      { label: "Sections", a: ca.structureComparison.sectionsA, b: ca.structureComparison.sectionsB },
+                      { label: "Visuals", a: ca.structureComparison.visualsA, b: ca.structureComparison.visualsB },
+                      { label: "Readability", a: ca.structureComparison.readabilityA, b: ca.structureComparison.readabilityB },
+                    ].map(({ label, a, b }) => (
+                      <tr key={label}>
+                        <td className="px-3 py-2 font-medium">{label}</td>
+                        <td className="px-3 py-2 text-foreground/80">{a}</td>
+                        <td className="px-3 py-2 text-foreground/80">{b}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {ca.suggestions && ca.suggestions.length > 0 && (
+            <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="suggestions">
+              <div className="flex items-center gap-2 mb-3">
+                <Lightbulb className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Suggestions</h3>
+              </div>
+              <div className="space-y-2">
+                {ca.suggestions.map((s, i) => (
+                  <div key={i} className="rounded-lg bg-primary/5 border border-primary/15 p-3 flex items-start gap-2.5">
+                    <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full h-5 w-5 flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs leading-relaxed">{s.text}</p>
+                      <span className="text-[9px] text-muted-foreground/60 mt-1 block">[Source: {s.source}]</span>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
-          {info.extractedCta && (
-            <div>
-              <span className="text-[9px] font-semibold uppercase text-muted-foreground/60 block mb-0.5">CTA</span>
-              <div className="flex items-center gap-1.5">
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${
-                  info.extractedCta.strength === "strong" ? "bg-emerald-500/10 text-emerald-400" :
-                  info.extractedCta.strength === "moderate" ? "bg-amber-500/10 text-amber-400" :
-                  "bg-muted/30 text-muted-foreground"
-                }`}>
-                  {info.extractedCta.strength}
-                </span>
-                <span className="text-[10px] text-foreground/70">{info.extractedCta.text}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="text-[11px] text-muted-foreground/50 italic">No content uploaded</p>
+        </>
       )}
-    </div>
-  );
 
-  return (
-    <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="quality-comparison">
-      <div className="flex items-center gap-2 mb-3">
-        <Layers className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold">Content Quality Comparison</h3>
-      </div>
-      {(!aAvailable || !bAvailable) && (
-        <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2 mb-3 text-[11px] text-muted-foreground">
-          Content analysis available for {aAvailable ? parseHumanReadableName(nameA) : parseHumanReadableName(nameB)} only. Upload content for {aAvailable ? parseHumanReadableName(nameB) : parseHumanReadableName(nameA)} to enable side-by-side quality comparison.
-        </div>
+      {!ca && !isLoadingVerdict && (
+        <Card className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-5 backdrop-blur" data-testid="no-content-analysis">
+          <div className="flex items-center gap-2 mb-2">
+            <Layers className="h-4 w-4 text-muted-foreground/50" />
+            <h3 className="text-sm font-semibold text-muted-foreground">Content Analysis</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">Upload content files for both assets to enable detailed content-to-content analysis including topic coverage, messaging comparison, CTA analysis, and structure comparison.</p>
+        </Card>
       )}
-      <div className="grid sm:grid-cols-2 gap-4">
-        {renderSide(parseHumanReadableName(nameA), contentInfoA, !!aAvailable)}
-        {renderSide(parseHumanReadableName(nameB), contentInfoB, !!bAvailable)}
-      </div>
-    </Card>
+    </motion.div>
   );
 }
 
 interface FullComparisonResult {
   verdict: string;
-  benchmarks: Benchmark[];
-  aggregateBenchmarks: AggregateBenchmarks | null;
-  analysis: Analysis | null;
   classification: Classification;
+  contentAnalysis: ContentAnalysis | null;
+  metricsA: MetricsWithData;
+  metricsB: MetricsWithData;
+  nameA?: string;
+  nameB?: string;
 }
 
 export default function ContentComparison() {
@@ -1598,50 +1501,6 @@ export default function ContentComparison() {
       return;
     }
 
-    const hasFullAnalysis = contentBResult.analysis && contentBResult.benchmarks.length > 0;
-
-    if (hasFullAnalysis) {
-      setComparisonResult({
-        verdict: "",
-        benchmarks: contentBResult.benchmarks,
-        aggregateBenchmarks: contentBResult.aggregateBenchmarks,
-        analysis: contentBResult.analysis,
-        classification: contentBResult.classification,
-      });
-      try {
-        const verdictRes = await authFetch("/api/assets/full-comparison", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contentA: {
-              contentId: asset.contentId,
-              name: asset.name || asset.contentId,
-              stage: asset.stage,
-              product: asset.product,
-              type: asset.type,
-              metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
-            },
-            contentB: {
-              name: contentBResult.filename,
-              contentId: contentBResult.contentId || contentBResult.filename,
-              stage: contentBResult.classification.stage,
-              product: contentBResult.classification.product,
-              contentType: contentBResult.classification.contentType,
-              industry: contentBResult.classification.industry,
-              topic: contentBResult.classification.topic,
-              hasExistingAnalysis: true,
-            },
-          }),
-        });
-        const verdictData = await verdictRes.json();
-        setComparisonResult(prev => prev ? { ...prev, verdict: verdictData.verdict || "" } : prev);
-      } catch {
-        setComparisonResult(prev => prev ? { ...prev, verdict: "Unable to generate AI verdict. The comparison data above is still valid." } : prev);
-      }
-      setComparisonLoading(false);
-      return;
-    }
-
     try {
       const res = await authFetch("/api/assets/full-comparison", {
         method: "POST",
@@ -1663,7 +1522,8 @@ export default function ContentComparison() {
             contentType: contentBResult.classification.contentType,
             industry: contentBResult.classification.industry,
             topic: contentBResult.classification.topic,
-            text: contentBResult.text?.slice(0, 500),
+            text: contentBResult.text?.slice(0, 4000),
+            metrics: contentBResult.metrics,
           },
         }),
       });
@@ -1787,10 +1647,8 @@ export default function ContentComparison() {
                           confidence: 1.0,
                         },
                         isFallback: true,
-                        benchmarks: [],
-                        aggregateBenchmarks: null,
-                        analysis: null,
                         contentId: asset.contentId,
+                        metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
                       };
                       handleNewContentReady(manualResult, false);
                     }} />
@@ -1941,8 +1799,6 @@ export default function ContentComparison() {
           contentA={getContentAInfo()!}
           comparisonData={comparisonResult}
           isLoadingVerdict={comparisonLoading}
-          contentInfoA={slotA.selectedAsset ? contentStatusMap[slotA.selectedAsset.contentId] || null : null}
-          contentInfoB={newContentResult?.isFallback ? (contentStatusMap[newContentResult.contentId || newContentResult.filename] || null) : null}
         />
       )}
     </div>

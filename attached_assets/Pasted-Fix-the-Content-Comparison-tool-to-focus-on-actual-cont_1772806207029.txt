@@ -1,0 +1,123 @@
+Fix the Content Comparison tool to focus on actual content-to-content analysis when both assets have uploaded content. Remove all fabricated data, projected numbers, and irrelevant sections. The comparison should be factual, grounded, and based only on what's actually in the uploaded content and the engagement data that exists.
+
+REMOVE THESE SECTIONS ENTIRELY:
+1. Remove "Performance Forecast" section:
+
+Delete the "3-5 projected pageviews" forecast completely
+Never project or estimate performance numbers for content that has no engagement data
+If an asset has zero views, zero leads, zero SQOs — show zeros. Do not invent projections.
+
+2. Remove "Stage Benchmarks" section:
+
+Delete the Min/Max/Mean/Median benchmark cards (Pageviews, Downloads, Leads, SQOs, Avg Time, Avg CTA Count)
+These numbers are presented as if they're meaningful benchmarks but they are aggregated stats being shown out of context
+If the user specifically asks "what are the benchmarks for TOFU?" then the AI can provide these in the chat. Do not show them by default in every comparison.
+
+3. Remove "Reusability Assessment" by default:
+
+Do not show the Overlap / Cannibalization / Repurpose table in every comparison
+This section is only relevant when a user is asking "can I reuse this content?" or "does this overlap with existing content?"
+If the user asks for reusability analysis, show it. Otherwise, hide it.
+
+4. Remove projected numbers in the Performance Comparison table:
+
+The "NEW CONTENT (PROJECTED)" column currently shows made-up numbers like "3-5" pageviews and "1" download for content that actually has zero data
+If an asset has real engagement data, show real numbers
+If an asset has NO engagement data (all zeros or no data), show "No data" or "New — no history" in that column instead of projections
+The DELTA column should only show a delta when both sides have real data. If one side has no data, show "—" instead of "-87%" or "-100%"
+
+
+FIX THE PERFORMANCE COMPARISON TABLE:
+The table should only show factual data:
+MetricContent A (Actual)Content B (Actual)DeltaPageviews310— (no data for B)Downloads140— (no data for B)Leads300— (no data for B)SQOs10— (no data for B)Avg Time6.1k0— (no data for B)
+
+Column headers should say "Content A (Actual)" and "Content B (Actual)" — NOT "Baseline" and "New Content (Projected)"
+If both assets have real data, show the delta as a percentage
+If one asset has zero or no data, show "No engagement data" in that column and "—" for delta
+Add a note below the table: "Content B has no engagement history. Performance comparison will be available once this content is deployed and generates data." [Source: Internal Data]
+
+
+ADD: ACTUAL CONTENT-TO-CONTENT COMPARISON (the main feature)
+This is the core of the comparison when both assets have uploaded content. The AI should read both actual content texts and produce a detailed content analysis:
+Section: "Content Analysis"
+The AI reads both uploaded content files and compares them across these dimensions:
+A) Topic Coverage Comparison:
+Show a table of all topics found across both content pieces:
+TopicContent AContent BYear-end payroll processing✓ Covered in detail (Section 2, 450 words)✓ Briefly mentioned (1 paragraph)Tax compliance deadlines✓ Covered with specific dates✗ Not coveredSage 50 setup guide✗ Not covered✓ Main focus (3 sections)Employee T4 generation✓ Step-by-step walkthrough✓ Overview onlyCRA reporting requirements✓ Detailed with examples✗ Not coveredSoftware feature updates✗ Not covered✓ Covered in detail
+Below the table, AI provides a summary: "Content A focuses on compliance and process guidance (payroll, tax, CRA reporting). Content B focuses on product features and setup. There is minimal topic overlap — these serve different user needs."
+B) Shared Content — What Both Talk About:
+Highlight the areas where both pieces cover the same topics:
+
+For each shared topic, explain how each piece handles it differently
+"Both contents discuss employee T4 generation. Content A provides a detailed step-by-step walkthrough with screenshots, while Content B mentions it briefly as one feature among many. Content A's treatment is significantly more useful for someone actually trying to complete this task."
+
+C) Unique Content — What Each Covers That The Other Doesn't:
+
+"Content A uniquely covers: Tax compliance deadlines, CRA reporting requirements, penalty avoidance"
+"Content B uniquely covers: Sage 50 setup instructions, new feature overview, system requirements"
+For each unique area, note whether it's a strength or a gap: "Content A's CRA reporting section is a significant strength — this is a high-demand topic with no coverage in Content B."
+
+D) Messaging & Tone Comparison:
+AspectContent AContent BPrimary audienceAccountants doing year-end payrollNew Sage 50 users setting up the productToneEducational, compliance-focusedProduct-focused, feature showcaseDepthDeep — detailed walkthroughs with examplesSurface — overview with brief descriptionsLanguageFrench (Canada)English (Canada)Reading levelProfessional / technicalGeneral / accessible
+E) CTA Comparison:
+AspectContent AContent BCTA presentYes / No (state what was found)Yes / NoCTA text"[exact CTA text found]""[exact CTA text found]"CTA typeSoft (learn more) / Medium (register) / Strong (buy now, request demo)Same classificationCTA placementEnd of document / Multiple throughout / NoneSameCTA strength assessmentAI assessment with reasoningAI assessment with reasoning
+F) Structure Comparison:
+AspectContent AContent BFormatPDF (12 pages)PDF (4 pages)Word count3,200 words800 wordsSections6 sections with clear headings3 sections, minimal structureVisualsScreenshots, tables, examplesText onlyReadabilityWell-structured, scannableDense, no visual breaks
+
+FIX THE AI COMPARISON VERDICT:
+The verdict should be based ONLY on what the AI actually found in the content and real engagement data. Never fabricate scores or projections.
+Current verdict (bad): "Human Firm EN has a readiness score of 44/100 with projected pageviews of 3-5."
+How the verdict should work:
+
+Do NOT assign a "readiness score" number unless you can clearly explain how it was calculated from real data
+Do NOT project pageviews or any other metrics
+DO provide a clear, factual verdict based on the content analysis:
+
+Example of a good verdict:
+"Content A (Human Firm FR) is a deeper, more comprehensive piece covering compliance-critical topics (payroll, tax deadlines, CRA reporting) with detailed walkthroughs. It has real engagement data: 31 views, 30 leads, 1 SQO, and exceptionally high engagement time (6.1k seconds). However, it is in French, limiting its audience to French-Canadian users.
+Content B (Human Firm EN) is a lighter product-focused piece covering Sage 50 setup and features. It has no engagement data yet so performance cannot be assessed. Its English language makes it accessible to a broader audience, but the content is shallow compared to Content A.
+Key differences: Content A is educational and compliance-focused. Content B is product-focused and feature-oriented. They serve different audiences and different stages of the user journey despite both being tagged as TOFU.
+Suggestions:
+
+Content B would benefit from adding the compliance topics that make Content A engaging (tax deadlines, CRA reporting) — adapted for the English-Canadian market
+Content A's high engagement time (6.1k seconds) suggests users find the compliance walkthrough valuable. Consider creating an English version of Content A.
+Both contents lack strong CTAs. Adding a specific CTA (e.g., 'Schedule a year-end payroll setup consultation') could improve conversion.
+
+[Source: Content Analysis — based on uploaded content files] [Source: Internal Data — Content A engagement metrics]"
+
+SOURCE TAGS ON EVERYTHING:
+Every piece of information in the comparison must be tagged:
+
+Engagement numbers (views, leads, SQOs): [Source: Internal Data]
+Content analysis (topics, CTA, structure, messaging): [Source: Content Analysis — from uploaded files]
+If the AI makes a suggestion: [Source: AI Recommendation]
+Never show a number or claim without a source tag
+Never present AI suggestions as if they are data
+
+
+WHAT THE COMPARISON SHOULD SHOW (final structure):
+
+Content A and Content B cards — asset names, tags, engagement metrics, content upload status (as it is now — this is good)
+AI Comparison Verdict — factual summary based on real content analysis and real engagement data. No made-up scores or projections. Clear source tags.
+Performance Comparison table — real numbers only. "No data" where data doesn't exist. No projections. No deltas for one-sided data.
+Content Analysis (NEW — the main section):
+
+Topic Coverage Comparison table
+Shared Content — what both cover and how they differ
+Unique Content — what each covers that the other doesn't
+Messaging & Tone Comparison
+CTA Comparison
+Structure Comparison
+
+
+Suggestions — specific, actionable recommendations grounded in the analysis. Not generic advice.
+
+Sections that are REMOVED from default view:
+
+Performance Forecast — deleted
+Stage Benchmarks — deleted
+Reusability Assessment — only shown when user asks for it
+
+
+
+This makes the comparison tool genuinely useful. Instead of showing fabricated projections and irrelevant benchmarks, it actually reads both content pieces and tells you what they cover, how they differ, where they overlap, and what to do about it. That's the real value of having the actual content uploaded. Opus 4.6
