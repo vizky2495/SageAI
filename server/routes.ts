@@ -265,7 +265,7 @@ export async function registerRoutes(
       baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
     });
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 500,
       system: `You are a senior content strategist for Sage's content analytics platform. Analyze uploaded PDF content against real performance data from Sage's marketing dataset.
 
@@ -468,7 +468,7 @@ Benchmarks: ${benchmarkSummary}`
           baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
         });
         const msg = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 200,
           system: `You are a B2B content classifier for Sage, an accounting and business management software company. Given extracted PDF text and metadata, classify the content. Return ONLY valid JSON with these fields:
 {"contentType":"<Whitepaper|eBook|Case Study|Datasheet|Guide|Infographic|Brochure|Checklist|Webinar|Flyer|Report|Document>","stage":"<TOFU|MOFU|BOFU>","product":"<Sage product name or General>","industry":"<target industry or General>","topic":"<primary topic>","confidence":<0.0-1.0>}
@@ -767,7 +767,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
           const bReadable = !!bTextForAnalysis;
 
           const analysisMsg = await anthropic.messages.create({
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             max_tokens: 4000,
             system: `You are a senior content strategist producing a CONCISE comparison report. Be brief and scannable — a busy campaign planner should understand this in 5 minutes.
 

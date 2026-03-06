@@ -612,7 +612,7 @@ async function generateAssetInsight(
   let insight: string;
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 80,
       system: "You generate one-line insights about content marketing assets. Be specific, data-driven, and actionable. Reference actual metrics. No filler. Max 15 words.",
       messages: [{
@@ -796,7 +796,7 @@ export function registerChatRoutes(app: Express): void {
           if (isFirstExchange) {
             try {
               const titleResponse = await anthropic.messages.create({
-                model: "claude-sonnet-4-5",
+                model: "claude-sonnet-4-6",
                 max_tokens: 30,
                 system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else.",
                 messages: [
@@ -889,7 +889,7 @@ export function registerChatRoutes(app: Express): void {
 
       const runStream = async () => {
         const stream = anthropic.messages.stream({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: tokenLimit,
           system: systemPrompt,
           messages: chatMessages,
@@ -934,7 +934,7 @@ export function registerChatRoutes(app: Express): void {
       if (isFirstExchange && fullResponse.length > 0) {
         try {
           const titleResponse = await anthropic.messages.create({
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             max_tokens: 30,
             system: "Summarize the following user query into a short conversation title of 5-8 words. Extract the core topic, action, and key filters (product, region, channel, metric). Strip filler words and greetings. Use title case. Return only the title, nothing else.",
             messages: [
@@ -1091,7 +1091,7 @@ export function registerChatRoutes(app: Express): void {
       let verdict: string;
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 150,
           system: "You compare two marketing content assets and provide a concise verdict. Be specific, data-driven, and actionable. Max 3 sentences. Identify the winner and explain why with specific metrics.",
           messages: [{
