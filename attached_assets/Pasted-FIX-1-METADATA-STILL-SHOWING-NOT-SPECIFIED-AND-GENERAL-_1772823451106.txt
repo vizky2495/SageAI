@@ -1,0 +1,67 @@
+FIX 1: METADATA STILL SHOWING "NOT SPECIFIED" AND "GENERAL" WHERE DATA EXISTS
+The metadata table shows:
+
+Country/Region: "Not specified" for both — but Content A is clearly about Victoria, BC (Canada) and the asset name says "English Canada". Content B is clearly about Australia and the name says "Australia". Pull the country from the asset name/tags if the engagement data field is empty.
+Product: "General" for both — but the AI analysis found Content A is about "Sage Accounting + AutoEntry" and Content B is about "Sage Business Cloud X3". Use the AI-detected product if the engagement data field says "General".
+Industry: "Not specified" for Content A and "General" for Content B — but AI detected Content A is Accounting/Bookkeeping and Content B is Mining. Same fix — use AI-detected industry.
+
+Fix:
+
+After AI analysis, if the metadata table has "Not specified" or "General" for country, product, or industry BUT the AI detected specific values from reading the content, auto-fill the metadata with the AI-detected values and mark them: "[Detected from content]"
+This way the metadata table shows useful information instead of empty fields
+Also flag this as a taxonomy issue in the suggestions: "Asset metadata shows [General/Not specified] for fields that the content analysis detected as [specific value]. Update the asset tags for better campaign segmentation."
+
+
+FIX 2: PERFORMANCE TABLE SHOWING MISLEADING DELTAS
+The performance table shows:
+
+Downloads: Content A = 1, Content B = 0, Delta = -100%
+Avg Time: Content A = 10,127, Content B = 0, Delta = -100%
+
+A delta of "-100%" implies Content B is worse. But with 1 pageview and 1 download total between both, these numbers are statistically meaningless. Showing percentage deltas on single-digit data is misleading.
+Fix:
+
+When BOTH assets have very low engagement (total views + downloads < 10 for both), show the performance table but add a prominent note: "Both assets have minimal engagement data (fewer than 10 total interactions each). These numbers are too small to draw reliable conclusions."
+Do NOT show delta percentages when the base numbers are this small. Show "—" instead of "-100%" for all deltas when data is statistically insignificant.
+Or better: replace the table with an inline note: "Both assets have minimal engagement: Content A (1 pageview, 1 download, 1 lead, 10,127s avg time) and Content B (1 pageview, 0 downloads, 1 lead, 1 SQO). Sample sizes are too small for meaningful comparison."
+
+
+FIX 3: SUGGESTIONS SHOULD NOT RECOMMEND CREATING NEW CONTENT
+Suggestion 1 says: "Develop Australian accounting practice case study mirroring Content A's narrative structure."
+We agreed earlier that this tool does NOT create or recommend creating new content. It evaluates existing content only.
+Fix:
+
+Remove any suggestion that says "create", "develop", "build", or "write" new content
+Suggestions should focus on: how to improve the existing content, how to better deploy it, metadata corrections, re-tagging, re-positioning, or which content to prioritize for campaigns
+Suggestion 1 should be rewritten as: "Content A's narrative case study format with concrete ROI metrics (20% efficiency gain) is more effective for BOFU than Content B's whitepaper format. Prioritize Content A's format for BOFU campaigns in the ANZ market."
+Suggestion 2 about splitting Content B into two assets is fine — that's about re-positioning existing content, not creating new content
+
+
+FIX 4: THE COVER PAGE TITLE IS TOO LONG
+Current subtitle: "Freedom Accounting Case Study (English Canada, BOFU) vs Mining Brochure GO, TOP, GNRC (Australia)"
+This wraps awkwardly. Use shorter readable names on the cover:
+
+"Freedom Accounting Case Study vs Mining Productivity Brochure"
+Show the full asset IDs and metadata on page 2, not the cover
+
+
+FIX 5: TAG DISPLAY IMPROVEMENT
+The tags on page 2 are currently displayed as a long run-on line of text. Improve the visual display:
+
+Render tags as individual pill-shaped elements (even in the PDF) — small rounded rectangles with subtle borders
+Group by type if the three-type tag system (Topic, Audience, Intent) is implemented. If not yet implemented, at least display them with visual spacing between each tag rather than a continuous text string.
+In the PDF, separate tags with visual delimiters: " | " between each or render them on separate lines if the line gets too long
+Maximum 8-10 tags shown in the overview. If more exist, show a note: "See full tag list in content library"
+
+
+WHAT'S WORKING WELL — KEEP THESE:
+
+The Content Overview summaries are concise and useful — good format
+The Key Topics section with 3-4 topics per piece and the comparison insight is the right level of detail
+The Audience Resonance table format is clean and scannable
+The Shared vs Different section with tag overlap visualization is effective
+The What Works / Could Be Improved sections are brief and specific
+The Verdict is 1 paragraph and substantive — exactly right
+The Suggestions are numbered and mostly actionable
+The report is 8 pages which is better than 11 but could still be tighter at 5-6 pages by compacting the tag display and reducing whitespace
+Both content 

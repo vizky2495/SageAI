@@ -731,8 +731,8 @@ No explanation, no markdown, no extra text. Only JSON.`,
       const aHasMetrics = metricsA.pageviews > 0 || metricsA.downloads > 0 || metricsA.leads > 0 || metricsA.sqos > 0;
       const bHasMetrics = metricsB.pageviews > 0 || metricsB.downloads > 0 || metricsB.leads > 0 || metricsB.sqos > 0;
 
-      const aSummary = contentAStored?.contentSummary || "";
-      const bSummary = contentBStored?.contentSummary || "";
+      const aSummary = contentAStored?.contentSummary && contentAStored.contentSummary !== "AI analysis unavailable" ? contentAStored.contentSummary : "";
+      const bSummary = contentBStored?.contentSummary && contentBStored.contentSummary !== "AI analysis unavailable" ? contentBStored.contentSummary : "";
       const aStructure = contentAStored?.contentStructure || {};
       const bStructure = contentBStored?.contentStructure || {};
       const aStructuredTags = normalizeKeywordTags(contentAStored?.keywordTags as any);

@@ -938,7 +938,7 @@ function ContentStatusPanel({
             Replace
           </button>
         </div>
-        {contentInfo?.contentSummary && (
+        {contentInfo?.contentSummary && contentInfo.contentSummary !== "AI analysis unavailable" && (
           <p className="text-[11px] text-muted-foreground line-clamp-2">{contentInfo.contentSummary}</p>
         )}
         <div className="flex flex-wrap gap-1">
@@ -1808,7 +1808,7 @@ export default function ContentComparison() {
                   <SelectedAssetCard
                     asset={{
                       id: "",
-                      contentId: newContentResult.filename,
+                      contentId: newContentResult.contentId || newContentResult.filename,
                       name: newContentResult.filename,
                       stage: newContentResult.classification.stage,
                       product: newContentResult.classification.product || null,
@@ -1816,16 +1816,16 @@ export default function ContentComparison() {
                       cta: null,
                       type: newContentResult.classification.contentType || null,
                       url: null,
-                      pageviews: 0,
-                      downloads: 0,
-                      leads: 0,
-                      sqos: 0,
-                      avgTime: 0,
-                      country: "",
+                      pageviews: newContentResult.metrics?.pageviews || 0,
+                      downloads: newContentResult.metrics?.downloads || 0,
+                      leads: newContentResult.metrics?.leads || 0,
+                      sqos: newContentResult.metrics?.sqos || 0,
+                      avgTime: newContentResult.metrics?.avgTime || 0,
+                      country: (newContentResult as any).country || "",
                       industry: "",
                     }}
                     onClear={() => { setStep("intake"); handleReset(); }}
-                    contentInfo={contentStatusMap[newContentResult.filename] || null}
+                    contentInfo={contentStatusMap[newContentResult.contentId || newContentResult.filename] || null}
                     onUploadComplete={() => { refreshContentStatus(); if (slotA.selectedAsset) handleBaselineSelected(slotA.selectedAsset); }}
                   />
                 ) : (
