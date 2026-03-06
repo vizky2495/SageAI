@@ -802,14 +802,12 @@ function ContentCard({
   const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [fetching, setFetching] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, navigate] = useLocation();
   const tone = stageTones[stage] || stageTones.TOFU;
   const { compareMode, selectedCard, onCompareSelect } = useContext(CompareContext);
-  const { statusMap, refreshStatus } = useContext(ContentStatusContext);
+  const { statusMap } = useContext(ContentStatusContext);
   const contentStatus = statusMap[asset.contentId];
-  const qc = useQueryClient();
 
   const isSelectedForCompare = selectedCard?.asset.contentId === asset.contentId;
 
@@ -1079,69 +1077,6 @@ function ContentCard({
             </div>
           )}
 
-          {!contentStatus?.fetchStatus && asset.url && !compareMode && (
-            <div className="mt-2">
-              <button
-                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-muted-foreground/30 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (fetching || !asset.url) return;
-                  setFetching(true);
-                  try {
-                    const fullUrl = asset.url.startsWith("http") ? asset.url : `https://${asset.url}`;
-                    await authFetch("/api/content/fetch-url", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ assetId: asset.contentId, url: fullUrl }),
-                    });
-                    refreshStatus();
-                  } catch {}
-                  setFetching(false);
-                }}
-                disabled={fetching}
-                data-testid="button-fetch-content"
-              >
-                {fetching ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Download className="h-3 w-3" />
-                )}
-                {fetching ? "Fetching…" : "Fetch content"}
-              </button>
-            </div>
-          )}
-
-          {contentStatus?.fetchStatus === "not_stored" && asset.url && !compareMode && (
-            <div className="mt-2">
-              <button
-                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-muted-foreground/30 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (fetching || !asset.url) return;
-                  setFetching(true);
-                  try {
-                    const fullUrl = asset.url.startsWith("http") ? asset.url : `https://${asset.url}`;
-                    await authFetch("/api/content/fetch-url", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ assetId: asset.contentId, url: fullUrl }),
-                    });
-                    refreshStatus();
-                  } catch {}
-                  setFetching(false);
-                }}
-                disabled={fetching}
-                data-testid="button-fetch-content-not-stored"
-              >
-                {fetching ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Download className="h-3 w-3" />
-                )}
-                {fetching ? "Fetching…" : "Fetch content"}
-              </button>
-            </div>
-          )}
         </Card>
         <HoverInsightTooltip
           asset={asset}
