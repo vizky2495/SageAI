@@ -279,34 +279,44 @@ export default function FunnelDashboard() {
                 </Badge>
               </div>
               <div className="h-[260px]" data-testid="chart-funnel">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                    <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
-                    <ReTooltip
-                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                      contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
-                      labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
-                      formatter={(value: number) => formatCompact(value)}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                    {uploadDiagnostics ? (
-                      <>
-                        <Bar dataKey="Content Assets" fill="#00D657" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Page Views" fill="#00A65C" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Downloads" fill="#006362" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Leads" fill="#1DD6A4" radius={[4, 4, 0, 0]} />
-                      </>
-                    ) : (
-                      <>
-                        <Bar dataKey="Engaged Sessions" fill="#00D657" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="New Contacts" fill="#00A65C" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="MQLs" fill="#006362" radius={[4, 4, 0, 0]} />
-                      </>
-                    )}
-                  </BarChart>
-                </ResponsiveContainer>
+                {uploadDiagnostics ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
+                      <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
+                      <ReTooltip
+                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                        contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
+                        labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
+                        formatter={(value: number) => formatCompact(value)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                      <Bar dataKey="Content Assets" fill="#00D657" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Page Views" fill="#00A65C" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Downloads" fill="#006362" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Leads" fill="#1DD6A4" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
+                      <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
+                      <ReTooltip
+                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                        contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
+                        labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
+                        formatter={(value: number) => formatCompact(value)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                      <Bar dataKey="Engaged Sessions" fill="#00D657" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="New Contacts" fill="#00A65C" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="MQLs" fill="#006362" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </Card>
           )}
