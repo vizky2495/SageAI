@@ -14,9 +14,10 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip as ReTooltip,
   XAxis,
@@ -69,15 +70,15 @@ export default function FunnelDashboard() {
   const funnelSeries = useMemo(() => {
     if (uploadDiagnostics) {
       return [
-        { stage: "TOFU", contentAssets: byStage.TOFU.length, pageViews: sum(byStage.TOFU, "pageViews"), uniqueLeads: sum(byStage.TOFU, "newContacts") },
-        { stage: "MOFU", contentAssets: byStage.MOFU.length, pageViews: sum(byStage.MOFU, "pageViews"), uniqueLeads: sum(byStage.MOFU, "newContacts") },
-        { stage: "BOFU", contentAssets: byStage.BOFU.length, pageViews: sum(byStage.BOFU, "pageViews"), uniqueLeads: sum(byStage.BOFU, "newContacts"), sqos: sum(byStage.BOFU, "sqos") },
+        { stage: "TOFU", "Content Assets": byStage.TOFU.length, "Page Views": sum(byStage.TOFU, "pageViews"), "Downloads": sum(byStage.TOFU, "downloads"), "Leads": sum(byStage.TOFU, "newContacts") },
+        { stage: "MOFU", "Content Assets": byStage.MOFU.length, "Page Views": sum(byStage.MOFU, "pageViews"), "Downloads": sum(byStage.MOFU, "downloads"), "Leads": sum(byStage.MOFU, "newContacts") },
+        { stage: "BOFU", "Content Assets": byStage.BOFU.length, "Page Views": sum(byStage.BOFU, "pageViews"), "Downloads": sum(byStage.BOFU, "downloads"), "Leads": sum(byStage.BOFU, "newContacts") },
       ];
     }
     return [
-      { stage: "TOFU", engagedSessions: tofuEngaged, newContacts: tofuNewContacts },
-      { stage: "MOFU", engagedSessions: sum(mofuBase, "engagedSessions"), newContacts: mofuNewContacts, mqls: mofuMqls },
-      { stage: "BOFU", sqos: bofuSqos },
+      { stage: "TOFU", "Engaged Sessions": tofuEngaged, "New Contacts": tofuNewContacts },
+      { stage: "MOFU", "Engaged Sessions": sum(mofuBase, "engagedSessions"), "New Contacts": mofuNewContacts, "MQLs": mofuMqls },
+      { stage: "BOFU", "SQOs": bofuSqos },
     ];
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStage]);
 
@@ -269,7 +270,7 @@ export default function FunnelDashboard() {
                 <div>
                   <div className="text-sm font-medium" data-testid="text-funnel-chart-title">Funnel progression</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {uploadDiagnostics ? "Content assets, page views, and leads by stage" : "Key metrics across the funnel"}
+                    {uploadDiagnostics ? "Content assets, page views, downloads, and leads by stage" : "Key metrics across the funnel"}
                   </div>
                 </div>
                 <Badge variant="secondary" className="rounded-xl">
@@ -277,43 +278,34 @@ export default function FunnelDashboard() {
                   {byStage.TOFU.length + byStage.MOFU.length + byStage.BOFU.length} classified
                 </Badge>
               </div>
-              <div className="h-[220px]" data-testid="chart-funnel">
+              <div className="h-[260px]" data-testid="chart-funnel">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-                    <defs>
-                      <linearGradient id="gradAssets" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="gradViews" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-3))" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="hsl(var(--chart-3))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                  <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
                     <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v) => formatCompact(v)} />
+                    <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
                     <ReTooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
+                      labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
+                      formatter={(value: number) => formatCompact(value)}
                     />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                     {uploadDiagnostics ? (
                       <>
-                        <Area type="monotone" dataKey="contentAssets" name="Content Assets" stroke="hsl(var(--chart-1))" fill="url(#gradAssets)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="pageViews" name="Page Views" stroke="hsl(var(--chart-2))" fill="url(#gradViews)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="uniqueLeads" name="Unique Leads" stroke="hsl(var(--chart-3))" fill="url(#gradLeads)" strokeWidth={2} />
+                        <Bar dataKey="Content Assets" fill="#00D657" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Page Views" fill="#00A65C" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Downloads" fill="#006362" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Leads" fill="#1DD6A4" radius={[4, 4, 0, 0]} />
                       </>
                     ) : (
                       <>
-                        <Area type="monotone" dataKey="engagedSessions" name="Engaged Sessions" stroke="hsl(var(--chart-1))" fill="url(#gradAssets)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="newContacts" name="New Contacts" stroke="hsl(var(--chart-2))" fill="url(#gradViews)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="mqls" name="MQLs" stroke="hsl(var(--chart-3))" fill="url(#gradLeads)" strokeWidth={2} />
+                        <Bar dataKey="Engaged Sessions" fill="#00D657" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="New Contacts" fill="#00A65C" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="MQLs" fill="#006362" radius={[4, 4, 0, 0]} />
                       </>
                     )}
-                  </AreaChart>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </Card>

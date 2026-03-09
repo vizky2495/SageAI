@@ -27,6 +27,7 @@ export type NormalizedRow = {
   newsletterSignups?: number;
   nextContentViews?: number;
   newContacts?: number;
+  downloads?: number;
   formSubmissions?: number;
   mqls?: number;
   qdcs?: number;
@@ -100,6 +101,7 @@ export function useFunnelData() {
             utmMedium: a.utmMedium || undefined,
             utmContent: a.utmContent || undefined,
             productFranchise: a.productFranchise || undefined,
+            industry: a.productCategory || undefined,
             objective: a.objective || undefined,
             contentType: a.typecampaignmember || undefined,
             cta: a.cta || undefined,
@@ -114,6 +116,7 @@ export function useFunnelData() {
             newsletterSignups: undefined,
             nextContentViews: undefined,
             newContacts: a.uniqueLeads || 0,
+            downloads: a.downloadsSum || 0,
             formSubmissions: undefined,
             mqls: undefined,
             qdcs: undefined,
