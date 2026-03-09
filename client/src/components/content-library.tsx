@@ -1487,6 +1487,9 @@ export default function ContentLibrary() {
   const [filters, setFilters] = useState<Filters>({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagTypeFilter, setTagTypeFilter] = useState<"all" | "topic" | "audience" | "intent">("all");
+  const [tagExplorerOpen, setTagExplorerOpen] = useState(false);
+  const [tagSearch, setTagSearch] = useState("");
+  const [tagShowAll, setTagShowAll] = useState(false);
   const qc = useQueryClient();
 
   const { data: contentStatusMap } = useQuery<ContentStatusMap>({
@@ -1755,88 +1758,224 @@ export default function ContentLibrary() {
           </div>
         )}
 
-        {tagSummary && Object.keys(tagSummary.topic_tags).length + Object.keys(tagSummary.audience_tags).length + Object.keys(tagSummary.intent_tags).length > 0 && (
-          <Card className="rounded-2xl border bg-card/80 p-3 shadow-sm" data-testid="tag-filter-bar">
-            <div className="flex items-center gap-2 mb-2">
+        {tagSummary && Object.keys(tagSummary.topic_tags).length + Object.keys(tagSummary.audience_tags).length + Object.keys(tagSummary.intent_tags).length + Object.keys(tagSummary.user_added_tags).length > 0 && (
+          <Card className="rounded-2xl border bg-card/80 shadow-sm overflow-hidden" data-testid="tag-filter-bar">
+            <button
+              onClick={() => { setTagExplorerOpen((v) => !v); setTagSearch(""); setTagShowAll(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/20 transition-colors"
+              data-testid="button-toggle-tag-explorer"
+            >
               <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-              <div className="flex gap-1">
-                {(["all", "topic", "audience", "intent"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTagTypeFilter(t)}
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                      tagTypeFilter === t
-                        ? "bg-[#00D657] text-black"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                    data-testid={`button-tag-type-${t}`}
-                  >
-                    {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
+              <span className="text-xs font-medium">Tag Explorer</span>
+              <span className="text-[10px] text-muted-foreground">
+                {tagSummary.total_assets_with_tags} of {tagSummary.total_assets} assets tagged
+              </span>
               {selectedTags.length > 0 && (
+                <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#00D657]/20 text-[#00D657] text-[10px] font-medium">
+                  {selectedTags.length} active
+                </span>
+              )}
+              <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground ml-auto transition-transform ${tagExplorerOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {selectedTags.length > 0 && !tagExplorerOpen && (
+              <div className="px-3 pb-2 flex flex-wrap gap-1.5" data-testid="tag-active-collapsed">
+                {(() => {
+                  const tagStyles: Record<string, { bg: string; text: string; border: string }> = {
+                    topic: { bg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
+                    audience: { bg: "bg-[#00A65C]", text: "text-white", border: "border-[#00A65C]/60" },
+                    intent: { bg: "bg-[#00D657]/20", text: "text-[#00D657]", border: "border-[#00D657]/60" },
+                    user: { bg: "bg-purple-500/30", text: "text-purple-300", border: "border-purple-500/30" },
+                  };
+                  return selectedTags.map((tag) => {
+                    const type = tagSummary.topic_tags[tag] ? "topic" : tagSummary.audience_tags[tag] ? "audience" : tagSummary.intent_tags[tag] ? "intent" : "user";
+                    const s = tagStyles[type];
+                    return (
+                      <button
+                        key={tag}
+                        onClick={(e) => { e.stopPropagation(); setSelectedTags((prev) => prev.filter((t) => t !== tag)); }}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${s.bg} ${s.text} ${s.border} ring-1 ring-[#00D657]/40`}
+                        data-testid={`button-active-tag-${tag}`}
+                      >
+                        {tag}
+                        <X className="h-2.5 w-2.5 opacity-60" />
+                      </button>
+                    );
+                  });
+                })()}
                 <button
-                  onClick={() => setSelectedTags([])}
-                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); setSelectedTags([]); }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground px-1.5"
                   data-testid="button-clear-tags"
                 >
-                  Clear tags
+                  Clear all
                 </button>
-              )}
-              <span className="text-[10px] text-muted-foreground ml-auto">
-                Tags on {tagSummary.total_assets_with_tags} of {tagSummary.total_assets} assets
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto" data-testid="tag-filter-pills">
-              {(() => {
-                const tagStyles = {
-                  topic: { bg: "bg-[#006362]", activeBg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
-                  audience: { bg: "bg-[#00A65C]", activeBg: "bg-[#00A65C]", text: "text-white", border: "border-[#00A65C]/60" },
-                  intent: { bg: "bg-transparent", activeBg: "bg-[#00D657]/20", text: "text-[#00D657]", border: "border-[#00D657]/60" },
-                  user: { bg: "bg-purple-500/15", activeBg: "bg-purple-500/30", text: "text-purple-300", border: "border-purple-500/30" },
-                };
-                const entries: { tag: string; count: number; type: "topic" | "audience" | "intent" | "user" }[] = [];
-                if (tagTypeFilter === "all" || tagTypeFilter === "topic") {
-                  Object.entries(tagSummary.topic_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "topic" }));
-                }
-                if (tagTypeFilter === "all" || tagTypeFilter === "audience") {
-                  Object.entries(tagSummary.audience_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "audience" }));
-                }
-                if (tagTypeFilter === "all" || tagTypeFilter === "intent") {
-                  Object.entries(tagSummary.intent_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "intent" }));
-                }
-                if (tagTypeFilter === "all") {
-                  Object.entries(tagSummary.user_added_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "user" }));
-                }
-                entries.sort((a, b) => b.count - a.count);
-                return entries.slice(0, 40).map((item) => {
-                  const isActive = selectedTags.includes(item.tag);
-                  const s = tagStyles[item.type];
-                  return (
+              </div>
+            )}
+
+            {tagExplorerOpen && (
+              <div className="px-3 pb-3 space-y-2.5 border-t border-border/20 pt-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={tagSearch}
+                      onChange={(e) => { setTagSearch(e.target.value); setTagShowAll(false); }}
+                      placeholder="Search tags..."
+                      className="w-full h-8 pl-8 pr-3 rounded-lg bg-muted/30 border border-border/40 text-xs focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                      data-testid="input-tag-search"
+                    />
+                  </div>
+                  {selectedTags.length > 0 && (
                     <button
-                      key={`${item.type}-${item.tag}`}
-                      onClick={() => {
-                        setSelectedTags((prev) =>
-                          prev.includes(item.tag)
-                            ? prev.filter((t) => t !== item.tag)
-                            : [...prev, item.tag]
-                        );
-                      }}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
-                        isActive
-                          ? `${s.activeBg} ${s.text} ${s.border} ring-1 ring-[#00D657]/40`
-                          : `${s.bg} ${s.text} ${s.border} opacity-70 hover:opacity-100`
-                      }`}
-                      data-testid={`button-tag-${item.type}-${item.tag}`}
+                      onClick={() => setSelectedTags([])}
+                      className="text-[10px] text-muted-foreground hover:text-foreground whitespace-nowrap"
+                      data-testid="button-clear-tags"
                     >
-                      {item.tag}
-                      <span className="opacity-60">×{item.count}</span>
+                      Clear {selectedTags.length} tag{selectedTags.length > 1 ? "s" : ""}
                     </button>
-                  );
-                });
-              })()}
-            </div>
+                  )}
+                </div>
+
+                <div className="flex gap-1">
+                  {(["all", "topic", "audience", "intent"] as const).map((t) => {
+                    const count = t === "all"
+                      ? Object.keys(tagSummary.topic_tags).length + Object.keys(tagSummary.audience_tags).length + Object.keys(tagSummary.intent_tags).length + Object.keys(tagSummary.user_added_tags).length
+                      : t === "topic" ? Object.keys(tagSummary.topic_tags).length
+                      : t === "audience" ? Object.keys(tagSummary.audience_tags).length
+                      : Object.keys(tagSummary.intent_tags).length;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => { setTagTypeFilter(t); setTagShowAll(false); }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                          tagTypeFilter === t
+                            ? "bg-[#00D657] text-black"
+                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                        }`}
+                        data-testid={`button-tag-type-${t}`}
+                      >
+                        {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+                        <span className="ml-1 opacity-60">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedTags.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground font-medium">Active filters</span>
+                    <div className="flex flex-wrap gap-1.5" data-testid="tag-active-expanded">
+                      {(() => {
+                        const tagStyles: Record<string, { bg: string; text: string; border: string }> = {
+                          topic: { bg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
+                          audience: { bg: "bg-[#00A65C]", text: "text-white", border: "border-[#00A65C]/60" },
+                          intent: { bg: "bg-[#00D657]/20", text: "text-[#00D657]", border: "border-[#00D657]/60" },
+                          user: { bg: "bg-purple-500/30", text: "text-purple-300", border: "border-purple-500/30" },
+                        };
+                        return selectedTags.map((tag) => {
+                          const type = tagSummary.topic_tags[tag] ? "topic" : tagSummary.audience_tags[tag] ? "audience" : tagSummary.intent_tags[tag] ? "intent" : "user";
+                          const s = tagStyles[type];
+                          return (
+                            <button
+                              key={tag}
+                              onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${s.bg} ${s.text} ${s.border} ring-1 ring-[#00D657]/40`}
+                              data-testid={`button-active-tag-${tag}`}
+                            >
+                              {tag}
+                              <X className="h-2.5 w-2.5 opacity-60" />
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto" data-testid="tag-filter-pills">
+                  {(() => {
+                    const tagStyles: Record<string, { bg: string; activeBg: string; text: string; border: string }> = {
+                      topic: { bg: "bg-[#006362]/60", activeBg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
+                      audience: { bg: "bg-[#00A65C]/60", activeBg: "bg-[#00A65C]", text: "text-white", border: "border-[#00A65C]/60" },
+                      intent: { bg: "bg-transparent", activeBg: "bg-[#00D657]/20", text: "text-[#00D657]", border: "border-[#00D657]/60" },
+                      user: { bg: "bg-purple-500/15", activeBg: "bg-purple-500/30", text: "text-purple-300", border: "border-purple-500/30" },
+                    };
+                    const entries: { tag: string; count: number; type: "topic" | "audience" | "intent" | "user" }[] = [];
+                    if (tagTypeFilter === "all" || tagTypeFilter === "topic") {
+                      Object.entries(tagSummary.topic_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "topic" }));
+                    }
+                    if (tagTypeFilter === "all" || tagTypeFilter === "audience") {
+                      Object.entries(tagSummary.audience_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "audience" }));
+                    }
+                    if (tagTypeFilter === "all" || tagTypeFilter === "intent") {
+                      Object.entries(tagSummary.intent_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "intent" }));
+                    }
+                    if (tagTypeFilter === "all") {
+                      Object.entries(tagSummary.user_added_tags).forEach(([tag, count]) => entries.push({ tag, count, type: "user" }));
+                    }
+
+                    const searchLower = tagSearch.toLowerCase().trim();
+                    const filtered = searchLower
+                      ? entries.filter((item) => item.tag.toLowerCase().includes(searchLower))
+                      : entries;
+                    filtered.sort((a, b) => b.count - a.count);
+
+                    const VISIBLE_LIMIT = 15;
+                    const visible = tagShowAll ? filtered : filtered.slice(0, VISIBLE_LIMIT);
+                    const hasMore = filtered.length > VISIBLE_LIMIT && !tagShowAll;
+
+                    if (filtered.length === 0) {
+                      return (
+                        <span className="text-[11px] text-muted-foreground py-2">
+                          {searchLower ? `No tags matching "${tagSearch}"` : "No tags in this category"}
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {visible.map((item) => {
+                          const isActive = selectedTags.includes(item.tag);
+                          const s = tagStyles[item.type];
+                          return (
+                            <button
+                              key={`${item.type}-${item.tag}`}
+                              onClick={() => {
+                                setSelectedTags((prev) =>
+                                  prev.includes(item.tag)
+                                    ? prev.filter((t) => t !== item.tag)
+                                    : [...prev, item.tag]
+                                );
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                                isActive
+                                  ? `${s.activeBg} ${s.text} ${s.border} ring-1 ring-[#00D657]/40`
+                                  : `${s.bg} ${s.text} ${s.border} opacity-70 hover:opacity-100`
+                              }`}
+                              data-testid={`button-tag-${item.type}-${item.tag}`}
+                            >
+                              {item.tag}
+                              <span className="opacity-60">×{item.count}</span>
+                            </button>
+                          );
+                        })}
+                        {hasMore && (
+                          <button
+                            onClick={() => setTagShowAll(true)}
+                            className="text-[10px] text-[#00D657] hover:text-[#00C04E] font-medium px-2 py-0.5"
+                            data-testid="button-show-more-tags"
+                          >
+                            +{filtered.length - VISIBLE_LIMIT} more
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
           </Card>
         )}
 
