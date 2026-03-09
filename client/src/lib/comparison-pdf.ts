@@ -16,6 +16,7 @@ const SAGE = {
   sourceJade: "#00B8A9",
   sourceAmber: "#F5A623",
   calloutBg: "#0A3D1F",
+  dimGreen: "#00A65C",
   tagTeal: "#0D9488",
   tagJade: "#059669",
   tagShared: "#00D657",
@@ -25,9 +26,11 @@ const SAGE = {
   tagUser: "#666666",
 };
 
-const MARGIN = 20;
+const MARGIN = 18;
 const PAGE_W = 210;
+const PAGE_H = 297;
 const CONTENT_W = PAGE_W - MARGIN * 2;
+const FOOTER_Y = PAGE_H - 10;
 
 interface FullComparisonResult {
   nameA: string;
@@ -87,41 +90,45 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
   function addFooter() {
     pageNum++;
-    setFill(SAGE.green);
-    doc.roundedRect(MARGIN, 278, 12, 4, 1, 1, "F");
-    setColor(SAGE.black);
-    doc.setFontSize(5);
-    doc.setFont("helvetica", "bold");
-    doc.text("SAGE", MARGIN + 1.5, 281);
-    setColor(SAGE.muted);
-    doc.setFontSize(6);
+    doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
-    doc.text("CONFIDENTIAL", PAGE_W / 2, 285, { align: "center" });
-    doc.text(`\u00A9 ${new Date().getFullYear()} The Sage Group plc. All rights reserved.`, PAGE_W / 2, 289, { align: "center" });
-    doc.text(`${pageNum}`, PAGE_W - MARGIN, 289, { align: "right" });
+    setColor(SAGE.dimGreen);
+    doc.text("Sage", MARGIN, FOOTER_Y);
+    setColor(SAGE.green);
+    doc.text("CONFIDENTIAL: INTERNAL USE ONLY", PAGE_W / 2, FOOTER_Y, { align: "center" });
+    setColor(SAGE.dimGreen);
+    doc.text(`${pageNum}`, PAGE_W - MARGIN, FOOTER_Y, { align: "right" });
+    doc.setFontSize(5.5);
+    doc.text(`\u00A9 ${new Date().getFullYear()} The Sage Group plc, or its licensors. All rights reserved.`, PAGE_W / 2, FOOTER_Y + 3, { align: "center" });
+  }
+
+  function addBlackPage() {
+    setFill(SAGE.black);
+    doc.rect(0, 0, PAGE_W, PAGE_H, "F");
   }
 
   function newPage() {
     if (pageNum > 0) doc.addPage();
-    setFill(SAGE.black);
-    doc.rect(0, 0, PAGE_W, 297, "F");
+    addBlackPage();
     addFooter();
-    y = MARGIN;
+    y = MARGIN + 2;
   }
 
   function checkPage(needed: number) {
-    if (y + needed > 268) newPage();
+    if (y + needed > FOOTER_Y - 8) newPage();
   }
 
   function sectionTitle(title: string) {
     checkPage(14);
     setColor(SAGE.white);
-    doc.setFontSize(13);
+    doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.text(title, MARGIN, y);
-    y += 2;
-    setFill(SAGE.green);
-    doc.rect(MARGIN, y, 30, 0.5, "F");
+    y += 3;
+    doc.setDrawColor(...hexToRgb(SAGE.green));
+    doc.setLineWidth(0.5);
+    doc.line(MARGIN, y, MARGIN + 50, y);
+    doc.setLineWidth(0.2);
     y += 6;
   }
 
@@ -225,7 +232,6 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     const hasAny = tagTypes.some(t => structuredTags[t.key].length > 0);
     if (!hasAny) return;
 
-    const totalTags = tagTypes.reduce((sum, t) => sum + structuredTags[t.key].length, 0);
     let remaining = maxTotal;
 
     if (label) {
@@ -275,32 +281,30 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       }
       y += tagH + 2;
     }
-
-    if (totalTags > maxTotal) {
-      setColor(SAGE.muted);
-      doc.setFontSize(5.5);
-      doc.setFont("helvetica", "italic");
-      doc.text(`+${totalTags - maxTotal} more tags — see full list in Content Library`, MARGIN, y);
-      y += 4;
-    }
   }
 
   // === COVER PAGE ===
-  newPage();
-  try {
-    setFill("#001A0A");
-    doc.circle(PAGE_W - 20, 270, 90, "F");
-  } catch {}
+  addBlackPage();
+  pageNum++;
 
-  y = 80;
+  setFill(SAGE.green);
+  doc.rect(MARGIN, 45, CONTENT_W, 0.8, "F");
+
+  y = 60;
   setColor(SAGE.white);
-  doc.setFontSize(32);
+  doc.setFontSize(34);
   doc.setFont("helvetica", "bold");
   doc.text("Content Comparison", MARGIN, y);
   y += 14;
-  doc.setFontSize(32);
+  doc.setFontSize(34);
   doc.text("Report", MARGIN, y);
   y += 18;
+
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "normal");
+  setColor(SAGE.white);
+  doc.text("Content Intelligence Analyst", MARGIN, y);
+  y += 14;
 
   setColor(SAGE.muted);
   doc.setFontSize(11);
@@ -325,12 +329,12 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   y += 7;
   doc.text("Prepared by Content Intelligence Analyst", MARGIN, y);
 
-  setFill(SAGE.green);
-  doc.roundedRect(MARGIN, 265, 16, 5, 1, 1, "F");
-  setColor(SAGE.black);
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "bold");
-  doc.text("SAGE", MARGIN + 2, 268.5);
+  doc.setFontSize(12);
+  setColor(SAGE.green);
+  doc.text("Sage", MARGIN, FOOTER_Y);
+  doc.setFontSize(5.5);
+  setColor(SAGE.dimGreen);
+  doc.text(`\u00A9 ${new Date().getFullYear()} The Sage Group plc, or its licensors. All rights reserved.`, PAGE_W / 2, FOOTER_Y + 3, { align: "center" });
 
   // === DUPLICATE ALERT ===
   if (data.isDuplicate && data.duplicateMessage) {
@@ -340,10 +344,8 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     const alertH = alertLines.length * 4.5 + 14;
     setFill("#3D2800");
     doc.roundedRect(MARGIN, y, CONTENT_W, alertH, 2, 2, "F");
-    doc.setDrawColor(...hexToRgb("#F5A623"));
-    doc.setLineWidth(0.8);
-    doc.line(MARGIN, y, MARGIN, y + alertH);
-    doc.setLineWidth(0.2);
+    setFill(SAGE.sourceAmber);
+    doc.rect(MARGIN, y, 1.5, alertH, "F");
     setColor("#F5A623");
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
@@ -422,15 +424,13 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       const issueTexts = metaIssues.map(mi => `${mi.asset}: ${mi.field} tag says "${mi.tagged}" — ${mi.issue}`);
       const allIssueLines: string[] = [];
       issueTexts.forEach(t => {
-        const lines = doc.splitTextToSize(`• ${t}`, CONTENT_W - 14);
+        const lines = doc.splitTextToSize(`\u2022 ${t}`, CONTENT_W - 14);
         allIssueLines.push(...lines);
       });
       const issueH = allIssueLines.length * 4 + 12;
       doc.roundedRect(MARGIN, y, CONTENT_W, issueH, 2, 2, "F");
-      doc.setDrawColor(...hexToRgb("#F5A623"));
-      doc.setLineWidth(0.5);
-      doc.line(MARGIN, y, MARGIN, y + issueH);
-      doc.setLineWidth(0.2);
+      setFill(SAGE.sourceAmber);
+      doc.rect(MARGIN, y, 1.5, issueH, "F");
       setColor("#F5A623");
       doc.setFontSize(7);
       doc.setFont("helvetica", "bold");
@@ -551,7 +551,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       y += 1;
       data.sharedAndDifferent.overlap.forEach(item => {
         checkPage(8);
-        wrappedText(`- ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+        wrappedText(`\u2022 ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
         y += 1;
       });
       y += 3;
@@ -562,7 +562,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       y += 1;
       data.sharedAndDifferent.divergence.forEach(item => {
         checkPage(8);
-        wrappedText(`- ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+        wrappedText(`\u2022 ${item}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
         y += 1;
       });
     }
@@ -584,7 +584,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
         const text = item.point || (item.factor && item.explanation ? `${item.factor}: ${item.explanation}` : item.factor || item.explanation || "");
         if (!text) continue;
         checkPage(8);
-        wrappedText(`- ${text}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+        wrappedText(`\u2022 ${text}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
         y += 1.5;
       }
       y += 3;
@@ -606,7 +606,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
         const text = item.point || (item.issue && item.detail ? `${item.issue}: ${item.detail}` : item.issue || item.detail || "");
         if (!text) continue;
         checkPage(8);
-        wrappedText(`- ${text}`, SAGE.sourceAmber, 7.5, CONTENT_W - 4, false, 2);
+        wrappedText(`\u2022 ${text}`, SAGE.sourceAmber, 7.5, CONTENT_W - 4, false, 2);
         y += 1.5;
       }
       y += 3;
@@ -620,8 +620,18 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     y += 2;
 
     if (data.verdict) {
-      wrappedText(data.verdict, SAGE.bodyText, 9, CONTENT_W);
-      y += 4;
+      checkPage(20);
+      setFill(SAGE.calloutBg);
+      const verdictLines = doc.splitTextToSize(data.verdict, CONTENT_W - 14);
+      const verdictH = verdictLines.length * 4.2 + 10;
+      doc.roundedRect(MARGIN, y, CONTENT_W, verdictH, 2, 2, "F");
+      setFill(SAGE.green);
+      doc.rect(MARGIN, y, 1.5, verdictH, "F");
+      setColor(SAGE.white);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      verdictLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 6, y + 6 + li * 4.2); });
+      y += verdictH + 6;
     }
 
     if (data.suggestions?.length) {
@@ -647,9 +657,11 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     if (data.lowEngagement) {
       setFill(SAGE.calloutBg);
       const noteText = `Both assets have minimal engagement (fewer than 10 total interactions each). Sample sizes are too small for meaningful percentage comparisons.`;
-      const noteLines = doc.splitTextToSize(noteText, CONTENT_W - 10);
+      const noteLines = doc.splitTextToSize(noteText, CONTENT_W - 12);
       const noteH = noteLines.length * 4 + 8;
       doc.roundedRect(MARGIN, y, CONTENT_W, noteH, 2, 2, "F");
+      setFill(SAGE.sourceAmber);
+      doc.rect(MARGIN, y, 1.5, noteH, "F");
       setColor(SAGE.sourceAmber);
       doc.setFontSize(7);
       doc.setFont("helvetica", "bold");
