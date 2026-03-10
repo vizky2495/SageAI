@@ -1,0 +1,137 @@
+
+Prompt for Replit:
+
+Connect the Content Comparison context with the Content Librarian chat. When a comparison is active, the Librarian should have full access to both content texts, the comparison analysis, and all metadata — so the user can ask follow-up questions about the comparison in natural language without re-explaining anything.
+
+THE PROBLEM
+Right now the Content Comparison tool and the Content Librarian chat are disconnected. The user sees a comparison report on screen but if they want to ask "why does Content A have better engagement?" or "what specific sections talk about cloud adoption?" or "would Content A work for the UK market?" they have to open the chat and re-explain everything from scratch. The chat has no idea a comparison just happened.
+
+THE FIX: PASS COMPARISON CONTEXT TO THE LIBRARIAN
+What the Librarian should have access to when a comparison is active:
+
+Full content text of Content A — the actual extracted text from the uploaded file, not just the summary. This lets the Librarian answer specific questions like "does Content A mention CRA?" or "what does it say about pricing models?" by searching the actual content.
+Full content text of Content B — same as above. The Librarian can answer questions about either piece or compare specific sections.
+The complete comparison analysis — the AI-generated results: content overview, tags, resonance assessment, topic relevance, shared/different, what works, what could be improved, verdict, and suggestions. This lets the Librarian reference its own analysis when answering follow-ups.
+All metadata for both assets — product, country, industry, funnel stage, channel, content type from engagement data.
+All engagement data for both assets — views, downloads, leads, SQOs, avg time.
+
+
+HOW TO IMPLEMENT
+When a comparison is completed (AI analysis generated and displayed):
+
+Store the full comparison context in the same state that persists across navigation (from the previous prompt)
+This context object should include:
+comparison_context: {
+  content_a: {
+    asset_id,
+    readable_name,
+    content_text (full text),
+    content_summary,
+    keyword_tags,
+    metadata (product, country, industry, funnel_stage, channel),
+    engagement (views, downloads, leads, sqos, avg_time)
+  },
+  content_b: {
+    same structure
+  },
+  comparison_results: {
+    content_overview_a,
+    content_overview_b,
+    resonance_assessment,
+    topic_relevance,
+    shared_and_different,
+    what_works,
+    could_be_improved,
+    verdict,
+    suggestions,
+    tags_shared,
+    is_duplicate (boolean)
+  }
+}
+
+When the Librarian chat is opened while a comparison is active, automatically inject this context into the AI prompt as system context
+The Librarian's system prompt should include:
+"The user has an active content comparison between 
+[Content A name] and [Content B name]. You have access 
+to the full text of both content pieces, the comparison 
+analysis results, and all metadata. You can answer 
+questions about either content piece, the comparison, 
+or help the user decide what to do next. When referencing 
+specific content, cite which piece you're referring to 
+(Content A or Content B) and which section of the content 
+your answer comes from."
+
+
+
+WHAT THE USER CAN NOW ASK THE LIBRARIAN DURING A COMPARISON
+Questions about specific content:
+
+"What exactly does Content A say about cloud adoption?" → Librarian reads Content A's full text and finds the relevant sections
+"Does Content B mention any specific ROI numbers?" → Librarian searches Content B's text
+"How many times does Content A reference Sage?" → Librarian searches and counts
+"What's the reading level of Content B compared to A?" → Librarian analyzes both texts
+
+Questions about the comparison:
+
+"Why does Content A have better engagement?" → Librarian references both the content analysis and engagement data
+"You said Content A has weak country fit — what specifically would need to change?" → Librarian references the resonance assessment and provides detailed recommendations
+"Are these really duplicates or are there subtle differences?" → Librarian does a detailed text comparison and highlights any differences found
+"Which one should I use for a campaign targeting Canadian accountants?" → Librarian uses resonance assessment + engagement data + content analysis to recommend
+
+Questions that go deeper than the report:
+
+"What percentage of Content A is about the living brand concept?" → Librarian analyzes the full text and calculates
+"If I wanted to use Content A for the UK market instead of Canada, would it work?" → Librarian reads the content and assesses market fit
+"Content B is tagged as MOFU — show me the sections that would qualify as MOFU content" → Librarian searches Content B for MOFU-appropriate material and either finds it or confirms it's mislabelled
+"What topics from Content A are trending right now?" → Librarian uses web search to check current relevance of the topics found in Content A
+
+Action-oriented questions:
+
+"Set up a campaign plan using Content A for the Canadian market" → Librarian passes context to Campaign Planner (same as the "Plan Campaign" button but triggered from chat)
+"Find me other content in the library similar to Content A" → Librarian searches the library using Content A's tags and topics
+"What other content in our library talks about cloud accounting?" → Librarian searches across all content summaries and tags
+
+
+UI INTEGRATION
+On the comparison page, update the Librarian chat pill:
+
+When a comparison is active, the chat pill should show awareness: "Content Librarian — Comparison active"
+Or the pill briefly expands to show: "Ask me about this comparison"
+This signals to the user that the chat knows about their comparison
+
+When the user opens the chat from the comparison page:
+
+Show a brief context note at the top of the chat: "I have access to both content pieces from your comparison: [Content A name] vs [Content B name]. Ask me anything about them."
+Show 3-4 quick action chips specific to the comparison context:
+
+"Deep dive into Content A"
+"Deep dive into Content B"
+"Find similar content in library"
+"Plan campaign with winner"
+
+
+These replace the default quick actions while a comparison is active
+
+When there is no active comparison:
+
+Chat works as normal with default quick actions
+Comparison context is not injected
+
+
+CONTEXT WINDOW MANAGEMENT
+Full content texts for two assets could be large. Manage the context window:
+
+Always include: both content summaries, tags, comparison results, metadata, engagement data (this is compact — fits easily)
+Include full content_text for both assets if combined they are under 100,000 tokens
+If combined content_text exceeds 100,000 tokens: include full text for whichever asset the user's question is about, and summary only for the other. Detect which asset the question targets from the user's message.
+If the user asks about both assets: include the most relevant sections of each rather than full texts. Use the topic_breakdown to identify which sections are relevant to the question.
+The comparison results (overview, resonance, verdict, suggestions) should ALWAYS be included regardless of content length — they're compact and provide essential context.
+
+
+ALSO CONNECT: CAMPAIGN PLANNER CONTEXT
+If the user previously sent the comparison to the Campaign Planner (via "Plan Campaign With This Content →"), and then opens the Librarian chat:
+
+The Librarian should also know a campaign plan is in progress
+Include a note in the Librarian's context: "The user has also started a campaign plan based on this comparison."
+The user can ask: "What did the campaign plan suggest for channels?" or "Can you adjust the campaign plan to target the UK instead?" and the Librarian has full context to answer
+If the user wants to modify the campaign plan based on chat discussion, the Librarian can update the context and re-send to the Campaign Planner

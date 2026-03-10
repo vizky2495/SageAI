@@ -813,10 +813,13 @@ CONCISENESS RULES:
 - suggestions: Maximum 4 items, 1-2 sentences each.
 
 SUGGESTION RULES — CRITICAL:
-- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, or writing NEW content.
-- Suggestions must focus on: improving existing content, better deployment, metadata corrections, re-tagging, re-positioning, or which existing content to prioritize for campaigns.
-- Good: "Content A's narrative case study format is more effective for BOFU — prioritize it for ANZ campaigns."
-- Bad: "Develop a new case study mirroring Content A's structure." — this recommends creating new content, which is not allowed.
+- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, writing, or producing NEW content.
+- Suggestions MUST focus on: improving the existing content pieces being compared, better deployment strategies, metadata corrections, re-tagging, re-positioning, format prioritisation, or which existing content to prioritize for campaigns.
+- Good: "Content A's narrative case study format with concrete ROI metrics is more effective for BOFU than Content B's whitepaper format. Prioritize Content A's format for BOFU campaigns in the ANZ market."
+- Good: "Content B covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
+- Bad: "Develop an Australian accounting case study mirroring Content A's structure." — FORBIDDEN, this recommends creating new content.
+- Bad: "Create a localized version for the Canadian market." — FORBIDDEN.
+- If you catch yourself suggesting to "create", "develop", "build", "write", "produce", or "design" something new, STOP and rephrase as advice about the existing content.
 
 METADATA DETECTION:
 - For each readable content, detect the actual country/region, product, and industry from the content text.
@@ -983,9 +986,12 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       let suggestions: { text: string; source: string }[] = resonanceAnalysis?.suggestions || [];
 
       const createContentPatterns = [
-        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate)\b/i,
-        /\b(create|develop|build|write|produce|draft|generate|launch)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic)\b/i,
-        /\b(develop|create|produce|write)\b\s+(a|an|the)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article)/i,
+        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author|design|craft)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate|similar|equivalent|complementary|localized|localised|tailored|bespoke)\b/i,
+        /\b(create|develop|build|write|produce|draft|generate|launch|design|craft)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic|report|resource|one-pager|factsheet|landing page)\b/i,
+        /\b(develop|create|produce|write|craft|design)\b\s+(a|an|the|one)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article|version)/i,
+        /\b(develop|create|produce|write|craft)\b\s+(an?\s+)?(Australian|Canadian|UK|US|French|German|Spanish|Irish|local|regional|market-specific|ANZ)/i,
+        /\bcreating\b.*\bcontent\b/i,
+        /\bmirroring\b.*\bstructure\b/i,
       ];
       suggestions = suggestions.filter(s => !createContentPatterns.some(rx => rx.test(s.text)));
 
@@ -1237,8 +1243,13 @@ CONCISENESS RULES:
 - Suggestions: max 5 items, 1-2 sentences each.
 
 SUGGESTION RULES — CRITICAL:
-- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, or writing NEW content.
-- Suggestions must focus on: improving existing content, better deployment, metadata corrections, re-positioning, or which content to prioritize.
+- This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, writing, or producing NEW content.
+- Suggestions MUST focus on: improving the existing content pieces being compared, better deployment strategies, metadata corrections, re-tagging, re-positioning, format prioritisation, or which existing content to prioritize for campaigns.
+- Good: "Content A's narrative case study format with concrete ROI metrics is more effective for BOFU — prioritize it for campaigns in the ANZ market."
+- Good: "Content C covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
+- Bad: "Develop a new case study mirroring Content A's structure." — FORBIDDEN, this recommends creating new content.
+- Bad: "Create a localized version for the Canadian market." — FORBIDDEN.
+- If you catch yourself suggesting to "create", "develop", "build", "write", "produce", or "design" something new, STOP and rephrase as advice about the existing content.
 
 Return ONLY valid JSON matching this schema:
 {
@@ -1297,13 +1308,16 @@ Return ONLY valid JSON matching this schema:
         };
       }
 
-      const createContentPatterns = [
-        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate)\b/i,
-        /\b(create|develop|build|write|produce|draft|generate|launch)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic)\b/i,
-        /\b(develop|create|produce|write)\b\s+(a|an|the)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article)/i,
+      const createContentPatternsMulti = [
+        /\b(create|develop|build|write|produce|draft|generate|launch|commission|author|design|craft)\b.*\b(new|additional|original|another|more|fresh|dedicated|separate|similar|equivalent|complementary|localized|localised|tailored|bespoke)\b/i,
+        /\b(create|develop|build|write|produce|draft|generate|launch|design|craft)\b.*\b(content|asset|piece|case study|whitepaper|brochure|document|guide|ebook|webinar|blog|article|video|infographic|report|resource|one-pager|factsheet|landing page)\b/i,
+        /\b(develop|create|produce|write|craft|design)\b\s+(a|an|the|one)\s+\w+\s*(case study|whitepaper|brochure|guide|ebook|webinar|blog|article|version)/i,
+        /\b(develop|create|produce|write|craft)\b\s+(an?\s+)?(Australian|Canadian|UK|US|French|German|Spanish|Irish|local|regional|market-specific|ANZ)/i,
+        /\bcreating\b.*\bcontent\b/i,
+        /\bmirroring\b.*\bstructure\b/i,
       ];
       if (multiAnalysis.suggestions) {
-        multiAnalysis.suggestions = multiAnalysis.suggestions.filter((s: any) => !createContentPatterns.some(rx => rx.test(s.text)));
+        multiAnalysis.suggestions = multiAnalysis.suggestions.filter((s: any) => !createContentPatternsMulti.some(rx => rx.test(s.text)));
         multiAnalysis.suggestions = multiAnalysis.suggestions.slice(0, 5);
       }
 

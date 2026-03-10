@@ -309,16 +309,21 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   setColor(SAGE.muted);
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
-  function shortName(name: string): string {
-    let s = name.replace(/\s*\([^)]*\)\s*$/, "");
-    s = s.replace(/\s*GO\s*[,|]\s*TOP\s*[,|]\s*GNRC\s*/gi, "");
-    s = s.replace(/\s*[,|]\s*(English\s+)?Canada\s*/gi, "");
-    s = s.replace(/\s*[,|]\s*Australia\s*/gi, "");
+  function coverName(name: string): string {
+    let s = name;
+    s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
+    s = s.replace(/\s*\([^)]*\)\s*$/g, "");
+    s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
+    s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
+    s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland)\s*/gi, "");
+    s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+    s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+    s = s.replace(/_/g, " ");
     s = s.trim().replace(/\s+/g, " ");
-    if (s.length > 40) s = s.slice(0, 40).trim() + "...";
+    if (s.length > 45) s = s.slice(0, 45).trim() + "...";
     return s;
   }
-  const subtitle = `${shortName(data.nameA)} vs ${shortName(data.nameB)}`;
+  const subtitle = `${coverName(data.nameA)} vs ${coverName(data.nameB)}`;
   const subtitleLines = doc.splitTextToSize(subtitle, CONTENT_W);
   subtitleLines.forEach((line: string) => { doc.text(line, MARGIN, y); y += 5; });
   y += 10;
@@ -357,10 +362,26 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     y += alertH + 6;
   }
 
+  // === ASSET IDENTITY (PAGE 2) ===
+  newPage();
+  sectionTitle("Asset Identity");
+  y += 2;
+  const meta = data.metadata;
+  const idWidths = [50, 62, 62];
+  drawTableRow(["", "Content A", "Content B"], idWidths, true, false);
+  drawTableRow(["Full Name", data.nameA, data.nameB], idWidths, false, true);
+  drawTableRow(["Format", dv(meta.formatA), dv(meta.formatB)], idWidths, false, false);
+  drawTableRow(["Funnel Stage", meta.stageA, meta.stageB], idWidths, false, true);
+  drawTableRow(["Product", dv(meta.productA), dv(meta.productB)], idWidths, false, false);
+  drawTableRow(["Country/Region", dv(meta.countryA), dv(meta.countryB)], idWidths, false, true);
+  drawTableRow(["Industry", dv(meta.industryA), dv(meta.industryB)], idWidths, false, false);
+  drawTableRow(["Word Count", meta.wordCountA?.toLocaleString() || "N/A", meta.wordCountB?.toLocaleString() || "N/A"], idWidths, false, true);
+  drawTableRow(["Content Type", dv(meta.typeA), dv(meta.typeB)], idWidths, false, false);
+
   // === CONTENT OVERVIEW ===
   const hasOverview = data.contentOverview && (data.contentOverview.a || data.contentOverview.b);
   if (hasOverview) {
-    if (!data.isDuplicate) newPage();
+    newPage();
     sectionTitle("Content Overview");
     sourceTag("Source: Content Analysis");
     y += 2;
@@ -398,23 +419,6 @@ export function generateComparisonPdf(data: FullComparisonResult) {
         drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared tags: ");
       }
     }
-
-    const meta = data.metadata;
-    y += 2;
-    checkPage(30);
-    wrappedText("Key Metadata", SAGE.green, 9, CONTENT_W, true);
-    y += 2;
-    const metaWidths = [50, 55, 55];
-    drawTableRow(["", data.nameA, data.nameB], metaWidths, true, false);
-    const metaRows = [
-      ["Format", dv(meta.formatA), dv(meta.formatB)],
-      ["Word Count", meta.wordCountA?.toLocaleString() || "N/A", meta.wordCountB?.toLocaleString() || "N/A"],
-      ["Country/Region", dv(meta.countryA), dv(meta.countryB)],
-      ["Funnel Stage", meta.stageA, meta.stageB],
-      ["Product", dv(meta.productA), dv(meta.productB)],
-      ["Industry", dv(meta.industryA), dv(meta.industryB)],
-    ];
-    metaRows.forEach((row, i) => drawTableRow(row, metaWidths, false, i % 2 === 0));
 
     const metaIssues = data.metadataIssues || [];
     if (metaIssues.length > 0) {
