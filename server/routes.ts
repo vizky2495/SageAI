@@ -396,57 +396,18 @@ Benchmarks: ${benchmarkSummary}`
 
       let text = "";
       let pageCount = 0;
-      let extractionMethod = "pdfjs";
+      let extractionMethod = "pdf-parse";
 
       try {
-        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-        const uint8 = new Uint8Array(buffer);
-        const loadingTask = pdfjsLib.getDocument({ data: uint8, disableFontFace: true, useSystemFonts: true, disableWorker: true } as any);
-        const doc = await loadingTask.promise;
-        pageCount = doc.numPages;
-        const pagesToProcess = Math.min(pageCount, MAX_PDF_PAGES);
-        const pageTexts: string[] = [];
-        for (let i = 1; i <= pagesToProcess; i++) {
-          try {
-            const page = await doc.getPage(i);
-            const content = await page.getTextContent();
-            const strings = content.items
-              .filter((item: any) => typeof item.str === "string")
-              .map((item: any) => item.str);
-            pageTexts.push(strings.join(" "));
-          } catch (pageErr) {
-            console.error(`PDF page ${i} extraction error:`, pageErr);
-          }
-        }
-        text = pageTexts.join("\n").trim();
-        doc.destroy();
+        const pdfParse = (await import("pdf-parse")).default;
+        const result = await pdfParse(buffer, { max: MAX_PDF_PAGES });
+        text = (result.text || "").trim();
+        pageCount = result.numpages || 0;
       } catch (parseErr: any) {
-        console.error("PDF primary extraction error, trying raw buffer fallback:", parseErr);
-        extractionMethod = "raw";
-        try {
-          const rawStr = buffer.toString("utf-8");
-          const cleaned = rawStr
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, " ")
-            .replace(/\s{3,}/g, " ");
-          const textMatches = cleaned.match(/\(([^)]{2,})\)/g);
-          if (textMatches) {
-            text = textMatches
-              .map(m => m.slice(1, -1))
-              .filter(s => /[a-zA-Z]{2,}/.test(s))
-              .join(" ")
-              .trim();
-          }
-          if (!text) {
-            const readable = cleaned
-              .split(/[^a-zA-Z0-9.,;:!?'"()\-\s]+/)
-              .filter(s => s.trim().length > 10 && /[a-zA-Z]{3,}/.test(s))
-              .join(" ")
-              .trim();
-            text = readable.slice(0, 50000);
-          }
-        } catch (rawErr) {
-          console.error("Raw buffer fallback also failed:", rawErr);
-        }
+        console.error("PDF extraction error:", parseErr);
+        return res.status(422).json({
+          error: "Could not extract text from this PDF. Try uploading a different file or enter details manually.",
+        });
       }
 
       if (!text || text.length < 20) {
@@ -663,8 +624,8 @@ No explanation, no markdown, no extra text. Only JSON.`,
         analysis,
       });
     } catch (error: any) {
-      console.error("PDF extraction error:", error);
-      res.status(500).json({ error: "PDF extraction failed.", detail: error?.message });
+      console.error("PDF extraction failed:", error);
+      res.status(500).json({ error: "Could not extract text from this PDF. Try uploading a different file or enter details manually." });
     }
   });
 
@@ -1129,8 +1090,8 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
         },
       });
     } catch (error: any) {
-      console.error("Full comparison error:", error);
-      res.status(500).json({ error: "Comparison analysis failed.", detail: error?.message });
+      console.error("Comparison analysis failed:", error);
+      res.status(500).json({ error: "Comparison analysis failed. Please try again." });
     }
   });
 
@@ -1381,8 +1342,8 @@ Return ONLY valid JSON matching this schema:
         suggestions: multiAnalysis.suggestions || [],
       });
     } catch (error: any) {
-      console.error("Multi-comparison error:", error);
-      res.status(500).json({ error: "Multi-comparison analysis failed.", detail: error?.message });
+      console.error("Multi-comparison analysis failed:", error);
+      res.status(500).json({ error: "Multi-comparison analysis failed. Please try again." });
     }
   });
 

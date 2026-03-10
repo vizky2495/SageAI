@@ -192,19 +192,10 @@ function extractHtmlContent(html: string): { text: string; headings: string[]; i
   return { text, headings, isGated, gateNotes };
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = new Uint8Array(buffer);
-  const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true }).promise;
-  const maxPages = Math.min(doc.numPages, 20);
-  const pages: string[] = [];
-  for (let i = 1; i <= maxPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map((item: any) => item.str).join(" ");
-    pages.push(strings);
-  }
-  return pages.join("\n\n");
+async function extractPdfText(buffer: Buffer): Promise<{ text: string; pageCount: number }> {
+  const pdfParse = (await import("pdf-parse")).default;
+  const result = await pdfParse(buffer, { max: 20 });
+  return { text: result.text || "", pageCount: result.numpages || 1 };
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
@@ -222,11 +213,21 @@ async function fetchAndStoreUrl(assetId: string, url: string, storedBy = "user")
   let fetchNotes = "";
   let contentFormat = isPdf ? "pdf" : "webpage_snapshot";
 
+  let pdfPageCount = 1;
   if (isPdf) {
-    text = await extractPdfText(body);
-    if (!text.trim()) {
+    try {
+      const pdfResult = await extractPdfText(body);
+      text = pdfResult.text;
+      pdfPageCount = pdfResult.pageCount;
+      if (!text.trim()) {
+        fetchStatus = "partial";
+        fetchNotes = "PDF text extraction returned empty — may be image-based PDF";
+      }
+    } catch (e: any) {
+      console.error("PDF extraction failed:", e);
       fetchStatus = "partial";
-      fetchNotes = "PDF text extraction returned empty — may be image-based PDF";
+      fetchNotes = "Could not extract text from this PDF";
+      text = "";
     }
   } else {
     const extracted = extractHtmlContent(body.toString("utf-8"));
@@ -251,9 +252,7 @@ async function fetchAndStoreUrl(assetId: string, url: string, storedBy = "user")
   };
 
   if (isPdf && analysis.structure) {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(body) }).promise;
-    analysis.structure.pageCount = doc.numPages;
+    analysis.structure.pageCount = pdfPageCount;
   }
 
   const stored = await storage.upsertContent({
@@ -341,10 +340,12 @@ export function registerContentRoutes(app: Express): void {
       if (ext === "pdf") {
         contentFormat = "pdf";
         try {
-          text = await extractPdfText(buffer);
+          const pdfResult = await extractPdfText(buffer);
+          text = pdfResult.text;
           if (!text.trim()) fetchNotes = "PDF text extraction returned empty — may be image-based";
         } catch (e: any) {
-          fetchNotes = `PDF extraction error: ${e.message}`;
+          console.error("PDF extraction error:", e);
+          fetchNotes = "Could not extract text from this PDF. Try uploading a different file or enter details manually.";
         }
       } else if (ext === "docx") {
         contentFormat = "docx";
