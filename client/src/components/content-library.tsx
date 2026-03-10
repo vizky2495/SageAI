@@ -970,7 +970,7 @@ function ContentCard({
   return (
     <>
       <div
-        className="w-[280px] shrink-0 relative"
+        className="w-[280px] shrink-0 relative flex flex-col"
         style={{ paddingTop: 6, paddingBottom: 6 }}
         onMouseEnter={() => {
           setHovered(true);
@@ -1394,6 +1394,8 @@ function StageCarousel({
   const allCards = data?.pages.flatMap((p) => p.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
+  if (stage === "UNKNOWN" && total === 0 && !isLoading) return null;
+
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid={`carousel-${stage.toLowerCase()}`}>
       <div className="flex items-center justify-between">
@@ -1402,7 +1404,9 @@ function StageCarousel({
             {stage}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            {total} content asset{total !== 1 ? "s" : ""}
+            {total} asset{total !== 1 ? "s" : ""}
+            <span className="mx-1.5 opacity-40">·</span>
+            {stage === "TOFU" ? "Awareness metrics" : stage === "MOFU" ? "Engagement metrics" : stage === "BOFU" ? "Conversion metrics" : "General metrics"}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -1429,7 +1433,7 @@ function StageCarousel({
 
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto pt-2 pb-3 scrollbar-thin"
+        className="flex items-stretch gap-3 overflow-x-auto pt-2 pb-3 scrollbar-thin"
         style={{ scrollSnapType: "x mandatory", maxWidth: "100%" }}
         data-testid={`scroll-lane-${stage.toLowerCase()}`}
       >
@@ -1745,7 +1749,7 @@ export default function ContentLibrary() {
                   <span className="font-medium">{s}</span>
                   <span>{c.withContent} of {c.total}</span>
                   {c.total > 0 && (
-                    <span className="inline-block h-1 w-12 rounded-full bg-muted overflow-hidden">
+                    <span className="inline-block h-2 w-14 rounded-full bg-muted overflow-hidden">
                       <span
                         className="block h-full rounded-full bg-emerald-500"
                         style={{ width: `${Math.round((c.withContent / c.total) * 100)}%` }}

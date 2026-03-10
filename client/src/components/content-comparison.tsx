@@ -2508,6 +2508,7 @@ export default function ContentComparison() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const filledSlots = slots.filter(s => s.filled);
   const canCompare = filledSlots.length >= 2;
@@ -2553,6 +2554,7 @@ export default function ContentComparison() {
     });
     setActiveSlotIndex(null);
     setActiveSource(null);
+    setCollapsed(false);
   }
 
   function handleViewStandaloneAnalysis(result: PdfResult) {
@@ -2772,24 +2774,40 @@ export default function ContentComparison() {
         className="rounded-2xl border border-primary/30 bg-card/70 backdrop-blur p-5"
         data-testid="panel-content-intake"
       >
-        <div className={`flex items-center gap-2 ${step === "standalone" ? "mb-0" : "mb-4"}`}>
-          <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30">
-            <ArrowLeftRight className="h-4 w-4 text-primary" />
+        <div
+          className={`flex items-center gap-2 w-full ${collapsed ? "" : step === "standalone" ? "mb-0" : "mb-4"}`}
+        >
+          <div
+            onClick={() => setCollapsed(c => !c)}
+            className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-expanded={!collapsed}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(c => !c); } }}
+            data-testid="btn-toggle-comparison-panel"
+          >
+            <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30 shrink-0">
+              <ArrowLeftRight className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
+              {!collapsed && step !== "standalone" && (
+                <p className="text-xs text-muted-foreground">Add 2–5 content pieces to compare — upload, pick from library, or enter manually</p>
+              )}
+              {collapsed && (
+                <p className="text-xs text-muted-foreground">Click to expand — upload, pick from library, or enter manually</p>
+              )}
+            </div>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${collapsed ? "" : "rotate-180"}`} />
           </div>
-          <div>
-            <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
-            {step !== "standalone" && (
-              <p className="text-xs text-muted-foreground">Add 2–5 content pieces to compare — upload, pick from library, or enter manually</p>
-            )}
-          </div>
-          {step !== "intake" && (
-            <Button onClick={handleReset} variant="outline" size="sm" className="ml-auto rounded-lg text-xs" data-testid="btn-reset-comparison">
+          {!collapsed && step !== "intake" && (
+            <Button onClick={handleReset} variant="outline" size="sm" className="rounded-lg text-xs shrink-0" data-testid="btn-reset-comparison">
               Start Over
             </Button>
           )}
         </div>
 
-        {step === "intake" && (
+        {!collapsed && step === "intake" && (
           <div className="space-y-3">
             {slots.map((slot, index) => (
               <div key={slot.id} className="space-y-2" data-testid={`slot-container-${index}`}>
@@ -2893,7 +2911,7 @@ export default function ContentComparison() {
             <Button
               onClick={handleRunComparison}
               disabled={!canCompare || comparisonLoading}
-              className="w-full rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`w-full rounded-xl font-semibold transition-colors ${canCompare ? "bg-[#00D657] hover:bg-[#00C04E] text-black" : "bg-muted text-muted-foreground cursor-not-allowed"}`}
               data-testid="btn-run-comparison"
             >
               {comparisonLoading ? (
@@ -2911,7 +2929,7 @@ export default function ContentComparison() {
           </div>
         )}
 
-        {step === "results" && (
+        {!collapsed && step === "results" && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
             <div className={`grid gap-2 ${filledSlots.length === 2 ? "sm:grid-cols-2" : filledSlots.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               {filledSlots.map((slot, i) => (
