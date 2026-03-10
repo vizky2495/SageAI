@@ -693,6 +693,152 @@ function getWidgetExportData(rows: NormalizedRow[], config: WidgetConfig): Array
   return data.map((d) => ({ [dimLabel]: d.name, [MEASURE_LABELS[config.measure]]: d.value }));
 }
 
+function WidgetFormFields({
+  chartType, setChartType,
+  dimension, setDimension,
+  measure, setMeasure,
+  secondaryMeasure, setSecondaryMeasure,
+  stageFilter, setStageFilter,
+  title, setTitle,
+  size, setSize,
+  autoTitle,
+}: {
+  chartType: ChartType; setChartType: (v: ChartType) => void;
+  dimension: Dimension; setDimension: (v: Dimension) => void;
+  measure: Measure; setMeasure: (v: Measure) => void;
+  secondaryMeasure: Measure | ""; setSecondaryMeasure: (v: Measure | "") => void;
+  stageFilter: StageKey | ""; setStageFilter: (v: StageKey | "") => void;
+  title: string; setTitle: (v: string) => void;
+  size: WidgetSize; setSize: (v: WidgetSize) => void;
+  autoTitle: string;
+}) {
+  return (
+    <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+      <div>
+        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Chart Type</label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {(Object.entries(CHART_TYPE_META) as [ChartType, typeof CHART_TYPE_META[ChartType]][]).map(([key, meta]) => {
+            const Icon = meta.icon;
+            return (
+              <button
+                key={key}
+                onClick={() => setChartType(key)}
+                className={`flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-all ${
+                  chartType === key
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                    : "border-border/30 hover:border-border/60 hover:bg-muted/20"
+                }`}
+                data-testid={`chart-type-${key}`}
+              >
+                <Icon className={`h-4 w-4 ${chartType === key ? "text-primary" : "text-muted-foreground/60"}`} />
+                <span className="text-[10px] font-medium">{meta.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {chartType !== "kpi" && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Dimension (Group By)</label>
+              <select
+                value={dimension}
+                onChange={(e) => setDimension(e.target.value as Dimension)}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                data-testid="select-dimension"
+              >
+                {Object.entries(DIMENSION_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Measure (Value)</label>
+              <select
+                value={measure}
+                onChange={(e) => setMeasure(e.target.value as Measure)}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                data-testid="select-measure"
+              >
+                {Object.entries(MEASURE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {chartType === "area" && (
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Secondary Measure (Optional)</label>
+              <select
+                value={secondaryMeasure}
+                onChange={(e) => setSecondaryMeasure(e.target.value as Measure | "")}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                data-testid="select-secondary-measure"
+              >
+                <option value="">None</option>
+                {Object.entries(MEASURE_LABELS).filter(([k]) => k !== measure).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {chartType !== "stacked-bar" && chartType !== "heatmap" && (
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Stage Filter (Optional)</label>
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value as StageKey | "")}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                data-testid="select-stage-filter"
+              >
+                <option value="">All Stages</option>
+                <option value="TOFU">TOFU</option>
+                <option value="MOFU">MOFU</option>
+                <option value="BOFU">BOFU</option>
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={autoTitle}
+            className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30"
+            data-testid="input-widget-title"
+          />
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Size</label>
+          <div className="flex gap-1.5">
+            {(["sm", "md", "lg"] as WidgetSize[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSize(s)}
+                className={`flex-1 rounded-lg border py-2 text-xs font-medium transition-all ${
+                  size === s ? "border-primary bg-primary/5 text-primary" : "border-border/30 text-muted-foreground hover:border-border/60"
+                }`}
+                data-testid={`size-${s}`}
+              >
+                {s === "sm" ? "Small" : s === "md" ? "Medium" : "Wide"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddWidgetModal({ onAdd, onClose }: { onAdd: (config: Omit<WidgetConfig, "id">) => void; onClose: () => void }) {
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [dimension, setDimension] = useState<Dimension>("channel");
@@ -704,37 +850,26 @@ function AddWidgetModal({ onAdd, onClose }: { onAdd: (config: Omit<WidgetConfig,
 
   const autoTitle = useMemo(() => {
     if (chartType === "kpi") return "Key Metrics";
-    const mLabel = MEASURE_LABELS[measure];
-    const dLabel = DIMENSION_LABELS[dimension];
-    return `${mLabel} by ${dLabel}`;
+    return `${MEASURE_LABELS[measure]} by ${DIMENSION_LABELS[dimension]}`;
   }, [chartType, dimension, measure]);
 
   const handleAdd = () => {
     onAdd({
-      chartType,
-      title: title.trim() || autoTitle,
-      dimension,
-      measure,
+      chartType, title: title.trim() || autoTitle, dimension, measure,
       secondaryMeasure: secondaryMeasure || undefined,
-      stageFilter: stageFilter || undefined,
-      size,
+      stageFilter: stageFilter || undefined, size,
     });
     onClose();
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={onClose}
-      data-testid="modal-add-widget"
+      onClick={onClose} data-testid="modal-add-widget"
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0, y: 12 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.95, opacity: 0, y: 12 }}
+        initial={{ scale: 0.95, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 12 }}
         className="w-full max-w-lg rounded-2xl border border-border/50 bg-card shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -742,136 +877,74 @@ function AddWidgetModal({ onAdd, onClose }: { onAdd: (config: Omit<WidgetConfig,
           <h2 className="text-sm font-semibold">Add Visualization</h2>
           <button onClick={onClose} className="text-muted-foreground/40 hover:text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
-
-        <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Chart Type</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {(Object.entries(CHART_TYPE_META) as [ChartType, typeof CHART_TYPE_META[ChartType]][]).map(([key, meta]) => {
-                const Icon = meta.icon;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setChartType(key)}
-                    className={`flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-all ${
-                      chartType === key
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                        : "border-border/30 hover:border-border/60 hover:bg-muted/20"
-                    }`}
-                    data-testid={`chart-type-${key}`}
-                  >
-                    <Icon className={`h-4 w-4 ${chartType === key ? "text-primary" : "text-muted-foreground/60"}`} />
-                    <span className="text-[10px] font-medium">{meta.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {chartType !== "kpi" && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Dimension (Group By)</label>
-                  <select
-                    value={dimension}
-                    onChange={(e) => setDimension(e.target.value as Dimension)}
-                    className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
-                    data-testid="select-dimension"
-                  >
-                    {Object.entries(DIMENSION_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Measure (Value)</label>
-                  <select
-                    value={measure}
-                    onChange={(e) => setMeasure(e.target.value as Measure)}
-                    className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
-                    data-testid="select-measure"
-                  >
-                    {Object.entries(MEASURE_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {chartType === "area" && (
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Secondary Measure (Optional)</label>
-                  <select
-                    value={secondaryMeasure}
-                    onChange={(e) => setSecondaryMeasure(e.target.value as Measure | "")}
-                    className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
-                    data-testid="select-secondary-measure"
-                  >
-                    <option value="">None</option>
-                    {Object.entries(MEASURE_LABELS).filter(([k]) => k !== measure).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {chartType !== "stacked-bar" && chartType !== "heatmap" && (
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Stage Filter (Optional)</label>
-                  <select
-                    value={stageFilter}
-                    onChange={(e) => setStageFilter(e.target.value as StageKey | "")}
-                    className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
-                    data-testid="select-stage-filter"
-                  >
-                    <option value="">All Stages</option>
-                    <option value="TOFU">TOFU</option>
-                    <option value="MOFU">MOFU</option>
-                    <option value="BOFU">BOFU</option>
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={autoTitle}
-                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30"
-                data-testid="input-widget-title"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Size</label>
-              <div className="flex gap-1.5">
-                {(["sm", "md", "lg"] as WidgetSize[]).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSize(s)}
-                    className={`flex-1 rounded-lg border py-2 text-xs font-medium transition-all ${
-                      size === s ? "border-primary bg-primary/5 text-primary" : "border-border/30 text-muted-foreground hover:border-border/60"
-                    }`}
-                    data-testid={`size-${s}`}
-                  >
-                    {s === "sm" ? "Small" : s === "md" ? "Medium" : "Wide"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <WidgetFormFields {...{ chartType, setChartType, dimension, setDimension, measure, setMeasure, secondaryMeasure, setSecondaryMeasure, stageFilter, setStageFilter, title, setTitle, size, setSize, autoTitle }} />
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border/30">
           <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">Cancel</Button>
           <Button size="sm" onClick={handleAdd} className="text-xs" data-testid="btn-confirm-add-widget">
             <Plus className="h-3.5 w-3.5 mr-1" />
             Add to Dashboard
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function EditWidgetModal({ widget, onSave, onClose }: { widget: WidgetConfig; onSave: (updated: WidgetConfig) => void; onClose: () => void }) {
+  const [chartType, setChartType] = useState<ChartType>(widget.chartType);
+  const [dimension, setDimension] = useState<Dimension>(widget.dimension);
+  const [measure, setMeasure] = useState<Measure>(widget.measure);
+  const [secondaryMeasure, setSecondaryMeasure] = useState<Measure | "">(widget.secondaryMeasure || "");
+  const [stageFilter, setStageFilter] = useState<StageKey | "">((widget.stageFilter as StageKey | "") || "");
+  const [title, setTitle] = useState(widget.title);
+  const [size, setSize] = useState<WidgetSize>(widget.size);
+
+  const autoTitle = useMemo(() => {
+    if (chartType === "kpi") return "Key Metrics";
+    return `${MEASURE_LABELS[measure]} by ${DIMENSION_LABELS[dimension]}`;
+  }, [chartType, dimension, measure]);
+
+  const handleSave = () => {
+    const effectiveSecondary = chartType === "area" ? (secondaryMeasure || undefined) : undefined;
+    const effectiveStage = (chartType !== "kpi" && chartType !== "stacked-bar" && chartType !== "heatmap")
+      ? (stageFilter || undefined) : undefined;
+
+    let newColSpan = widget.colSpan;
+    if (size !== widget.size) {
+      newColSpan = size === "lg" ? 2 : 1;
+    }
+
+    onSave({
+      ...widget,
+      chartType, title: title.trim() || autoTitle, dimension, measure,
+      secondaryMeasure: effectiveSecondary,
+      stageFilter: effectiveStage, size,
+      colSpan: newColSpan,
+    });
+    onClose();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose} data-testid="modal-edit-widget"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 12 }}
+        className="w-full max-w-lg rounded-2xl border border-border/50 bg-card shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
+          <h2 className="text-sm font-semibold">Edit Visualization</h2>
+          <button onClick={onClose} className="text-muted-foreground/40 hover:text-muted-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <WidgetFormFields {...{ chartType, setChartType, dimension, setDimension, measure, setMeasure, secondaryMeasure, setSecondaryMeasure, stageFilter, setStageFilter, title, setTitle, size, setSize, autoTitle }} />
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border/30">
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">Cancel</Button>
+          <Button size="sm" onClick={handleSave} className="text-xs" data-testid="btn-confirm-edit-widget">
+            <Check className="h-3.5 w-3.5 mr-1" />
+            Save Changes
           </Button>
         </div>
       </motion.div>
@@ -888,6 +961,7 @@ function SortableWidget({
   onResize,
   onSetSize,
   onDownload,
+  onEdit,
 }: {
   config: WidgetConfig;
   rows: NormalizedRow[];
@@ -897,6 +971,7 @@ function SortableWidget({
   onResize: (id: string) => void;
   onSetSize: (id: string, colSpan: number, heightPx: number) => void;
   onDownload: (id: string) => void;
+  onEdit: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: config.id });
   const [isResizing, setIsResizing] = useState(false);
@@ -1013,6 +1088,14 @@ function SortableWidget({
             {isResizing && (
               <span className="text-[9px] text-[#00D657] font-medium mr-1">{spanLabel} / {effectiveHeight}px</span>
             )}
+            <button
+              onClick={() => onEdit(config.id)}
+              className="p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+              title="Edit chart settings"
+              data-testid={`edit-${config.id}`}
+            >
+              <Edit3 className="h-3 w-3" />
+            </button>
             <button
               onClick={() => onDownload(config.id)}
               className="p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
@@ -1142,6 +1225,7 @@ export default function ReportsDashboard() {
   const [pages, setPages] = useState<ReportPage[]>([]);
   const [activePageId, setActivePageId] = useState<string>("");
   const [showAddWidget, setShowAddWidget] = useState(false);
+  const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1191,6 +1275,20 @@ export default function ReportsDashboard() {
     if (!activePage) return;
     setPages((prev) => prev.map((p) =>
       p.id === activePage.id ? { ...p, widgets: p.widgets.filter((w) => w.id !== widgetId) } : p
+    ));
+  }, [activePage]);
+
+  const editingWidget = useMemo(() => {
+    if (!editingWidgetId || !activePage) return null;
+    return activePage.widgets.find((w) => w.id === editingWidgetId) || null;
+  }, [editingWidgetId, activePage]);
+
+  const updateWidget = useCallback((updated: WidgetConfig) => {
+    if (!activePage) return;
+    setPages((prev) => prev.map((p) =>
+      p.id === activePage.id
+        ? { ...p, widgets: p.widgets.map((w) => w.id === updated.id ? updated : w) }
+        : p
     ));
   }, [activePage]);
 
@@ -1402,6 +1500,7 @@ export default function ReportsDashboard() {
                       onResize={resizeWidget}
                       onSetSize={setWidgetSize}
                       onDownload={downloadWidget}
+                      onEdit={setEditingWidgetId}
                     />
                   ))}
                 </AnimatePresence>
@@ -1424,6 +1523,13 @@ export default function ReportsDashboard() {
       <AnimatePresence>
         {showAddWidget && (
           <AddWidgetModal onAdd={addWidget} onClose={() => setShowAddWidget(false)} />
+        )}
+        {editingWidget && (
+          <EditWidgetModal
+            widget={editingWidget}
+            onSave={(updated) => { updateWidget(updated); setEditingWidgetId(null); }}
+            onClose={() => setEditingWidgetId(null)}
+          />
         )}
       </AnimatePresence>
     </div>
