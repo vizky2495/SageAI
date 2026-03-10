@@ -830,7 +830,7 @@ export default function PageChat({
           onClick={openChat}
           className="fixed bottom-6 right-6 z-[55] flex items-center gap-2.5 rounded-full border border-[#00D657]/30 px-4 py-2.5 shadow-lg cursor-pointer group"
           style={{ background: "rgba(10, 20, 15, 0.88)", backdropFilter: "blur(24px)" }}
-          whileHover={{ width: "auto", boxShadow: "0 0 20px rgba(0, 214, 87, 0.15)" }}
+          whileHover={{ boxShadow: "0 0 20px rgba(0, 214, 87, 0.15)" }}
           animate={pillPulse ? { scale: [1, 1.04, 1], borderColor: ["rgba(0,214,87,0.3)", "rgba(0,214,87,0.6)", "rgba(0,214,87,0.3)"] } : {}}
           transition={pillPulse ? { duration: 1.5, ease: "easeInOut" } : { type: "spring", stiffness: 300 }}
           data-testid={`chat-pill-${agent}`}
