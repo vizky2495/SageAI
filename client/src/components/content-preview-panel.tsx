@@ -71,6 +71,7 @@ interface ContentData {
   fetchStatus: string;
   fetchNotes: string | null;
   dateStored: string | null;
+  dateLastUpdated: string | null;
   hasFile: boolean;
 }
 
@@ -91,6 +92,12 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatUploadDateLong(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) +
+    " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 export default function ContentPreviewPanel({
@@ -235,6 +242,27 @@ export default function ContentPreviewPanel({
               {content.fetchNotes && (
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
                   {content.fetchNotes}
+                </div>
+              )}
+
+              {(content.dateStored || content.dateLastUpdated) && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/5 px-3 py-2" data-testid="panel-upload-dates">
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {content.dateStored && (
+                      <div>
+                        <span className="font-medium text-foreground/80">
+                          {content.dateLastUpdated && content.dateLastUpdated !== content.dateStored ? "First uploaded:" : "Content uploaded:"}
+                        </span>{" "}
+                        {formatUploadDateLong(content.dateStored)}
+                      </div>
+                    )}
+                    {content.dateLastUpdated && content.dateStored && content.dateLastUpdated !== content.dateStored && (
+                      <div>
+                        <span className="font-medium text-foreground/80">Updated:</span>{" "}
+                        {formatUploadDateLong(content.dateLastUpdated)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

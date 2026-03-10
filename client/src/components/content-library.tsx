@@ -53,6 +53,8 @@ interface ContentStatusEntry {
   extractedTopics: string[] | null;
   extractedCta: { text: string; type: string; strength: string; location: string } | null;
   keywordTags: StructuredKeywordTags;
+  dateStored: string | null;
+  dateLastUpdated: string | null;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -63,6 +65,24 @@ const ContentStatusContext = createContext<{ statusMap: ContentStatusMap; refres
 });
 
 const PAGE_SIZE = 25;
+
+function formatUploadDate(isoDate: string, style: "short" | "long" = "short"): string {
+  const d = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+  if (style === "short") {
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay === 1) return "Yesterday";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) +
+    " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
 
 const stageTones: Record<string, { bg: string; text: string; border: string }> = {
   TOFU: { bg: "bg-chart-1/12", text: "text-chart-1", border: "border-chart-1/20" },
@@ -1177,6 +1197,16 @@ function ContentCard({
               </>
             )}
           </div>
+
+          {contentStatus && contentStatus.fetchStatus === "success" && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
+            <div className="mt-1 text-[11px]" style={{ color: "#888888" }} data-testid="card-upload-date">
+              {contentStatus.dateLastUpdated && contentStatus.dateStored && contentStatus.dateLastUpdated !== contentStatus.dateStored
+                ? `Updated: ${formatUploadDate(contentStatus.dateLastUpdated)}`
+                : contentStatus.dateStored
+                  ? `Uploaded: ${formatUploadDate(contentStatus.dateStored)}`
+                  : null}
+            </div>
+          )}
 
           {contentStatus && contentStatus.fetchStatus === "success" && contentStatus.contentSummary && (
             <div className="mt-2 space-y-1.5" data-testid="card-content-preview">

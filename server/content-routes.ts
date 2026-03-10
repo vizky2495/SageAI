@@ -653,7 +653,7 @@ export function registerContentRoutes(app: Express): void {
         storedFileBase64: content.storedFileBase64,
         originalFilename: content.originalFilename,
         fileSizeBytes: content.fileSizeBytes,
-        dateStored: new Date(),
+        dateStored: content.dateStored || new Date(),
         fetchStatus: "success",
         fetchNotes: null,
         storedBy: content.storedBy,

@@ -102,7 +102,9 @@ Be a strategist, not just a data retriever.
 
 11. **HONEST** — If you made a mistake, own it immediately. Don't wait to be caught. Only use the provided data — never make up assets or metrics.
 
-12. **CONTENT COVERAGE AWARENESS** — Many assets in the library only have engagement/performance metrics and don't have their actual content file uploaded yet. When recommending an asset that doesn't have stored content, mention it once naturally: "This is a top performer based on engagement data. The actual content hasn't been uploaded yet, so I can't verify messaging quality or CTA effectiveness. Upload it in the Content Library for a complete assessment." When running gap analysis or evaluations, proactively note: "Of the assets I'm analyzing, X don't have content uploaded — uploading them would enable topic, messaging, and CTA analysis." Do NOT repeat this warning every time — mention it once per conversation when relevant, not on every response.`;
+12. **CONTENT COVERAGE AWARENESS** — Many assets in the library only have engagement/performance metrics and don't have their actual content file uploaded yet. When recommending an asset that doesn't have stored content, mention it once naturally: "This is a top performer based on engagement data. The actual content hasn't been uploaded yet, so I can't verify messaging quality or CTA effectiveness. Upload it in the Content Library for a complete assessment." When running gap analysis or evaluations, proactively note: "Of the assets I'm analyzing, X don't have content uploaded — uploading them would enable topic, messaging, and CTA analysis." Do NOT repeat this warning every time — mention it once per conversation when relevant, not on every response.
+
+13. **UPLOAD DATE vs OTHER DATES** — The "Content uploaded to library" date indicates when the content file was uploaded to the CIA platform for analysis. This is NOT the content creation date, NOT the engagement data date, and NOT when performance data was captured. When referencing an asset, you can mention the upload date naturally: "This content was uploaded to the library on March 5, 2026. The engagement data shows 304 pageviews." Never confuse the upload date with content creation date or data freshness. If the content has been updated/re-uploaded, mention the update date.`;
 
 const CAMPAIGN_PLANNER_PROMPT = `You are a senior campaign strategist at a top-tier B2B marketing agency, working with Sage's Content Intelligence Analyst platform. You produce data-driven campaign plans that are presentation-ready for CMO-level stakeholders. You follow industry best practices (HubSpot, Salesforce, Google Ads benchmarks) and ground every recommendation in the data provided.
 
@@ -712,6 +714,9 @@ async function buildContentLibraryContext(): Promise<string | null> {
       const userTags = (c.keywordTags.user_added_tags || []).join(", ");
       ctx += `--- ${c.assetId} ---\n`;
       ctx += `Format: ${c.contentFormat || "unknown"} | Source: ${c.sourceType === "url_fetched" ? "URL fetched" : c.sourceType === "file_uploaded" ? (c.originalFilename || "Uploaded file") : c.sourceType}\n`;
+      if (c.dateStored) ctx += `Content uploaded to library: ${new Date(c.dateStored).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+      if (c.dateLastUpdated && c.dateStored && c.dateLastUpdated.getTime() !== c.dateStored.getTime()) ctx += ` | Last updated: ${new Date(c.dateLastUpdated).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+      if (c.dateStored) ctx += `\n`;
       const summary = c.contentSummary && c.contentSummary.length > 300 ? c.contentSummary.slice(0, 300) + "..." : c.contentSummary;
       if (summary) ctx += `Summary: ${summary}\n`;
       if (c.extractedTopics?.length) ctx += `Topics: ${c.extractedTopics.join(", ")}\n`;
@@ -751,7 +756,9 @@ async function buildContentStorageContext(userMessage: string): Promise<string |
           `CTA: ${content.extractedCta ? `"${content.extractedCta.text}" (${content.extractedCta.type}, ${content.extractedCta.strength})` : "None detected"}\n` +
           `Messaging Themes: ${(content.messagingThemes || []).join(", ") || "N/A"}\n` +
           `Structure: ${content.contentStructure ? `${content.contentStructure.wordCount} words, ${content.contentStructure.sectionCount} sections` : "N/A"}\n` +
-          `Source: ${content.sourceType === "url_fetched" ? content.sourceUrl || "URL" : content.sourceType === "file_uploaded" ? content.originalFilename || "Uploaded file" : "Unknown"}`
+          `Source: ${content.sourceType === "url_fetched" ? content.sourceUrl || "URL" : content.sourceType === "file_uploaded" ? content.originalFilename || "Uploaded file" : "Unknown"}\n` +
+          `Content uploaded to library: ${content.dateStored ? new Date(content.dateStored).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Unknown"}` +
+          (content.dateLastUpdated && content.dateStored && content.dateLastUpdated.getTime() !== content.dateStored.getTime() ? ` | Last updated: ${new Date(content.dateLastUpdated).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : "")
         );
       } else {
         contentParts.push(
