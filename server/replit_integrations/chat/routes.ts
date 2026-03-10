@@ -555,46 +555,80 @@ async function enrichComparisonContentTexts(ctx: any): Promise<void> {
   }
 }
 
+function generateShortNameServer(raw: string): string {
+  if (!raw || raw.length < 3) return raw;
+  let s = raw;
+  s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
+  s = s.replace(/\s*\([^)]*\)\s*$/g, "");
+  s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
+  s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
+  s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland|South Africa)\s*/gi, "");
+  s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+  s = s.replace(/\b(PDF|DOCX|PPTX|DOC)\b/gi, "");
+  s = s.replace(/\bWhitepaper[-\s]*/gi, "");
+  s = s.replace(/\bBrochure[-\s]*/gi, () => "Brochure ");
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+  s = s.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+  s = s.replace(/_/g, " ");
+  s = s.replace(/\s*[-|,]\s*$/, "");
+  s = s.trim().replace(/\s+/g, " ");
+  if (!s) return raw.length > 25 ? raw.slice(0, 25) + "…" : raw;
+  const words = s.split(" ").filter(Boolean);
+  return words.length > 4 ? words.slice(0, 4).join(" ") : words.join(" ");
+}
+
 function buildComparisonContextPrompt(ctx: any): string | null {
   if (!ctx || typeof ctx !== "object") return null;
 
   let prompt = `\n\n=== ACTIVE CONTENT COMPARISON ===\n`;
   prompt += `The user has an active content comparison. You have full access to the content texts, analysis results, metadata, and engagement data below. When answering questions:\n`;
   prompt += `- You can reference specific sections of either content piece by searching the provided text.\n`;
-  prompt += `- Cite which piece you're referring to (Content A or Content B) and what section.\n`;
+  prompt += `- ALWAYS refer to content by its short readable name (provided below), NEVER use "Content A" or "Content B".\n`;
   prompt += `- Use the comparison analysis (verdict, resonance, topics) to support your answers.\n`;
-  prompt += `- You can answer detailed questions like "does Content A mention X?" by searching the actual text.\n\n`;
+  prompt += `- You can answer detailed questions like "does [Name] mention X?" by searching the actual text.\n\n`;
 
   if (ctx.type === "two-way") {
     const a = ctx.contentA;
     const b = ctx.contentB;
     const r = ctx.comparisonResults;
+    const nameA = a?.name || "Content A";
+    const nameB = b?.name || "Content B";
+    let shortA = generateShortNameServer(nameA);
+    let shortB = generateShortNameServer(nameB);
+    if (shortA === shortB) {
+      const stA = a?.metadata?.funnelStage || "";
+      const stB = b?.metadata?.funnelStage || "";
+      if (stA && stB && stA !== stB) { shortA = `${shortA} (${stA})`; shortB = `${shortB} (${stB})`; }
+      else { shortA = `${shortA} (1)`; shortB = `${shortB} (2)`; }
+    }
+
+    prompt += `SHORT NAMES: "${shortA}" (Baseline) and "${shortB}" (Challenger). Always use these names.\n\n`;
 
     if (a) {
-      prompt += `--- CONTENT A: "${a.name}" ---\n`;
-      prompt += `Content ID: ${a.contentId}\n`;
+      prompt += `--- BASELINE: "${shortA}" ---\n`;
+      prompt += `Full ID: ${a.contentId}\n`;
       prompt += `Metadata: Stage=${a.metadata?.funnelStage || "N/A"}, Product=${a.metadata?.product || "N/A"}, Country=${a.metadata?.country || "N/A"}, Industry=${a.metadata?.industry || "N/A"}, Type=${a.metadata?.contentType || "N/A"}, Format=${a.metadata?.format || "N/A"}, Words=${a.metadata?.wordCount || "N/A"}\n`;
       prompt += `Engagement: Views=${a.engagement?.pageviews || 0}, Downloads=${a.engagement?.downloads || 0}, Leads=${a.engagement?.leads || 0}, SQOs=${a.engagement?.sqos || 0}, Avg Time=${a.engagement?.avgTime || 0}s\n`;
       if (a.keywordTags?.length > 0) prompt += `Tags: ${a.keywordTags.join(", ")}\n`;
       if (a.contentSummary) prompt += `Summary: ${a.contentSummary}\n`;
       if (a.contentText) {
         const textA = a.contentText.slice(0, 50000);
-        prompt += `\nFULL CONTENT TEXT (Content A):\n${textA}\n`;
+        prompt += `\nFULL CONTENT TEXT (${shortA}):\n${textA}\n`;
         if (a.contentText.length > 50000) prompt += `[...truncated at 50,000 chars, full text is ${a.contentText.length} chars]\n`;
       }
       prompt += `\n`;
     }
 
     if (b) {
-      prompt += `--- CONTENT B: "${b.name}" ---\n`;
-      prompt += `Content ID: ${b.contentId}\n`;
+      prompt += `--- CHALLENGER: "${shortB}" ---\n`;
+      prompt += `Full ID: ${b.contentId}\n`;
       prompt += `Metadata: Stage=${b.metadata?.funnelStage || "N/A"}, Product=${b.metadata?.product || "N/A"}, Country=${b.metadata?.country || "N/A"}, Industry=${b.metadata?.industry || "N/A"}, Type=${b.metadata?.contentType || "N/A"}, Format=${b.metadata?.format || "N/A"}, Words=${b.metadata?.wordCount || "N/A"}\n`;
       prompt += `Engagement: Views=${b.engagement?.pageviews || 0}, Downloads=${b.engagement?.downloads || 0}, Leads=${b.engagement?.leads || 0}, SQOs=${b.engagement?.sqos || 0}, Avg Time=${b.engagement?.avgTime || 0}s\n`;
       if (b.keywordTags?.length > 0) prompt += `Tags: ${b.keywordTags.join(", ")}\n`;
       if (b.contentSummary) prompt += `Summary: ${b.contentSummary}\n`;
       if (b.contentText) {
         const textB = b.contentText.slice(0, 50000);
-        prompt += `\nFULL CONTENT TEXT (Content B):\n${textB}\n`;
+        prompt += `\nFULL CONTENT TEXT (${shortB}):\n${textB}\n`;
         if (b.contentText.length > 50000) prompt += `[...truncated at 50,000 chars, full text is ${b.contentText.length} chars]\n`;
       }
       prompt += `\n`;
@@ -602,8 +636,8 @@ function buildComparisonContextPrompt(ctx: any): string | null {
 
     if (r) {
       prompt += `--- COMPARISON ANALYSIS RESULTS ---\n`;
-      if (r.contentOverviewA) prompt += `Content A Overview: ${r.contentOverviewA}\n`;
-      if (r.contentOverviewB) prompt += `Content B Overview: ${r.contentOverviewB}\n`;
+      if (r.contentOverviewA) prompt += `${shortA} Overview: ${r.contentOverviewA}\n`;
+      if (r.contentOverviewB) prompt += `${shortB} Overview: ${r.contentOverviewB}\n`;
       if (r.resonanceAssessment) prompt += `Resonance Assessment: ${JSON.stringify(r.resonanceAssessment)}\n`;
       if (r.topicRelevance) prompt += `Topic Analysis: ${JSON.stringify(r.topicRelevance)}\n`;
       if (r.sharedAndDifferent) {

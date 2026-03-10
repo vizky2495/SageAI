@@ -1080,6 +1080,47 @@ interface ContentInfo {
   extractedCta: { text: string; type: string; strength: string } | null;
 }
 
+const BASELINE_COLOR = "#006362";
+const CHALLENGER_COLOR = "#00A65C";
+
+function generateShortName(raw: string): string {
+  if (!raw || raw.length < 3) return raw;
+  let s = raw;
+  s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
+  s = s.replace(/\s*\([^)]*\)\s*$/g, "");
+  s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
+  s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
+  s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland|South Africa)\s*/gi, "");
+  s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+  s = s.replace(/\b(PDF|DOCX|PPTX|DOC)\b/gi, "");
+  s = s.replace(/\bWhitepaper[-\s]*/gi, "");
+  s = s.replace(/\bBrochure[-\s]*/gi, (m) => "Brochure ");
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+  s = s.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+  s = s.replace(/_/g, " ");
+  s = s.replace(/\s*[-|,]\s*$/, "");
+  s = s.trim().replace(/\s+/g, " ");
+  if (!s) return raw.length > 25 ? raw.slice(0, 25) + "…" : raw;
+  const words = s.split(" ").filter(Boolean);
+  if (words.length > 4) {
+    return words.slice(0, 4).join(" ");
+  }
+  return words.join(" ");
+}
+
+function generateShortNamePair(rawA: string, rawB: string, stageA?: string, stageB?: string): [string, string] {
+  let a = generateShortName(rawA);
+  let b = generateShortName(rawB);
+  if (a === b && stageA && stageB && stageA !== stageB) {
+    a = `${a} (${stageA})`;
+    b = `${b} (${stageB})`;
+  } else if (a === b) {
+    a = `${a} (1)`;
+    b = `${b} (2)`;
+  }
+  return [a, b];
+}
+
 function parseHumanReadableName(contentId: string): string {
   if (!contentId || contentId.length < 5) return contentId;
   const parts = contentId.split("_");
@@ -1412,6 +1453,7 @@ function ComparisonResults({
   const meta = comparisonData.metadata;
   const nameA = comparisonData.nameA;
   const nameB = comparisonData.nameB;
+  const [shortA, shortB] = generateShortNamePair(nameA, nameB, meta.stageA, meta.stageB);
   const overview = comparisonData.contentOverview;
   const resonance = comparisonData.resonanceAssessment;
   const shared = comparisonData.sharedAndDifferent;
@@ -1456,17 +1498,20 @@ function ComparisonResults({
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, data: overview.a, color: "emerald", structTags: structuredTagsA, flatTags: tagsA, tagType: "a" as const, hasContent: meta.aHasContent, metaItems: [
+            {[{ label: shortA, role: "Baseline", fullName: nameA, data: overview.a, accent: BASELINE_COLOR, structTags: structuredTagsA, flatTags: tagsA, tagType: "a" as const, hasContent: meta.aHasContent, metaItems: [
               { k: "Stage", v: meta.stageA }, { k: "Product", v: meta.productA }, { k: "Country", v: displayVal(meta.countryA) },
               { k: "Industry", v: displayVal(meta.industryA) }, { k: "Format", v: displayVal(meta.formatA) },
               { k: "Words", v: meta.wordCountA ? `${meta.wordCountA.toLocaleString()}` : "Not specified" },
-            ]}, { label: nameB, data: overview.b, color: "sky", structTags: structuredTagsB, flatTags: tagsB, tagType: "b" as const, hasContent: meta.bHasContent, metaItems: [
+            ]}, { label: shortB, role: "Challenger", fullName: nameB, data: overview.b, accent: CHALLENGER_COLOR, structTags: structuredTagsB, flatTags: tagsB, tagType: "b" as const, hasContent: meta.bHasContent, metaItems: [
               { k: "Stage", v: meta.stageB }, { k: "Product", v: meta.productB }, { k: "Country", v: displayVal(meta.countryB) },
               { k: "Industry", v: displayVal(meta.industryB) }, { k: "Format", v: displayVal(meta.formatB) },
               { k: "Words", v: meta.wordCountB ? `${meta.wordCountB.toLocaleString()}` : "Not specified" },
-            ]}].map(({ label, data, color, structTags, flatTags, tagType, hasContent, metaItems }) => (
-              <div key={label} className={`rounded-xl border border-${color}-500/20 bg-${color}-500/5 p-4 space-y-2.5`}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider`}>{label}</h4>
+            ]}].map(({ label, role, fullName, data, accent, structTags, flatTags, tagType, hasContent, metaItems }) => (
+              <div key={label} className="rounded-xl p-4 space-y-2.5" style={{ border: `1px solid ${accent}33`, background: `${accent}0D` }}>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider" style={{ color: accent }}>{label}</h4>
+                  <span className="text-[9px] text-muted-foreground/60">{role}</span>
+                </div>
                 {data?.summary ? (
                   <p className="text-xs text-foreground/85 leading-relaxed">{data.summary}</p>
                 ) : !hasContent ? (
@@ -1526,9 +1571,9 @@ function ComparisonResults({
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {[{ label: nameA, items: keyTopics.a, color: "emerald" }, { label: nameB, items: keyTopics.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
+            {[{ label: shortA, items: keyTopics.a, accent: BASELINE_COLOR }, { label: shortB, items: keyTopics.b, accent: CHALLENGER_COLOR }].map(({ label, items, accent }) => items && items.length > 0 && (
               <div key={label}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-2`}>{label}</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: accent }}>{label}</h4>
                 <div className="space-y-1">
                   {items.slice(0, 5).map((t, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs">
@@ -1564,8 +1609,8 @@ function ComparisonResults({
               <thead>
                 <tr className="border-b border-border/20 bg-muted/20">
                   <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Dimension</th>
-                  {resonance.a && <th className="text-left px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>}
-                  {resonance.b && <th className="text-left px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>}
+                  {resonance.a && <th className="text-left px-3 py-2 text-[10px] font-semibold uppercase" style={{ color: BASELINE_COLOR }}>{shortA}</th>}
+                  {resonance.b && <th className="text-left px-3 py-2 text-[10px] font-semibold uppercase" style={{ color: CHALLENGER_COLOR }}>{shortB}</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/10">
@@ -1611,14 +1656,14 @@ function ComparisonResults({
               {hasStructuredTags ? (
                 <div className="space-y-2">
                   {flattenKeywordTags(structuredShared).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Shared tags:</span><StructuredTagPills structuredTags={structuredShared} /></div>}
-                  {flattenKeywordTags(structuredTagsA).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only {nameA}:</span><StructuredTagPills structuredTags={structuredTagsA} /></div>}
-                  {flattenKeywordTags(structuredTagsB).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only {nameB}:</span><StructuredTagPills structuredTags={structuredTagsB} /></div>}
+                  {flattenKeywordTags(structuredTagsA).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only <span style={{ color: BASELINE_COLOR }}>{shortA}</span>:</span><StructuredTagPills structuredTags={structuredTagsA} /></div>}
+                  {flattenKeywordTags(structuredTagsB).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only <span style={{ color: CHALLENGER_COLOR }}>{shortB}</span>:</span><StructuredTagPills structuredTags={structuredTagsB} /></div>}
                 </div>
               ) : (
                 <>
                   {sharedTagsList.length > 0 && <div className="mb-1.5"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-                  {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only {nameA}:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
-                  {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only {nameB}:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
+                  {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only <span style={{ color: BASELINE_COLOR }}>{shortA}</span>:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
+                  {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only <span style={{ color: CHALLENGER_COLOR }}>{shortB}</span>:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
                 </>
               )}
             </div>
@@ -1652,9 +1697,9 @@ function ComparisonResults({
             <SourceTag type="internal" />
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            {[{ label: nameA, items: whatWorks.a, color: "emerald" }, { label: nameB, items: whatWorks.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
+            {[{ label: shortA, items: whatWorks.a, accent: BASELINE_COLOR }, { label: shortB, items: whatWorks.b, accent: CHALLENGER_COLOR }].map(({ label, items, accent }) => items && items.length > 0 && (
               <div key={label}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-1.5`}>{label}</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: accent }}>{label}</h4>
                 {items.slice(0, 3).map((item, i) => {
                   const text = item.point || (item.factor && item.explanation ? `${item.factor}: ${item.explanation}` : item.factor || item.explanation || "");
                   return text ? <p key={i} className="text-xs text-foreground/80 leading-relaxed mb-1">- {text}</p> : null;
@@ -1673,9 +1718,9 @@ function ComparisonResults({
             <SourceTag type="content" />
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            {[{ label: nameA, items: whatImprove.a, color: "emerald" }, { label: nameB, items: whatImprove.b, color: "sky" }].map(({ label, items, color }) => items && items.length > 0 && (
+            {[{ label: shortA, items: whatImprove.a, accent: BASELINE_COLOR }, { label: shortB, items: whatImprove.b, accent: CHALLENGER_COLOR }].map(({ label, items, accent }) => items && items.length > 0 && (
               <div key={label}>
-                <h4 className={`text-xs font-semibold text-${color}-400 uppercase tracking-wider mb-1.5`}>{label}</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: accent }}>{label}</h4>
                 {items.slice(0, 3).map((item, i) => {
                   const text = item.point || (item.issue && item.detail ? `${item.issue}: ${item.detail}` : item.issue || item.detail || "");
                   return text ? <p key={i} className="text-xs text-foreground/75 leading-relaxed mb-1">- {text}</p> : null;
@@ -1733,11 +1778,11 @@ function ComparisonResults({
                   </p>
                   <div className="grid sm:grid-cols-2 gap-3 pt-1">
                     <div className="rounded-lg bg-muted/10 border border-border/20 p-2.5">
-                      <span className="text-[10px] font-semibold text-emerald-400 uppercase block mb-1">{nameA}</span>
+                      <span className="text-[10px] font-semibold uppercase block mb-1" style={{ color: BASELINE_COLOR }}>{shortA}</span>
                       <span className="text-[10px] text-foreground/70">{formatNum(mA?.pageviews ?? 0)} views, {formatNum(mA?.downloads ?? 0)} downloads, {formatNum(mA?.leads ?? 0)} leads, {formatNum(mA?.sqos ?? 0)} SQOs{(mA?.avgTime ?? 0) > 0 ? `, ${formatNum(mA?.avgTime ?? 0)}s avg time` : ""}</span>
                     </div>
                     <div className="rounded-lg bg-muted/10 border border-border/20 p-2.5">
-                      <span className="text-[10px] font-semibold text-sky-400 uppercase block mb-1">{nameB}</span>
+                      <span className="text-[10px] font-semibold uppercase block mb-1" style={{ color: CHALLENGER_COLOR }}>{shortB}</span>
                       <span className="text-[10px] text-foreground/70">{formatNum(mB?.pageviews ?? 0)} views, {formatNum(mB?.downloads ?? 0)} downloads, {formatNum(mB?.leads ?? 0)} leads, {formatNum(mB?.sqos ?? 0)} SQOs{(mB?.avgTime ?? 0) > 0 ? `, ${formatNum(mB?.avgTime ?? 0)}s avg time` : ""}</span>
                     </div>
                   </div>
@@ -1750,8 +1795,8 @@ function ComparisonResults({
               <thead>
                 <tr className="border-b border-border/20 bg-muted/20">
                   <th className="text-left px-4 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Metric</th>
-                  <th className="text-right px-3 py-2 text-[10px] font-semibold text-emerald-400 uppercase">{nameA}</th>
-                  <th className="text-right px-3 py-2 text-[10px] font-semibold text-sky-400 uppercase">{nameB}</th>
+                  <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase" style={{ color: BASELINE_COLOR }}>{shortA}</th>
+                  <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase" style={{ color: CHALLENGER_COLOR }}>{shortB}</th>
                   <th className="text-right px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase">Delta</th>
                 </tr>
               </thead>
@@ -1796,7 +1841,7 @@ function ComparisonResults({
             <SourceTag type="internal" />
           </div>
           <p className="text-xs text-foreground/85 leading-relaxed">
-            {comparisonData.performanceInlineSummary || `Performance data available for ${mA?.hasData ? nameA : nameB} only.`}
+            {comparisonData.performanceInlineSummary || `Performance data available for ${mA?.hasData ? shortA : shortB} only.`}
           </p>
         </Card>
       )}
@@ -1811,7 +1856,7 @@ function ComparisonResults({
             {meta.bothHaveContent
               ? "The AI analysis could not be generated. This may be a temporary issue — try running the comparison again."
               : meta.aHasContent || meta.bHasContent
-              ? `Content text is only available for ${meta.aHasContent ? nameA : nameB}. Upload content for the other asset to enable full resonance analysis.`
+              ? `Content text is only available for ${meta.aHasContent ? shortA : shortB}. Upload content for the other asset to enable full resonance analysis.`
               : "No content text is available for either asset. Upload content files to enable AI-powered resonance analysis, keyword tags, and topic breakdowns."}
           </p>
         </Card>
@@ -2102,45 +2147,53 @@ function StandaloneAnalysisView({
 function FilledSlotCard({
   slot,
   index,
+  totalSlots,
   onClear,
 }: {
   slot: ContentSlot;
   index: number;
+  totalSlots: number;
   onClear: () => void;
 }) {
-  const name = slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label;
+  const rawName = slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label;
+  const shortName = generateShortName(rawName);
   const stage = slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage || "";
   const type = slot.pdfResult?.classification?.contentType || slot.libraryAsset?.type || "";
   const product = slot.pdfResult?.classification?.product || slot.libraryAsset?.product || "";
   const hasAnalysis = slot.source === "upload" && slot.pdfResult && !slot.pdfResult.isFallback;
+  const accent = totalSlots === 2 ? (index === 0 ? BASELINE_COLOR : CHALLENGER_COLOR) : BASELINE_COLOR;
+  const roleLabel = totalSlots === 2 ? (index === 0 ? "Baseline" : "Challenger") : undefined;
 
   return (
-    <div className="rounded-xl bg-muted/10 border border-emerald-500/20 p-3 flex items-center gap-3" data-testid={`filled-slot-${index}`}>
-      <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-        {slot.source === "upload" ? <FileText className="h-4 w-4 text-emerald-400" /> :
-         slot.source === "library" ? <Database className="h-4 w-4 text-emerald-400" /> :
-         <PenLine className="h-4 w-4 text-emerald-400" />}
+    <div className="rounded-xl bg-muted/10 p-3 flex items-center gap-3" style={{ border: `1px solid ${accent}33` }} data-testid={`filled-slot-${index}`}>
+      <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${accent}1A` }}>
+        {slot.source === "upload" ? <FileText className="h-4 w-4" style={{ color: accent }} /> :
+         slot.source === "library" ? <Database className="h-4 w-4" style={{ color: accent }} /> :
+         <PenLine className="h-4 w-4" style={{ color: accent }} />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold truncate">{name}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-bold truncate" style={{ color: accent }}>{shortName}</p>
+          {roleLabel && <span className="text-[9px] text-muted-foreground/60 shrink-0">{roleLabel}</span>}
+        </div>
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-          {type && <span>{type}</span>}
-          {stage && (
-            <>
-              <span>·</span>
-              <Badge className={`${stageBadgeColors[stage] || "bg-muted"} border text-[9px]`}>{stage}</Badge>
-            </>
-          )}
+          {stage && <Badge className={`${stageBadgeColors[stage] || "bg-muted"} border text-[9px]`}>{stage}</Badge>}
           {product && (
             <>
               <span>·</span>
               <span className="truncate">{product}</span>
             </>
           )}
+          {type && (
+            <>
+              <span>·</span>
+              <span>{type}</span>
+            </>
+          )}
           {hasAnalysis && (
             <>
               <span>·</span>
-              <span className="text-emerald-400">Analyzed</span>
+              <span style={{ color: accent }}>Analyzed</span>
             </>
           )}
         </div>
@@ -2741,7 +2794,9 @@ export default function ContentComparison() {
             {slots.map((slot, index) => (
               <div key={slot.id} className="space-y-2" data-testid={`slot-container-${index}`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Content {index + 1}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {slots.length === 2 ? (index === 0 ? "Baseline" : "Challenger") : `Content ${index + 1}`}
+                  </span>
                   {slots.length > 2 && !slot.filled && (
                     <button
                       onClick={() => removeSlot(index)}
@@ -2754,7 +2809,7 @@ export default function ContentComparison() {
                 </div>
 
                 {slot.filled ? (
-                  <FilledSlotCard slot={slot} index={index} onClear={() => clearSlot(index)} />
+                  <FilledSlotCard slot={slot} index={index} totalSlots={slots.length} onClear={() => clearSlot(index)} />
                 ) : activeSlotIndex === index ? (
                   <div className="rounded-xl border border-primary/20 bg-muted/5 p-3 space-y-3">
                     {!activeSource && <SlotSourcePicker slotIndex={index} onSelectSource={(src) => setActiveSource(src)} />}
@@ -2956,6 +3011,7 @@ export default function ContentComparison() {
 function CampaignContextModal({ data, onClose }: { data: FullComparisonResult; onClose: () => void }) {
   const [, navigate] = useLocation();
   const meta = data.metadata;
+  const [campShortA, campShortB] = generateShortNamePair(data.nameA, data.nameB, meta.stageA, meta.stageB);
   const stageToObjective: Record<string, string> = { TOFU: "Brand Awareness", MOFU: "Lead Generation", BOFU: "Conversion" };
   const [includeA, setIncludeA] = useState(true);
   const [includeB, setIncludeB] = useState(true);
@@ -3031,13 +3087,16 @@ function CampaignContextModal({ data, onClose }: { data: FullComparisonResult; o
           <div>
             <span className={labelClass}>Recommended Content</span>
             <div className="space-y-2">
-              {[{ name: data.nameA, stage: meta.stageA, product: meta.productA, format: meta.formatA, checked: includeA, onChange: setIncludeA },
-                { name: data.nameB, stage: meta.stageB, product: meta.productB, format: meta.formatB, checked: includeB, onChange: setIncludeB }].map((item) => (
-                <label key={item.name} className="flex items-center gap-3 rounded-xl border border-border/30 bg-muted/10 p-3 cursor-pointer hover:border-primary/30 transition-colors" data-testid={`check-include-${item.name}`}>
+              {[{ shortName: campShortA, fullName: data.nameA, stage: meta.stageA, product: meta.productA, format: meta.formatA, checked: includeA, onChange: setIncludeA, accent: BASELINE_COLOR, role: "Baseline" },
+                { shortName: campShortB, fullName: data.nameB, stage: meta.stageB, product: meta.productB, format: meta.formatB, checked: includeB, onChange: setIncludeB, accent: CHALLENGER_COLOR, role: "Challenger" }].map((item) => (
+                <label key={item.fullName} className="flex items-center gap-3 rounded-xl bg-muted/10 p-3 cursor-pointer transition-colors" style={{ border: `1px solid ${item.accent}33` }} data-testid={`check-include-${item.fullName}`}>
                   <input type="checkbox" checked={item.checked} onChange={e => item.onChange(e.target.checked)} className="accent-[#00D657] h-4 w-4" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-semibold block truncate">{item.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{item.format} | {item.stage} | {item.product}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold truncate" style={{ color: item.accent }}>{item.shortName}</span>
+                      <span className="text-[9px] text-muted-foreground/60">{item.role}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{item.stage} · {item.product} · {item.format}</span>
                   </div>
                 </label>
               ))}

@@ -1,0 +1,78 @@
+Replace "Content A" and "Content B" labels throughout the Content Comparison tool with meaningful, recognizable names. The user should never have to remember which is A and which is B.
+
+THE NAMING APPROACH: SHORT READABLE NAMES + ROLE LABELS
+Every comparison has two roles:
+Baseline — the existing content you're evaluating against (currently "Content A")
+Challenger — the content you're testing or comparing (currently "Content B")
+But instead of showing "Baseline" and "Challenger" as the primary labels, use the actual content's short readable name as the primary identifier, with the role as a subtle secondary label.
+How to generate short readable names:
+From the asset ID or AI analysis, extract a short recognizable name (3-5 words max):
+"CL_ACS_CA_SMA_PDF_TOFU_HumanFirmEN" → "Human Firm Guide"
+"CL_ACS_CA_SMA_PDF_MOFU_HumanFirmCaseStudy" → "Human Firm Case Study"
+"Freedom Accounting Case Study (English Canada, BOFU)" → "Freedom Accounting"
+"Mining Brochure GO, TOP, GNRC (Australia)" → "Mining Brochure"
+"Whitepaper- When Every Visit Matters" → "Every Visit Matters"
+Rules for generating short names:
+Strip "CL_", asset ID codes, country codes, funnel stage labels
+Use the human-readable part of the name or title
+Maximum 4 words
+If the AI has read the content and generated a summary, extract the best short name from the content title or primary subject
+If two assets have similar names, add a differentiator: "Human Firm Guide (TOFU)" vs "Human Firm Case Study (MOFU)"
+
+HOW NAMES APPEAR THROUGHOUT THE TOOL
+On the comparison selector cards at the top:
+BASELINE                          CHALLENGER
+┌─────────────────────┐          ┌─────────────────────┐
+│ Human Firm Guide    │          │ Mining Brochure      │
+│ TOFU · Sage 50 · CA │          │ BOFU · X3 · AU      │
+│ Baseline             │          │ Challenger            │
+└─────────────────────┘          └─────────────────────┘
+Short readable name is large and bold (primary identifier)
+Key metadata tags below (funnel stage · product · country)
+"Baseline" / "Challenger" in small muted text as role label
+In the comparison analysis sections:
+Always use the short readable name, never "Content A" or "Content B"
+First mention on each page: full short name. Subsequent mentions: can abbreviate if unambiguous.
+Example: "Human Firm Guide takes a thought leadership approach while Mining Brochure uses data-driven industry research."
+Not: "Content A takes a thought leadership approach while Content B uses data-driven industry research."
+In comparison tables:
+Dimension    | Human Firm Guide  | Mining Brochure
+Country Fit  | Weak              | Strong
+Industry Fit | Strong            | Weak
+Column headers use short readable names, not "Content A (Actual)"
+In the verdict:
+Use short readable names throughout
+"Human Firm Guide resonates significantly better..." not "Content A resonates..."
+In the chat (Librarian):
+The Librarian uses short readable names when referring to compared content
+"The Human Firm Guide covers cloud adoption in detail, while the Mining Brochure focuses on productivity metrics."
+User can also refer to content by its short name: "Tell me more about the Mining Brochure's ROI section"
+In the PDF report:
+Cover page: "[Human Firm Guide] vs [Mining Brochure]" — short names
+Throughout the report: short readable names, never "Content A/B"
+First page after cover: include a reference block showing the full asset IDs for traceability:
+"Human Firm Guide — CL_ACS_CA_SMA_PDF_TOFU_HumanFirmEN"
+"Mining Brochure — CL_ACS_CAEN_SMA_WBC_TOFU_MiningBrochure"
+This appears once for reference, then short names are used everywhere else
+In the Campaign Planner context handoff:
+Use short readable names in the context review screen
+"Recommended content: Human Firm Guide (TOFU, Sage 50, Canada)"
+
+COLOR CODING FOR QUICK VISUAL IDENTIFICATION
+Assign each asset a consistent color throughout the comparison:
+Baseline: Teal accent (#006362) — used for its tags, table column highlights, chart bars, and any visual indicators
+Challenger: Jade accent (#00A65C) — same usage
+This way even in a quick scan of a table or tag list, the user can visually distinguish which asset is being discussed without reading the name every time.
+Apply the colors to:
+Tag pills: Baseline tags in teal, Challenger tags in jade, shared tags in green
+Table column headers: Baseline column has teal accent, Challenger column has jade accent
+Performance metrics: Baseline numbers in teal, Challenger numbers in jade
+In the chat: when the Librarian references an asset, the name appears in its assigned color
+
+KEEP "BASELINE" AND "CHALLENGER" AS ROLE LABELS
+The role labels are still useful for understanding the comparison structure — which is the reference point and which is being evaluated against it. But they should be secondary, not primary:
+Show as small muted text below or beside the short readable name
+Never use "Baseline" or "Challenger" alone without the readable name
+The user should think in terms of "Human Firm Guide vs Mining Brochure" not "Baseline vs Challenger"
+If the comparison doesn't have a clear baseline/challenger relationship (user is just comparing two equal options), the role labels can be hidden entirely — just show the two names side by side
+

@@ -700,8 +700,38 @@ No explanation, no markdown, no extra text. Only JSON.`,
         return suffix ? `${name} (${suffix})` : name;
       }
 
+      function toShortName(raw: string): string {
+        if (!raw || raw.length < 3) return raw;
+        let s = raw;
+        s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
+        s = s.replace(/\s*\([^)]*\)\s*$/g, "");
+        s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
+        s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
+        s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland|South Africa)\s*/gi, "");
+        s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+        s = s.replace(/\b(PDF|DOCX|PPTX|DOC)\b/gi, "");
+        s = s.replace(/\bWhitepaper[-\s]*/gi, "");
+        s = s.replace(/\bBrochure[-\s]*/gi, () => "Brochure ");
+        s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+        s = s.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+        s = s.replace(/_/g, " ");
+        s = s.replace(/\s*[-|,]\s*$/, "");
+        s = s.trim().replace(/\s+/g, " ");
+        if (!s) return raw.length > 25 ? raw.slice(0, 25) + "…" : raw;
+        const words = s.split(" ").filter(Boolean);
+        return words.length > 4 ? words.slice(0, 4).join(" ") : words.join(" ");
+      }
+
       const nameA = toReadableName(contentA.name);
       const nameB = toReadableName(contentB.name);
+      let shortA = toShortName(contentA.name);
+      let shortB = toShortName(contentB.name);
+      if (shortA === shortB) {
+        const sA0 = contentA.stage || "TOFU";
+        const sB0 = contentB.stage || "TOFU";
+        if (sA0 !== sB0) { shortA = `${shortA} (${sA0})`; shortB = `${shortB} (${sB0})`; }
+        else { shortA = `${shortA} (1)`; shortB = `${shortB} (2)`; }
+      }
       const countryA = contentA.country || "";
       const countryB = contentB.country || "";
       const industryA = contentA.industry || "";
@@ -745,8 +775,8 @@ No explanation, no markdown, no extra text. Only JSON.`,
           console.log(`[Comparison] Text similarity: ${(similarity * 100).toFixed(1)}%`);
           if (similarity >= 0.9) {
             isDuplicate = true;
-            const mislabelled = normA === normB ? "Content B appears to be an identical copy of Content A." : "Content B appears to be a near-identical copy of Content A.";
-            duplicateMessage = `DUPLICATE CONTENT DETECTED: Content A and Content B contain identical or near-identical text (${Math.round(similarity * 100)}% overlap). ${mislabelled} See Verdict for recommended actions.`;
+            const mislabelled = normA === normB ? `${shortB} appears to be an identical copy of ${shortA}.` : `${shortB} appears to be a near-identical copy of ${shortA}.`;
+            duplicateMessage = `DUPLICATE CONTENT DETECTED: ${shortA} and ${shortB} contain identical or near-identical text (${Math.round(similarity * 100)}% overlap). ${mislabelled} See Verdict for recommended actions.`;
           }
         }
       }
@@ -797,7 +827,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
             system: `You are a senior content strategist producing a CONCISE comparison report. Be brief and scannable — a busy campaign planner should understand this in 5 minutes.
 
 CRITICAL HONESTY RULES:
-- ONLY analyze content you were given FULL TEXT for. Content A readable: ${aReadable}. Content B readable: ${bReadable}.
+- ONLY analyze content you were given FULL TEXT for. "${shortA}" (Baseline) readable: ${aReadable}. "${shortB}" (Challenger) readable: ${bReadable}.
 - If content text was NOT provided for an asset, you MUST NOT generate tags, summaries, topic analysis, resonance ratings, or improvement suggestions for it. Instead set those fields to null.
 - NEVER guess tags from titles, filenames, or metadata. Tags come ONLY from reading actual content text.
 - NEVER write speculative summaries like "Based on the title, this likely covers..." — if you didn't read it, say nothing.
@@ -815,9 +845,10 @@ CONCISENESS RULES:
 SUGGESTION RULES — CRITICAL:
 - This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, writing, or producing NEW content.
 - Suggestions MUST focus on: improving the existing content pieces being compared, better deployment strategies, metadata corrections, re-tagging, re-positioning, format prioritisation, or which existing content to prioritize for campaigns.
-- Good: "Content A's narrative case study format with concrete ROI metrics is more effective for BOFU than Content B's whitepaper format. Prioritize Content A's format for BOFU campaigns in the ANZ market."
-- Good: "Content B covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
-- Bad: "Develop an Australian accounting case study mirroring Content A's structure." — FORBIDDEN, this recommends creating new content.
+- ALWAYS use the actual content names "${shortA}" and "${shortB}" in your analysis, verdict, and suggestions. NEVER say "Content A" or "Content B".
+- Good: "${shortA}'s narrative case study format with concrete ROI metrics is more effective for BOFU than ${shortB}'s whitepaper format. Prioritize ${shortA}'s format for BOFU campaigns in the ANZ market."
+- Good: "${shortB} covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
+- Bad: "Develop an Australian accounting case study mirroring ${shortA}'s structure." — FORBIDDEN, this recommends creating new content.
 - Bad: "Create a localized version for the Canadian market." — FORBIDDEN.
 - If you catch yourself suggesting to "create", "develop", "build", "write", "produce", or "design" something new, STOP and rephrase as advice about the existing content.
 
@@ -840,7 +871,7 @@ Return ONLY valid JSON:
   "keyTopics": {
     "a": ${aReadable ? '[{ "topic": "topic name", "detail": "one sentence on what content says about this" }]' : 'null'},
     "b": ${bReadable ? '[{ "topic": "topic name", "detail": "one sentence" }]' : 'null'},
-    "comparisonInsight": ${aReadable && bReadable ? '"1-2 sentences on how they differ"' : aReadable ? '"Analysis based on Content A only. Content B could not be read."' : '"Analysis based on Content B only. Content A could not be read."'}
+    "comparisonInsight": ${aReadable && bReadable ? '"1-2 sentences on how they differ — use actual content names"' : aReadable ? `"Analysis based on ${shortA} only. ${shortB} could not be read."` : `"Analysis based on ${shortB} only. ${shortA} could not be read."`}
   },
   "resonanceAssessment": {
     "a": ${aReadable ? '{ "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" }, "industryFit": { "rating": "...", "explanation": "1 sentence" }, "funnelStageFit": { "rating": "...", "explanation": "1 sentence" }, "productFit": { "rating": "...", "explanation": "1 sentence" } }' : 'null'},
@@ -857,12 +888,12 @@ Return ONLY valid JSON:
     "a": ${aReadable ? '[{ "point": "specific gap found — one line" }]' : 'null'},
     "b": ${bReadable ? '[{ "point": "specific gap found — one line" }]' : 'null'}
   },
-  "verdict": "1 paragraph: which resonates better and why. ${!aReadable || !bReadable ? 'Acknowledge that only one content was readable.' : 'Based on actual content and real data only.'}",
+  "verdict": "1 paragraph using actual names '${shortA}' and '${shortB}': which resonates better and why. ${!aReadable || !bReadable ? 'Acknowledge that only one content was readable.' : 'Based on actual content and real data only.'} NEVER say Content A or Content B.",
   "suggestions": [{ "text": "1-2 sentence actionable suggestion", "source": "AI Recommendation|Content Analysis|Internal Data" }]
 }`,
             messages: [{
               role: "user",
-              content: `CONTENT A — "${nameA}":
+              content: `BASELINE — "${shortA}" (Full ID: ${nameA}):
 Tagged Stage: ${stageA} | Product: ${productA} | Country/Region: ${countryA || "Not specified"} | Industry: ${industryA || "Not specified"} | Format: ${contentAStored?.contentFormat || typeA}
 ${aSummary ? `Summary: ${aSummary}` : ""}
 Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages
@@ -872,7 +903,7 @@ ${aTextForAnalysis ? `FULL CONTENT TEXT:\n${aTextForAnalysis.slice(0, 12000)}` :
 
 ---
 
-CONTENT B — "${nameB}":
+CHALLENGER — "${shortB}" (Full ID: ${nameB}):
 Tagged Stage: ${stageB} | Product: ${productB} | Country/Region: ${countryB || "Not specified"} | Industry: ${industryB || "Not specified"} | Format: ${contentBStored?.contentFormat || typeB}
 ${bSummary ? `Summary: ${bSummary}` : ""}
 Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages
@@ -1245,9 +1276,10 @@ CONCISENESS RULES:
 SUGGESTION RULES — CRITICAL:
 - This tool evaluates EXISTING content only. NEVER suggest creating, developing, building, writing, or producing NEW content.
 - Suggestions MUST focus on: improving the existing content pieces being compared, better deployment strategies, metadata corrections, re-tagging, re-positioning, format prioritisation, or which existing content to prioritize for campaigns.
-- Good: "Content A's narrative case study format with concrete ROI metrics is more effective for BOFU — prioritize it for campaigns in the ANZ market."
-- Good: "Content C covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
-- Bad: "Develop a new case study mirroring Content A's structure." — FORBIDDEN, this recommends creating new content.
+- ALWAYS refer to content by its actual name, NEVER use generic labels like "Content A", "Content B", etc.
+- Good: "[Name]'s narrative case study format with concrete ROI metrics is more effective for BOFU — prioritize it for campaigns in the ANZ market."
+- Good: "[Name] covers both TOFU and BOFU topics — consider splitting it into two separately tagged assets for better funnel targeting."
+- Bad: "Develop a new case study mirroring [Name]'s structure." — FORBIDDEN, this recommends creating new content.
 - Bad: "Create a localized version for the Canadian market." — FORBIDDEN.
 - If you catch yourself suggesting to "create", "develop", "build", "write", "produce", or "design" something new, STOP and rephrase as advice about the existing content.
 

@@ -309,21 +309,39 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   setColor(SAGE.muted);
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
-  function coverName(name: string): string {
+  function shortName(name: string): string {
     let s = name;
     s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
     s = s.replace(/\s*\([^)]*\)\s*$/g, "");
     s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
     s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
-    s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland)\s*/gi, "");
+    s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland|South Africa)\s*/gi, "");
     s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+    s = s.replace(/\b(PDF|DOCX|PPTX|DOC)\b/gi, "");
+    s = s.replace(/\bWhitepaper[-\s]*/gi, "");
+    s = s.replace(/\bBrochure[-\s]*/gi, () => "Brochure ");
     s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+    s = s.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
     s = s.replace(/_/g, " ");
+    s = s.replace(/\s*[-|,]\s*$/, "");
     s = s.trim().replace(/\s+/g, " ");
-    if (s.length > 45) s = s.slice(0, 45).trim() + "...";
-    return s;
+    if (!s) return name.length > 25 ? name.slice(0, 25) + "..." : name;
+    const words = s.split(" ").filter(Boolean);
+    return words.length > 4 ? words.slice(0, 4).join(" ") : words.join(" ");
   }
-  const subtitle = `${coverName(data.nameA)} vs ${coverName(data.nameB)}`;
+  let sA = shortName(data.nameA);
+  let sB = shortName(data.nameB);
+  if (sA === sB) {
+    const meta0 = data.metadata;
+    if (meta0.stageA && meta0.stageB && meta0.stageA !== meta0.stageB) {
+      sA = `${sA} (${meta0.stageA})`;
+      sB = `${sB} (${meta0.stageB})`;
+    } else {
+      sA = `${sA} (1)`;
+      sB = `${sB} (2)`;
+    }
+  }
+  const subtitle = `${sA} vs ${sB}`;
   const subtitleLines = doc.splitTextToSize(subtitle, CONTENT_W);
   subtitleLines.forEach((line: string) => { doc.text(line, MARGIN, y); y += 5; });
   y += 10;
@@ -368,8 +386,8 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   y += 2;
   const meta = data.metadata;
   const idWidths = [50, 62, 62];
-  drawTableRow(["", "Content A", "Content B"], idWidths, true, false);
-  drawTableRow(["Full Name", data.nameA, data.nameB], idWidths, false, true);
+  drawTableRow(["", `${sA} (Baseline)`, `${sB} (Challenger)`], idWidths, true, false);
+  drawTableRow(["Full ID", data.nameA, data.nameB], idWidths, false, true);
   drawTableRow(["Format", dv(meta.formatA), dv(meta.formatB)], idWidths, false, false);
   drawTableRow(["Funnel Stage", meta.stageA, meta.stageB], idWidths, false, true);
   drawTableRow(["Product", dv(meta.productA), dv(meta.productB)], idWidths, false, false);
@@ -391,8 +409,8 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     const structShared = normalizeKeywordTags(data.structuredSharedTags);
     const hasStructured = flattenKeywordTags(structUniqueA).length > 0 || flattenKeywordTags(structUniqueB).length > 0 || flattenKeywordTags(structShared).length > 0;
 
-    [{ name: data.nameA, ov: data.contentOverview!.a, tags: data.uniqueTagsA || [], tagColor: SAGE.tagTeal, structTags: structUniqueA },
-     { name: data.nameB, ov: data.contentOverview!.b, tags: data.uniqueTagsB || [], tagColor: SAGE.tagJade, structTags: structUniqueB }].forEach(({ name, ov, tags, tagColor, structTags }) => {
+    [{ name: sA, ov: data.contentOverview!.a, tags: data.uniqueTagsA || [], tagColor: SAGE.tagTeal, structTags: structUniqueA },
+     { name: sB, ov: data.contentOverview!.b, tags: data.uniqueTagsB || [], tagColor: SAGE.tagJade, structTags: structUniqueB }].forEach(({ name, ov, tags, tagColor, structTags }) => {
       if (!ov) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
@@ -455,7 +473,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sourceTag("Source: Content Analysis");
     y += 2;
 
-    [{ name: data.nameA, items: kt.a }, { name: data.nameB, items: kt.b }].forEach(({ name, items }) => {
+    [{ name: sA, items: kt.a }, { name: sB, items: kt.b }].forEach(({ name, items }) => {
       if (!items?.length) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
@@ -496,7 +514,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       : [35, 15, 120];
 
     if (data.resonanceAssessment.a && data.resonanceAssessment.b) {
-      drawTableRow(["Dimension", "Rating", data.nameA, "Rating", data.nameB], resWidths, true, false);
+      drawTableRow(["Dimension", "Rating", sA, "Rating", sB], resWidths, true, false);
       for (let i = 0; i < dims.length; i++) {
         const dimKey = dims[i].key;
         const dA = data.resonanceAssessment.a[dimKey];
@@ -511,7 +529,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       }
     } else {
       const assessment = data.resonanceAssessment.a || data.resonanceAssessment.b;
-      const name = data.resonanceAssessment.a ? data.nameA : data.nameB;
+      const name = data.resonanceAssessment.a ? sA : sB;
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
       y += 2;
       drawTableRow(["Dimension", "Rating", "Explanation"], resWidths, true, false);
@@ -540,13 +558,13 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
     if (sHasStructured) {
       if (flattenKeywordTags(sStructShared).length > 0) drawStructuredTags(sStructShared, "Shared:");
-      if (flattenKeywordTags(sStructA).length > 0) drawStructuredTags(sStructA, `Only ${data.nameA}:`);
-      if (flattenKeywordTags(sStructB).length > 0) drawStructuredTags(sStructB, `Only ${data.nameB}:`);
+      if (flattenKeywordTags(sStructA).length > 0) drawStructuredTags(sStructA, `Only ${sA}:`);
+      if (flattenKeywordTags(sStructB).length > 0) drawStructuredTags(sStructB, `Only ${sB}:`);
       y += 2;
     } else if (sTags.length > 0 || uTagsA.length > 0 || uTagsB.length > 0) {
       if (sTags.length) drawTags(sTags, SAGE.tagShared, SAGE.green, "Shared: ");
-      if (uTagsA.length) drawTags(uTagsA, SAGE.tagTeal, "", `Only ${data.nameA}: `);
-      if (uTagsB.length) drawTags(uTagsB, SAGE.tagJade, "", `Only ${data.nameB}: `);
+      if (uTagsA.length) drawTags(uTagsA, SAGE.tagTeal, "", `Only ${sA}: `);
+      if (uTagsB.length) drawTags(uTagsB, SAGE.tagJade, "", `Only ${sB}: `);
       y += 2;
     }
 
@@ -579,7 +597,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sectionTitle("What Works");
     y += 2;
 
-    [{ name: data.nameA, items: wmw.a }, { name: data.nameB, items: wmw.b }].forEach(({ name, items }) => {
+    [{ name: sA, items: wmw.a }, { name: sB, items: wmw.b }].forEach(({ name, items }) => {
       if (!items?.length) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
@@ -601,7 +619,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sectionTitle("Could Be Improved");
     y += 2;
 
-    [{ name: data.nameA, items: wci.a }, { name: data.nameB, items: wci.b }].forEach(({ name, items }) => {
+    [{ name: sA, items: wci.a }, { name: sB, items: wci.b }].forEach(({ name, items }) => {
       if (!items?.length) return;
       checkPage(10);
       wrappedText(name, SAGE.green, 10, CONTENT_W, true);
@@ -676,14 +694,14 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       noteLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 5, y + 10 + li * 4); });
       y += noteH + 4;
 
-      const summaryA = `${data.nameA}: ${data.metricsA.pageviews} views, ${data.metricsA.downloads} downloads, ${data.metricsA.leads} leads, ${data.metricsA.sqos} SQOs${data.metricsA.avgTime > 0 ? `, ${data.metricsA.avgTime}s avg time` : ""}`;
-      const summaryB = `${data.nameB}: ${data.metricsB.pageviews} views, ${data.metricsB.downloads} downloads, ${data.metricsB.leads} leads, ${data.metricsB.sqos} SQOs${data.metricsB.avgTime > 0 ? `, ${data.metricsB.avgTime}s avg time` : ""}`;
+      const summaryA = `${sA}: ${data.metricsA.pageviews} views, ${data.metricsA.downloads} downloads, ${data.metricsA.leads} leads, ${data.metricsA.sqos} SQOs${data.metricsA.avgTime > 0 ? `, ${data.metricsA.avgTime}s avg time` : ""}`;
+      const summaryB = `${sB}: ${data.metricsB.pageviews} views, ${data.metricsB.downloads} downloads, ${data.metricsB.leads} leads, ${data.metricsB.sqos} SQOs${data.metricsB.avgTime > 0 ? `, ${data.metricsB.avgTime}s avg time` : ""}`;
       wrappedText(summaryA, SAGE.bodyText, 7.5, CONTENT_W, false);
       y += 1;
       wrappedText(summaryB, SAGE.bodyText, 7.5, CONTENT_W, false);
     } else {
       const perfWidths = [40, 40, 40, 40];
-      drawTableRow(["Metric", data.nameA, data.nameB, "Delta"], perfWidths, true, false);
+      drawTableRow(["Metric", sA, sB, "Delta"], perfWidths, true, false);
 
       const metrics = [
         { label: "Pageviews", key: "pageviews" as const },
@@ -711,9 +729,9 @@ export function generateComparisonPdf(data: FullComparisonResult) {
     sectionTitle("Performance");
     sourceTag("Source: Internal Data");
     y += 2;
-    const summary = data.performanceInlineSummary || `Performance data available for ${data.metricsA.hasData ? data.nameA : data.nameB} only.`;
+    const summary = data.performanceInlineSummary || `Performance data available for ${data.metricsA.hasData ? sA : sB} only.`;
     wrappedText(summary, SAGE.bodyText, 8, CONTENT_W);
   }
 
-  doc.save(`Comparison_Report_${data.nameA.replace(/[^a-zA-Z0-9]/g, "_")}_vs_${data.nameB.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+  doc.save(`Comparison_Report_${sA.replace(/[^a-zA-Z0-9]/g, "_")}_vs_${sB.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
 }
