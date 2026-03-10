@@ -533,6 +533,128 @@ async function buildCampaignPlansSummary(userId: string): Promise<string | null>
 
 const MAX_CONTEXT_EXCHANGES = 4;
 
+async function enrichComparisonContentTexts(ctx: any): Promise<void> {
+  if (!ctx || typeof ctx !== "object") return;
+  const enrichContent = async (c: any) => {
+    if (c && c.contentId && (!c.contentText || c.contentText.length < 100)) {
+      try {
+        const stored = await storage.getContentByAssetId(c.contentId);
+        if (stored?.contentText) {
+          c.contentText = stored.contentText;
+        }
+        if (!c.contentSummary && stored?.contentSummary) {
+          c.contentSummary = stored.contentSummary;
+        }
+      } catch { }
+    }
+  };
+  if (ctx.type === "two-way") {
+    await Promise.all([enrichContent(ctx.contentA), enrichContent(ctx.contentB)]);
+  } else if (ctx.type === "multi" && ctx.multiContents) {
+    await Promise.all(ctx.multiContents.map(enrichContent));
+  }
+}
+
+function buildComparisonContextPrompt(ctx: any): string | null {
+  if (!ctx || typeof ctx !== "object") return null;
+
+  let prompt = `\n\n=== ACTIVE CONTENT COMPARISON ===\n`;
+  prompt += `The user has an active content comparison. You have full access to the content texts, analysis results, metadata, and engagement data below. When answering questions:\n`;
+  prompt += `- You can reference specific sections of either content piece by searching the provided text.\n`;
+  prompt += `- Cite which piece you're referring to (Content A or Content B) and what section.\n`;
+  prompt += `- Use the comparison analysis (verdict, resonance, topics) to support your answers.\n`;
+  prompt += `- You can answer detailed questions like "does Content A mention X?" by searching the actual text.\n\n`;
+
+  if (ctx.type === "two-way") {
+    const a = ctx.contentA;
+    const b = ctx.contentB;
+    const r = ctx.comparisonResults;
+
+    if (a) {
+      prompt += `--- CONTENT A: "${a.name}" ---\n`;
+      prompt += `Content ID: ${a.contentId}\n`;
+      prompt += `Metadata: Stage=${a.metadata?.funnelStage || "N/A"}, Product=${a.metadata?.product || "N/A"}, Country=${a.metadata?.country || "N/A"}, Industry=${a.metadata?.industry || "N/A"}, Type=${a.metadata?.contentType || "N/A"}, Format=${a.metadata?.format || "N/A"}, Words=${a.metadata?.wordCount || "N/A"}\n`;
+      prompt += `Engagement: Views=${a.engagement?.pageviews || 0}, Downloads=${a.engagement?.downloads || 0}, Leads=${a.engagement?.leads || 0}, SQOs=${a.engagement?.sqos || 0}, Avg Time=${a.engagement?.avgTime || 0}s\n`;
+      if (a.keywordTags?.length > 0) prompt += `Tags: ${a.keywordTags.join(", ")}\n`;
+      if (a.contentSummary) prompt += `Summary: ${a.contentSummary}\n`;
+      if (a.contentText) {
+        const textA = a.contentText.slice(0, 50000);
+        prompt += `\nFULL CONTENT TEXT (Content A):\n${textA}\n`;
+        if (a.contentText.length > 50000) prompt += `[...truncated at 50,000 chars, full text is ${a.contentText.length} chars]\n`;
+      }
+      prompt += `\n`;
+    }
+
+    if (b) {
+      prompt += `--- CONTENT B: "${b.name}" ---\n`;
+      prompt += `Content ID: ${b.contentId}\n`;
+      prompt += `Metadata: Stage=${b.metadata?.funnelStage || "N/A"}, Product=${b.metadata?.product || "N/A"}, Country=${b.metadata?.country || "N/A"}, Industry=${b.metadata?.industry || "N/A"}, Type=${b.metadata?.contentType || "N/A"}, Format=${b.metadata?.format || "N/A"}, Words=${b.metadata?.wordCount || "N/A"}\n`;
+      prompt += `Engagement: Views=${b.engagement?.pageviews || 0}, Downloads=${b.engagement?.downloads || 0}, Leads=${b.engagement?.leads || 0}, SQOs=${b.engagement?.sqos || 0}, Avg Time=${b.engagement?.avgTime || 0}s\n`;
+      if (b.keywordTags?.length > 0) prompt += `Tags: ${b.keywordTags.join(", ")}\n`;
+      if (b.contentSummary) prompt += `Summary: ${b.contentSummary}\n`;
+      if (b.contentText) {
+        const textB = b.contentText.slice(0, 50000);
+        prompt += `\nFULL CONTENT TEXT (Content B):\n${textB}\n`;
+        if (b.contentText.length > 50000) prompt += `[...truncated at 50,000 chars, full text is ${b.contentText.length} chars]\n`;
+      }
+      prompt += `\n`;
+    }
+
+    if (r) {
+      prompt += `--- COMPARISON ANALYSIS RESULTS ---\n`;
+      if (r.contentOverviewA) prompt += `Content A Overview: ${r.contentOverviewA}\n`;
+      if (r.contentOverviewB) prompt += `Content B Overview: ${r.contentOverviewB}\n`;
+      if (r.resonanceAssessment) prompt += `Resonance Assessment: ${JSON.stringify(r.resonanceAssessment)}\n`;
+      if (r.topicRelevance) prompt += `Topic Analysis: ${JSON.stringify(r.topicRelevance)}\n`;
+      if (r.sharedAndDifferent) {
+        prompt += `Shared themes: ${r.sharedAndDifferent.overlap?.join(", ") || "none"}\n`;
+        prompt += `Differentiators: ${r.sharedAndDifferent.divergence?.join(", ") || "none"}\n`;
+      }
+      if (r.whatWorks) prompt += `What works: ${JSON.stringify(r.whatWorks)}\n`;
+      if (r.couldBeImproved) prompt += `Could be improved: ${JSON.stringify(r.couldBeImproved)}\n`;
+      prompt += `Verdict: ${r.verdict}\n`;
+      if (r.suggestions?.length > 0) prompt += `Suggestions: ${r.suggestions.map((s: any) => s.text).join("; ")}\n`;
+      prompt += `Duplicate: ${r.isDuplicate ? "Yes" : "No"}\n`;
+      if (r.tagsShared?.length > 0) prompt += `Shared tags: ${r.tagsShared.join(", ")}\n`;
+      prompt += `\n`;
+    }
+  } else if (ctx.type === "multi") {
+    const contents = ctx.multiContents || [];
+    contents.forEach((c: any, i: number) => {
+      prompt += `--- CONTENT ${i + 1}: "${c.name}" ---\n`;
+      prompt += `Content ID: ${c.contentId}\n`;
+      prompt += `Metadata: Stage=${c.metadata?.funnelStage || "N/A"}, Product=${c.metadata?.product || "N/A"}, Country=${c.metadata?.country || "N/A"}, Industry=${c.metadata?.industry || "N/A"}, Type=${c.metadata?.contentType || "N/A"}\n`;
+      prompt += `Engagement: Views=${c.engagement?.pageviews || 0}, Downloads=${c.engagement?.downloads || 0}, Leads=${c.engagement?.leads || 0}, SQOs=${c.engagement?.sqos || 0}, Avg Time=${c.engagement?.avgTime || 0}s\n`;
+      if (c.keywordTags?.length > 0) prompt += `Tags: ${c.keywordTags.join(", ")}\n`;
+      if (c.contentSummary) prompt += `Summary: ${c.contentSummary}\n`;
+      if (c.contentText) {
+        const maxPerPiece = Math.floor(80000 / contents.length);
+        const text = c.contentText.slice(0, maxPerPiece);
+        prompt += `Content text: ${text}\n`;
+        if (c.contentText.length > maxPerPiece) prompt += `[...truncated]\n`;
+      }
+      prompt += `\n`;
+    });
+
+    const mr = ctx.multiResults;
+    if (mr) {
+      prompt += `--- CROSS-CONTENT ANALYSIS ---\n`;
+      if (mr.crossAnalysis?.sharedThemes?.length > 0) prompt += `Shared themes: ${mr.crossAnalysis.sharedThemes.join(", ")}\n`;
+      if (mr.crossAnalysis?.differentiators?.length > 0) prompt += `Differentiators: ${mr.crossAnalysis.differentiators.join(", ")}\n`;
+      if (mr.crossAnalysis?.contentGaps?.length > 0) prompt += `Content gaps: ${mr.crossAnalysis.contentGaps.join(", ")}\n`;
+      if (mr.rankings?.overall?.length > 0) {
+        prompt += `Rankings:\n`;
+        mr.rankings.overall.forEach((r: any) => { prompt += `  - ${r.name}: ${r.score}/100 — ${r.reason}\n`; });
+      }
+      prompt += `Verdict: ${mr.verdict}\n`;
+      if (mr.suggestions?.length > 0) prompt += `Suggestions: ${mr.suggestions.map((s: any) => s.text).join("; ")}\n`;
+      prompt += `\n`;
+    }
+  }
+
+  return prompt;
+}
+
 async function buildContentLibraryContext(): Promise<string | null> {
   try {
     const allContent = await storage.getAllStoredContentAnalysis();
@@ -783,7 +905,7 @@ export function registerChatRoutes(app: Express): void {
   app.post("/api/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
-      const { content } = req.body;
+      const { content, comparisonContext } = req.body;
       let { images } = req.body;
 
       if (images && Array.isArray(images)) {
@@ -923,6 +1045,13 @@ export function registerChatRoutes(app: Express): void {
         if (contentStorageCtx) {
           systemPrompt += contentStorageCtx;
         }
+        if (comparisonContext) {
+          await enrichComparisonContentTexts(comparisonContext);
+          const compCtx = buildComparisonContextPrompt(comparisonContext);
+          if (compCtx) {
+            systemPrompt += compCtx;
+          }
+        }
       } else {
         const plannerContext = buildPlannerContext(summary);
         systemPrompt = `${CAMPAIGN_PLANNER_PROMPT}\n\n${plannerContext}`;
@@ -935,7 +1064,7 @@ export function registerChatRoutes(app: Express): void {
       let fullResponse = "";
       let retryAttempt = false;
 
-      const tokenLimit = agentType === "planner" ? 4096 : agentType === "librarian" ? 2500 : 1500;
+      const tokenLimit = agentType === "planner" ? 4096 : agentType === "librarian" ? (comparisonContext ? 3500 : 2500) : 1500;
 
       const runStream = async () => {
         const stream = anthropic.messages.stream({

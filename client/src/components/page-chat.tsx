@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2, MessageSquare, ArrowRight } from "lucide-react";
+import { X, Send, Plus, Trash2, ShieldCheck, Copy, Check, Paperclip, ZoomIn, Upload, Search, BarChart3, Layers, FileText, File, History, Minimize2, Maximize2, MessageSquare, ArrowRight, GitCompare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { authFetch } from "@/lib/queryClient";
+import type { ComparisonContext } from "@/components/content-comparison";
 
 interface Message {
   id: number;
@@ -303,12 +304,23 @@ export default function PageChat({
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [greetingStats, setGreetingStats] = useState<GreetingStats | null>(null);
   const [pillPulse, setPillPulse] = useState(false);
+  const [comparisonContext, setComparisonContext] = useState<ComparisonContext | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
 
   const bannerSessionKey = `cia-banner-shown-${agent}`;
+
+  useEffect(() => {
+    if (agent !== "librarian") return;
+    function handleComparisonCtx(e: Event) {
+      const ctx = (e as CustomEvent).detail as ComparisonContext | null;
+      setComparisonContext(ctx);
+    }
+    window.addEventListener("comparison-context-update", handleComparisonCtx);
+    return () => window.removeEventListener("comparison-context-update", handleComparisonCtx);
+  }, [agent]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -510,10 +522,14 @@ export default function PageChat({
     }
 
     try {
+      const msgBody: any = { content: fullContent || "(shared an image)", images: attachedImages.length > 0 ? attachedImages : undefined };
+      if (comparisonContext && agent === "librarian") {
+        msgBody.comparisonContext = comparisonContext;
+      }
       const res = await authFetch(`/api/conversations/${convId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: fullContent || "(shared an image)", images: attachedImages.length > 0 ? attachedImages : undefined }),
+        body: JSON.stringify(msgBody),
       });
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
@@ -585,7 +601,25 @@ export default function PageChat({
 
   const greeting = getGreetingMessage(agent, greetingStats);
 
-  const allSuggestions = [...new Set([
+  const comparisonNames = comparisonContext?.type === "two-way"
+    ? { a: comparisonContext.contentA?.name || "Content A", b: comparisonContext.contentB?.name || "Content B" }
+    : null;
+
+  const comparisonSuggestions = comparisonContext ? (
+    comparisonContext.type === "two-way" ? [
+      `Deep dive into ${comparisonNames?.a}`,
+      `Deep dive into ${comparisonNames?.b}`,
+      "Find similar content in our library",
+      "Plan campaign with the winner",
+    ] : [
+      "Which content should I prioritise for campaigns?",
+      "Find similar content in our library",
+      "What gaps exist across these pieces?",
+      "Plan campaign with the top-ranked content",
+    ]
+  ) : null;
+
+  const allSuggestions = comparisonSuggestions || [...new Set([
     ...fallbackSuggestions,
     "Which content has the highest SQO conversion?",
     "Show me aging content that needs a refresh",
@@ -807,7 +841,12 @@ export default function PageChat({
             </div>
             <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00D657] border border-black/50" />
           </div>
-          <span className="text-xs font-medium text-white/80 whitespace-nowrap group-hover:text-white transition-colors">{greeting.title}</span>
+          <span className="text-xs font-medium text-white/80 whitespace-nowrap group-hover:text-white transition-colors">
+            {comparisonContext ? "Comparison active — ask me" : greeting.title}
+          </span>
+          {comparisonContext && (
+            <GitCompare className="h-3.5 w-3.5 text-[#00D657] shrink-0" />
+          )}
         </motion.button>
       )}
 
@@ -883,7 +922,21 @@ export default function PageChat({
                           {greeting.message}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mb-4 max-w-[380px] mx-auto">
+                      {comparisonContext && (
+                        <div className="mx-auto max-w-[380px] mb-4 rounded-xl border border-[#00D657]/30 bg-[#00D657]/5 px-3.5 py-2.5" data-testid="comparison-context-note">
+                          <div className="flex items-center gap-2 mb-1">
+                            <GitCompare className="h-3.5 w-3.5 text-[#00D657] shrink-0" />
+                            <span className="text-xs font-semibold text-[#00D657]">Comparison Active</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            {comparisonContext.type === "two-way"
+                              ? `I have access to both content pieces: ${comparisonNames?.a} vs ${comparisonNames?.b}. Ask me anything about them — specific sections, engagement data, or strategic recommendations.`
+                              : `I have access to ${comparisonContext.multiContents?.length || 0} content pieces from your comparison. Ask me anything about them.`
+                            }
+                          </p>
+                        </div>
+                      )}
+                      {!comparisonContext && <div className="grid grid-cols-2 gap-2 mb-4 max-w-[380px] mx-auto">
                         {STARTERS.map((s) => {
                           const Icon = s.icon;
                           return (
@@ -893,7 +946,7 @@ export default function PageChat({
                             </button>
                           );
                         })}
-                      </div>
+                      </div>}
                       <div className="space-y-1 max-w-[380px] mx-auto">
                         {allSuggestions.map((q) => (
                           <button key={q} onClick={() => { setInput(q); setTimeout(() => chatInputRef.current?.focus(), 50); }} className="w-full text-left text-xs rounded-xl border border-border/30 bg-muted/10 px-3 py-2 hover:bg-muted/20 hover:border-[#00D657]/30 transition text-muted-foreground hover:text-foreground" data-testid={`suggestion-${agent}-${q.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`}>

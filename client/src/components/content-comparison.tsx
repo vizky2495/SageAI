@@ -39,6 +39,60 @@ import {
   Medal,
 } from "lucide-react";
 
+export interface ComparisonContextContent {
+  name: string;
+  contentId: string;
+  contentText: string;
+  contentSummary: string;
+  keywordTags: string[];
+  metadata: {
+    product: string;
+    country: string;
+    industry: string;
+    funnelStage: string;
+    channel: string;
+    contentType: string;
+    format: string;
+    wordCount: number | null;
+  };
+  engagement: {
+    pageviews: number;
+    downloads: number;
+    leads: number;
+    sqos: number;
+    avgTime: number;
+    hasData: boolean;
+  };
+}
+
+export interface ComparisonContextResults {
+  contentOverviewA: string | null;
+  contentOverviewB: string | null;
+  resonanceAssessment: any | null;
+  topicRelevance: any | null;
+  sharedAndDifferent: { overlap: string[]; divergence: string[] } | null;
+  whatWorks: any | null;
+  couldBeImproved: any | null;
+  verdict: string;
+  suggestions: { text: string; source: string }[];
+  tagsShared: string[];
+  isDuplicate: boolean;
+}
+
+export interface ComparisonContext {
+  type: "two-way" | "multi";
+  contentA?: ComparisonContextContent;
+  contentB?: ComparisonContextContent;
+  comparisonResults?: ComparisonContextResults;
+  multiContents?: ComparisonContextContent[];
+  multiResults?: {
+    crossAnalysis: { sharedThemes: string[]; differentiators: string[]; contentGaps: string[] };
+    rankings: { overall: { name: string; score: number; reason: string }[] };
+    verdict: string;
+    suggestions: { text: string; source: string }[];
+  };
+}
+
 interface Classification {
   contentType: string;
   stage: string;
@@ -2457,6 +2511,41 @@ export default function ContentComparison() {
     setStep("intake");
   }
 
+  function buildContentCtx(slot: ContentSlot, piece: any): ComparisonContextContent {
+    const a = slot.libraryAsset;
+    const r = slot.pdfResult;
+    const fullText = r?.text || "";
+    return {
+      name: piece.name,
+      contentId: piece.contentId,
+      contentText: fullText,
+      contentSummary: "",
+      keywordTags: [],
+      metadata: {
+        product: piece.product || "",
+        country: piece.country || "",
+        industry: piece.industry || "",
+        funnelStage: piece.stage || "",
+        channel: a?.channel || "",
+        contentType: piece.type || "",
+        format: r ? "PDF" : "Library Asset",
+        wordCount: r?.wordCount || null,
+      },
+      engagement: {
+        pageviews: piece.metrics?.pageviews || 0,
+        downloads: piece.metrics?.downloads || 0,
+        leads: piece.metrics?.leads || 0,
+        sqos: piece.metrics?.sqos || 0,
+        avgTime: piece.metrics?.avgTime || 0,
+        hasData: !!(piece.metrics && (piece.metrics.pageviews > 0 || piece.metrics.leads > 0 || piece.metrics.sqos > 0)),
+      },
+    };
+  }
+
+  function dispatchComparisonContext(ctx: ComparisonContext | null) {
+    window.dispatchEvent(new CustomEvent("comparison-context-update", { detail: ctx }));
+  }
+
   async function handleRunComparison() {
     if (!canCompare) return;
     setStep("results");
@@ -2506,6 +2595,31 @@ export default function ContentComparison() {
         if (!res.ok) throw new Error("Comparison analysis failed");
         const data = await res.json();
         setComparisonResult(data);
+
+        const ctxA = buildContentCtx(filledSlots[0], pieces[0]);
+        const ctxB = buildContentCtx(filledSlots[1], pieces[1]);
+        ctxA.contentSummary = data.metadata?.summaryA || data.contentOverview?.a?.summary || "";
+        ctxB.contentSummary = data.metadata?.summaryB || data.contentOverview?.b?.summary || "";
+        ctxA.keywordTags = flattenKeywordTags(data.keywordTagsA);
+        ctxB.keywordTags = flattenKeywordTags(data.keywordTagsB);
+        dispatchComparisonContext({
+          type: "two-way",
+          contentA: ctxA,
+          contentB: ctxB,
+          comparisonResults: {
+            contentOverviewA: data.contentOverview?.a?.summary || null,
+            contentOverviewB: data.contentOverview?.b?.summary || null,
+            resonanceAssessment: data.resonanceAssessment,
+            topicRelevance: data.keyTopics,
+            sharedAndDifferent: data.sharedAndDifferent,
+            whatWorks: data.whatMakesItWork,
+            couldBeImproved: data.whatCouldBeImproved,
+            verdict: data.verdict,
+            suggestions: data.suggestions,
+            tagsShared: data.sharedTags || [],
+            isDuplicate: !!data.isDuplicate,
+          },
+        });
       } catch (err: any) {
         setComparisonError(err.message || "Failed to run comparison analysis.");
       }
@@ -2552,6 +2666,26 @@ export default function ContentComparison() {
           })),
         };
         setMultiResult(mapped);
+
+        const multiCtxContents = filledSlots.map((slot, i) => {
+          const ctx = buildContentCtx(slot, pieces[i]);
+          const content = mapped.contents?.[i];
+          if (content) {
+            ctx.contentSummary = content.summary || "";
+            ctx.keywordTags = content.keywordTags || [];
+          }
+          return ctx;
+        });
+        dispatchComparisonContext({
+          type: "multi",
+          multiContents: multiCtxContents,
+          multiResults: {
+            crossAnalysis: mapped.crossAnalysis,
+            rankings: { overall: mapped.rankings.overall },
+            verdict: mapped.verdict,
+            suggestions: mapped.suggestions,
+          },
+        });
       } catch (err: any) {
         setComparisonError(err.message || "Failed to run multi-content comparison.");
       }
@@ -2569,6 +2703,7 @@ export default function ContentComparison() {
     setComparisonLoading(false);
     setComparisonError(null);
     setStep("intake");
+    dispatchComparisonContext(null);
   }
 
   async function handleDownloadPdf(data: FullComparisonResult) {
