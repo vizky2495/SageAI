@@ -641,12 +641,12 @@ export default function PageChat({
         )}
         <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`msg-${agent}-${msg.role}-${msg.id}`}>
           <div className={`max-w-[85%] ${msg.role === "assistant" ? "ml-6" : ""}`}>
-            <div className={`rounded-2xl px-3.5 py-2.5 text-sm ${msg.role === "user" ? "bg-[#004D4D] text-white" : "dark:bg-[#1A1A1A] bg-muted/50 border border-border/20"}`}>
+            <div className={`rounded-2xl px-3.5 py-2.5 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50 border border-border/30"}`}>
               {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
               {msg.images && msg.images.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {msg.images.map((img, imgIdx) => (
-                    <button key={imgIdx} onClick={() => setLightboxImage(img)} className="relative group/img rounded-lg overflow-hidden border border-white/20" data-testid={`msg-image-${msg.id}-${imgIdx}`}>
+                    <button key={imgIdx} onClick={() => setLightboxImage(img)} className="relative group/img rounded-lg overflow-hidden border border-border/40" data-testid={`msg-image-${msg.id}-${imgIdx}`}>
                       <img src={img} alt="Attachment" className="h-16 w-16 object-cover" />
                       <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
                         <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
@@ -683,7 +683,7 @@ export default function PageChat({
     <div className="flex justify-start" data-testid={`msg-streaming-${agent}`}>
       <div className="flex items-start gap-1.5">
         <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0 mt-1"><span className="text-[7px] font-bold text-black">CIA</span></div>
-        <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
+        <div className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border border-border/30">
           {renderMarkdown(streamingContent)}
           <span className="inline-block w-1.5 h-4 bg-[#00D657] opacity-60 animate-pulse ml-0.5 rounded-sm" />
         </div>
@@ -693,7 +693,7 @@ export default function PageChat({
     <div className="flex justify-start" data-testid={`msg-thinking-${agent}`}>
       <div className="flex items-center gap-1.5">
         <div className="h-5 w-5 rounded-full bg-[#00D657] flex items-center justify-center shrink-0"><span className="text-[7px] font-bold text-black">CIA</span></div>
-        <div className="rounded-2xl px-3.5 py-2.5 text-sm dark:bg-[#1A1A1A] bg-muted/50 border border-border/20">
+        <div className="rounded-2xl px-3.5 py-2.5 text-sm bg-muted/50 border border-border/30">
           <div className="flex items-center gap-1.5">
             <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
             <div className="h-1.5 w-1.5 rounded-full bg-[#00D657] opacity-60 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -738,7 +738,7 @@ export default function PageChat({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleChatKeyDown}
           placeholder={placeholder}
-          className="flex-1 resize-none rounded-xl border border-border/30 dark:bg-[#1A1A1A] bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[40px] max-h-[120px] transition-colors"
+          className="flex-1 resize-none rounded-xl border border-border/30 bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[40px] max-h-[120px] transition-colors text-foreground placeholder:text-muted-foreground"
           rows={1}
           disabled={isStreaming}
           data-testid={`input-chat-${agent}`}
@@ -776,12 +776,11 @@ export default function PageChat({
             data-testid={`welcome-banner-${agent}`}
           >
             <div
-              className="rounded-2xl border border-[#00D657]/20 p-4 shadow-2xl"
-              style={{ background: "rgba(10, 20, 15, 0.88)", backdropFilter: "blur(24px)" }}
+              className="rounded-2xl border border-[#00D657]/20 p-4 shadow-2xl bg-card/95 backdrop-blur-xl"
             >
               <button
                 onClick={dismissBanner}
-                className="absolute top-3 right-3 p-1 rounded-lg hover:bg-white/10 transition-colors text-white/40 hover:text-white"
+                className="absolute top-3 right-3 p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground/60 hover:text-foreground"
                 data-testid={`btn-dismiss-banner-${agent}`}
               >
                 <X className="h-3.5 w-3.5" />
@@ -798,10 +797,10 @@ export default function PageChat({
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
                 </div>
-                <span className="text-sm font-semibold text-white">{greeting.title}</span>
+                <span className="text-sm font-semibold text-foreground">{greeting.title}</span>
               </div>
 
-              <p className="text-sm text-white/70 leading-relaxed mb-4">{greeting.message}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">{greeting.message}</p>
 
               <div className="flex gap-2">
                 {greeting.actions.map((action, i) => (
@@ -828,8 +827,7 @@ export default function PageChat({
       {mode === "closed" && bannerDismissed && (
         <motion.button
           onClick={openChat}
-          className="fixed bottom-6 right-6 z-[55] flex items-center gap-2.5 rounded-full border border-[#00D657]/30 px-4 py-2.5 shadow-lg cursor-pointer group"
-          style={{ background: "rgba(10, 20, 15, 0.88)", backdropFilter: "blur(24px)" }}
+          className="fixed bottom-6 right-6 z-[55] flex items-center gap-2.5 rounded-full border border-[#00D657]/30 px-4 py-2.5 shadow-lg cursor-pointer group bg-card/95 backdrop-blur-xl"
           whileHover={{ boxShadow: "0 0 20px rgba(0, 214, 87, 0.15)" }}
           animate={pillPulse ? { scale: [1, 1.04, 1], borderColor: ["rgba(0,214,87,0.3)", "rgba(0,214,87,0.6)", "rgba(0,214,87,0.3)"] } : {}}
           transition={pillPulse ? { duration: 1.5, ease: "easeInOut" } : { type: "spring", stiffness: 300 }}
@@ -839,9 +837,9 @@ export default function PageChat({
             <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center">
               <span className="text-[7px] font-bold text-black">CIA</span>
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00D657] border border-black/50" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#00D657] border border-background/50" />
           </div>
-          <span className="text-xs font-medium text-white/80 whitespace-nowrap group-hover:text-white transition-colors">
+          <span className="text-xs font-medium text-foreground/80 whitespace-nowrap group-hover:text-foreground transition-colors">
             {comparisonContext ? "Comparison active — ask me" : greeting.title}
           </span>
           {comparisonContext && (
@@ -859,29 +857,28 @@ export default function PageChat({
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
             className={
               isFullscreen
-                ? "fixed inset-0 z-[55] flex flex-col overflow-hidden"
-                : "fixed bottom-6 right-6 z-[55] flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl w-[420px]"
+                ? "fixed inset-0 z-[55] flex flex-col overflow-hidden bg-background"
+                : "fixed bottom-6 right-6 z-[55] flex flex-col overflow-hidden rounded-2xl border border-[#00D657]/20 shadow-2xl w-[420px] bg-card/[0.97] backdrop-blur-xl"
             }
             style={{
-              background: "rgba(10, 12, 10, 0.95)",
-              boxShadow: isFullscreen ? undefined : "-4px 0 20px rgba(0, 0, 0, 0.4)",
+              boxShadow: isFullscreen ? undefined : "-4px 0 20px rgba(0, 0, 0, 0.15)",
               height: isFullscreen ? undefined : "65vh",
               maxHeight: isFullscreen ? undefined : "calc(100vh - 48px)",
             }}
             data-testid={`chat-panel-${agent}`}
           >
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20 shrink-0">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-6 w-6 rounded-full bg-[#00D657] flex items-center justify-center"><span className="text-[8px] font-bold text-black">CIA</span></div>
-                <span className="text-sm font-semibold text-white truncate max-w-[200px]">
+                <span className="text-sm font-semibold text-foreground truncate max-w-[200px]">
                   {activeConv?.title && activeConv.title !== "New Chat" ? activeConv.title : agentName}
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={createConversation} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title="New conversation" data-testid={`btn-new-chat-${agent}`}><Plus className="h-4 w-4" /></button>
-                <button onClick={() => setShowHistory(!showHistory)} className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`} title="History" data-testid={`btn-history-${agent}`}><History className="h-4 w-4" /></button>
-                <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} data-testid={`btn-fullscreen-${agent}`}>{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
-                <button onClick={closeChat} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white" data-testid={`btn-close-chat-${agent}`}><X className="h-4 w-4" /></button>
+                <button onClick={createConversation} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" title="New conversation" data-testid={`btn-new-chat-${agent}`}><Plus className="h-4 w-4" /></button>
+                <button onClick={() => setShowHistory(!showHistory)} className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="History" data-testid={`btn-history-${agent}`}><History className="h-4 w-4" /></button>
+                <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"} data-testid={`btn-fullscreen-${agent}`}>{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
+                <button onClick={closeChat} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" data-testid={`btn-close-chat-${agent}`}><X className="h-4 w-4" /></button>
               </div>
             </div>
 
@@ -896,7 +893,7 @@ export default function PageChat({
                       ) : (
                         <div className="space-y-0.5">
                           {conversations.map((conv) => (
-                            <div key={conv.id} onClick={() => openConversation(conv)} className={`flex items-center justify-between rounded-lg px-2 py-1.5 cursor-pointer transition group text-xs ${activeConv?.id === conv.id ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`} data-testid={`conv-item-${agent}-${conv.id}`}>
+                            <div key={conv.id} onClick={() => openConversation(conv)} className={`flex items-center justify-between rounded-lg px-2 py-1.5 cursor-pointer transition group text-xs ${activeConv?.id === conv.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`} data-testid={`conv-item-${agent}-${conv.id}`}>
                               <div className="min-w-0 flex-1">
                                 <div className="truncate font-medium">{conv.title}</div>
                                 <div className="text-[10px] text-muted-foreground/40">{new Date(conv.createdAt).toLocaleDateString()}</div>
