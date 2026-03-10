@@ -84,12 +84,24 @@ function formatUploadDate(isoDate: string, style: "short" | "long" = "short"): s
     " at " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-const stageTones: Record<string, { bg: string; text: string; border: string }> = {
-  TOFU: { bg: "bg-chart-1/12", text: "text-chart-1", border: "border-chart-1/20" },
-  MOFU: { bg: "bg-chart-2/12", text: "text-chart-2", border: "border-chart-2/20" },
-  BOFU: { bg: "bg-chart-3/12", text: "text-chart-3", border: "border-chart-3/20" },
-  UNKNOWN: { bg: "bg-chart-4/12", text: "text-chart-4", border: "border-chart-4/20" },
+const stageTones: Record<string, { bg: string; text: string; border: string; accent: string }> = {
+  TOFU: { bg: "bg-chart-1/12", text: "text-chart-1", border: "border-chart-1/20", accent: "#00D657" },
+  MOFU: { bg: "bg-chart-2/12", text: "text-chart-2", border: "border-chart-2/20", accent: "#67E8F9" },
+  BOFU: { bg: "bg-chart-3/12", text: "text-chart-3", border: "border-chart-3/20", accent: "#A78BFA" },
+  UNKNOWN: { bg: "bg-chart-4/12", text: "text-chart-4", border: "border-chart-4/20", accent: "#6B7280" },
 };
+
+function deriveReadableName(contentId: string, asset: { name?: string | null; campaignName?: string | null; url?: string | null }): { primary: string; showId: boolean } {
+  if (asset.name && asset.name !== contentId) return { primary: asset.name, showId: true };
+  if (asset.campaignName && asset.campaignName !== contentId) return { primary: asset.campaignName, showId: true };
+  const parts = contentId.split("_");
+  if (parts.length >= 7) {
+    const tail = parts.slice(6).join(" ");
+    const readable = tail.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/(\d+)/g, " $1 ").replace(/\s+/g, " ").trim();
+    if (readable.length > 3) return { primary: readable, showId: true };
+  }
+  return { primary: contentId, showId: false };
+}
 
 interface CompareContextType {
   compareMode: boolean;
@@ -353,7 +365,7 @@ function HoverInsightTooltip({
 
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-[280px] animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-[220px] animate-in fade-in slide-in-from-bottom-2 duration-200"
       data-testid={`tooltip-insight-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
     >
       <div className="rounded-xl border bg-card/95 backdrop-blur-lg shadow-xl p-3 space-y-2">
@@ -963,22 +975,16 @@ function ContentCard({
 
   const isSelectedForCompare = selectedCard?.asset.contentId === asset.contentId;
 
-  const secondary =
-    asset.campaignName || asset.name || asset.formName || null;
+  const { primary: readableName, showId: showIdBelow } = deriveReadableName(asset.contentId, asset);
 
   const allTags = [
     asset.utmChannel,
     asset.productFranchise,
     asset.productCategory,
     asset.objective,
-    asset.cta && `CTA: ${asset.cta}`,
     asset.utmMedium && `Medium: ${asset.utmMedium}`,
-    asset.utmCampaign && `Campaign: ${asset.utmCampaign}`,
-    asset.utmTerm && `Term: ${asset.utmTerm}`,
-    asset.utmContent && `UTM Content: ${asset.utmContent}`,
-    asset.formName && `Form: ${asset.formName}`,
   ].filter(Boolean) as string[];
-  const tags = allTags.slice(0, 4);
+  const tags = allTags.slice(0, 3);
 
   const handleCardClick = () => {
     if (compareMode && !isSelectedForCompare) {
@@ -987,11 +993,29 @@ function ContentCard({
     }
   };
 
+  const metrics: { label: string; value: string }[] = [];
+  if (stage === "TOFU") {
+    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+    metrics.push({ label: "Avg time", value: asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m" });
+    if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
+  } else if (stage === "MOFU") {
+    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+    if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
+  } else if (stage === "BOFU") {
+    metrics.push({ label: "SQOs", value: formatCompact(asset.sqoCount) });
+    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+  } else {
+    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+  }
+
   return (
     <>
       <div
-        className="w-[280px] shrink-0 relative flex flex-col"
-        style={{ paddingTop: 6, paddingBottom: 6 }}
+        className="w-[220px] shrink-0 relative flex flex-col"
+        style={{ paddingTop: 4, paddingBottom: 4 }}
         onMouseEnter={() => {
           setHovered(true);
           if (!compareMode) {
@@ -1015,191 +1039,122 @@ function ContentCard({
           </div>
         )}
         <Card
-          className={`flex h-full flex-col overflow-hidden rounded-2xl border p-4 backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
+          className={`flex h-full flex-col overflow-hidden rounded-xl border backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
           style={{
             transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease",
-            transform: hovered ? "translateY(-4px)" : "translateY(0)",
+            transform: hovered ? "translateY(-3px)" : "translateY(0)",
+            borderLeft: `3px solid ${tone.accent}`,
             boxShadow: isSelectedForCompare
               ? "0 0 0 2px rgba(16, 185, 129, 0.6), 0 0 20px rgba(16, 185, 129, 0.2)"
               : hovered
-              ? "0 10px 25px -5px rgba(0,0,0,0.15), 0 4px 10px -5px rgba(0,0,0,0.1)"
+              ? "0 8px 20px -5px rgba(0,0,0,0.15), 0 3px 8px -4px rgba(0,0,0,0.1)"
               : "0 1px 3px 0 rgba(0,0,0,0.06)",
             borderColor: isSelectedForCompare
               ? "rgb(16, 185, 129)"
               : hovered ? "hsl(var(--primary) / 0.35)" : undefined,
+            borderLeftColor: tone.accent,
             background: hovered ? "hsl(var(--card))" : "hsl(var(--card) / 0.7)",
             animation: isSelectedForCompare ? "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" : undefined,
           }}
           onClick={handleCardClick}
           data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <button
-                className="block w-full truncate text-left text-sm font-[650] tracking-tight text-foreground underline decoration-muted-foreground/30 underline-offset-2 cursor-pointer"
-                style={{
-                  transition: "color 0.15s ease",
-                  color: hovered ? "hsl(var(--primary))" : undefined,
-                }}
-                title={`${asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
-                onClick={(e) => {
-                  if (compareMode) { e.preventDefault(); return; }
-                  setShowDetail(true);
-                }}
-                data-testid="card-title"
-              >
-                {asset.contentId}
-              </button>
-              {secondary && (
-                <div
-                  className="mt-0.5 truncate text-xs text-muted-foreground"
-                  title={secondary}
-                  data-testid="card-secondary"
+          <div className="px-3 pt-2.5 pb-0">
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="min-w-0 flex-1">
+                <button
+                  className="block w-full text-left text-[13px] font-semibold leading-tight text-foreground cursor-pointer line-clamp-2"
+                  style={{
+                    transition: "color 0.15s ease",
+                    color: hovered ? "hsl(var(--primary))" : undefined,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                  title={`${asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
+                  onClick={(e) => {
+                    if (compareMode) { e.preventDefault(); return; }
+                    setShowDetail(true);
+                  }}
+                  data-testid="card-title"
                 >
-                  {secondary}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <ContentStatusIndicator status={contentStatus?.fetchStatus} assetId={asset.contentId} assetName={asset.name || asset.contentId} />
-              <Badge
-                className={`border ${tone.bg} ${tone.text} ${tone.border}`}
-                data-testid="card-stage-badge"
-              >
-                {stage}
-              </Badge>
+                  {readableName}
+                </button>
+                {showIdBelow && (
+                  <div
+                    className="mt-0.5 truncate text-[10px] text-muted-foreground/60 font-mono"
+                    title={asset.contentId}
+                    data-testid="card-secondary"
+                  >
+                    {asset.contentId}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                <ContentStatusIndicator status={contentStatus?.fetchStatus} assetId={asset.contentId} assetName={asset.name || asset.contentId} />
+                <Badge
+                  className={`border text-[9px] px-1.5 py-0 ${tone.bg} ${tone.text} ${tone.border}`}
+                  data-testid="card-stage-badge"
+                >
+                  {stage}
+                </Badge>
+              </div>
             </div>
           </div>
 
-          {asset.url && (
-            <div className="mt-2 flex items-center gap-1.5">
-              <div
-                className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
-                title={asset.url}
-                data-testid="card-url"
-              >
-                {truncateUrl(asset.url)}
-              </div>
-              <button
-                className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-primary hover:bg-primary/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!compareMode) setShowDetail(true);
-                }}
-                title="Preview URL"
-                data-testid="button-preview-url"
-              >
-                <Eye className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-
           {tags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1 overflow-hidden" data-testid="card-tags">
+            <div className="px-3 mt-1 flex flex-wrap gap-0.5 overflow-hidden max-h-[18px]" data-testid="card-tags">
               {tags.map((t, i) => (
-                <Badge
+                <span
                   key={`${t}-${i}`}
-                  variant="secondary"
-                  className="max-w-full truncate rounded-lg border bg-card/60 text-[10px]"
+                  className="max-w-[90px] truncate rounded px-1 py-0 text-[9px] text-muted-foreground/80 bg-muted/40"
                   title={t}
                 >
                   {t}
-                </Badge>
+                </span>
               ))}
-              {allTags.length > 4 && (
-                <Badge
-                  variant="secondary"
-                  className="rounded-lg border bg-card/60 text-[10px] text-muted-foreground"
-                  title={allTags.slice(4).join(", ")}
+              {allTags.length > 3 && (
+                <span
+                  className="rounded px-1 py-0 text-[9px] text-muted-foreground/60 bg-muted/40"
+                  title={allTags.slice(3).join(", ")}
                 >
-                  +{allTags.length - 4}
-                </Badge>
+                  +{allTags.length - 3}
+                </span>
               )}
             </div>
           )}
 
-          <Separator
-            className="my-3"
-            style={{
-              transition: "background-color 0.2s ease",
-              backgroundColor: hovered ? "hsl(var(--primary) / 0.2)" : undefined,
-            }}
-          />
+          {asset.utmCampaign && (
+            <div
+              className="px-3 mt-0.5 truncate text-[9px] text-muted-foreground/60"
+              title={asset.utmCampaign}
+              data-testid="card-campaign"
+            >
+              Campaign: {asset.utmCampaign}
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-2 text-xs" data-testid="card-metrics">
-            {stage === "TOFU" && (
-              <>
-                <div>
-                  <div className="text-muted-foreground">Pageviews</div>
-                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
+          <div className="mx-3 my-1.5 h-px bg-border/50" />
+
+          <div className="px-3 pb-2" data-testid="card-metrics">
+            <div className={`grid gap-1 text-[11px] ${metrics.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+              {metrics.map((m) => (
+                <div key={m.label} className="text-center">
+                  <div className="text-muted-foreground/70 text-[9px] leading-none">{m.label}</div>
+                  <div className="font-bold text-[13px] leading-tight">{m.value}</div>
                 </div>
-                <div>
-                  <div className="text-muted-foreground">Avg time</div>
-                  <div className="mt-0.5 font-[650]">
-                    {asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m"}
-                  </div>
-                </div>
-                {asset.downloadsSum > 0 && (
-                  <div>
-                    <div className="text-muted-foreground">Downloads</div>
-                    <div className="mt-0.5 font-[650]">{formatCompact(asset.downloadsSum)}</div>
-                  </div>
-                )}
-              </>
-            )}
-            {stage === "MOFU" && (
-              <>
-                <div>
-                  <div className="text-muted-foreground">Unique leads</div>
-                  <div className="mt-0.5 font-[650]">
-                    {formatCompact(asset.uniqueLeads)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Pageviews</div>
-                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
-                </div>
-              </>
-            )}
-            {stage === "BOFU" && (
-              <>
-                <div>
-                  <div className="text-muted-foreground">SQOs</div>
-                  <div className="mt-0.5 font-[650]">
-                    {formatCompact(asset.sqoCount)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Unique leads</div>
-                  <div className="mt-0.5 font-[650]">
-                    {formatCompact(asset.uniqueLeads)}
-                  </div>
-                </div>
-                {asset.sqoCount === 0 && (
-                  <div className="col-span-2 mt-1 rounded bg-chart-4/10 px-2 py-1 text-[10px] text-chart-4">
-                    BOFU tag from CONTENT
-                  </div>
-                )}
-              </>
-            )}
-            {stage === "UNKNOWN" && (
-              <>
-                <div>
-                  <div className="text-muted-foreground">Pageviews</div>
-                  <div className="mt-0.5 font-[650]">{formatCompact(asset.pageviewsSum)}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Unique leads</div>
-                  <div className="mt-0.5 font-[650]">
-                    {formatCompact(asset.uniqueLeads)}
-                  </div>
-                </div>
-              </>
+              ))}
+            </div>
+            {stage === "BOFU" && asset.sqoCount === 0 && (
+              <div className="mt-1 rounded bg-chart-4/10 px-1.5 py-0.5 text-[9px] text-chart-4 text-center">
+                BOFU tag from CONTENT
+              </div>
             )}
           </div>
 
           {contentStatus && contentStatus.fetchStatus === "success" && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
-            <div className="mt-1 text-[11px]" style={{ color: "#888888" }} data-testid="card-upload-date">
+            <div className="px-3 pb-1 text-[10px]" style={{ color: "#888888" }} data-testid="card-upload-date">
               {contentStatus.dateLastUpdated && contentStatus.dateStored && contentStatus.dateLastUpdated !== contentStatus.dateStored
                 ? `Updated: ${formatUploadDate(contentStatus.dateLastUpdated)}`
                 : contentStatus.dateStored
@@ -1209,34 +1164,10 @@ function ContentCard({
           )}
 
           {contentStatus && contentStatus.fetchStatus === "success" && contentStatus.contentSummary && (
-            <div className="mt-2 space-y-1.5" data-testid="card-content-preview">
-              <div className="text-[11px] text-muted-foreground leading-snug line-clamp-2" data-testid="card-content-summary">
+            <div className="px-3 pb-2 space-y-1" data-testid="card-content-preview">
+              <div className="text-[10px] text-muted-foreground leading-snug line-clamp-2" data-testid="card-content-summary">
                 {contentStatus.contentSummary}
               </div>
-              {contentStatus.extractedTopics && contentStatus.extractedTopics.length > 0 && (
-                <div className="flex flex-wrap gap-1" data-testid="card-topic-pills">
-                  {contentStatus.extractedTopics.slice(0, 3).map((topic, i) => (
-                    <Badge key={i} variant="secondary" className="rounded-lg text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                      {topic}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {contentStatus.extractedCta && (
-                <Badge
-                  variant="secondary"
-                  className={`rounded-lg text-[9px] px-1.5 py-0 ${
-                    contentStatus.extractedCta.strength === "strong"
-                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                      : contentStatus.extractedCta.strength === "moderate"
-                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                  data-testid="card-cta-pill"
-                >
-                  CTA: {contentStatus.extractedCta.type.replace(/_/g, " ")}
-                </Badge>
-              )}
               {contentStatus.keywordTags && (() => {
                 const t = contentStatus.keywordTags;
                 const allTagsTyped: { tag: string; type: "topic" | "audience" | "intent" | "user" }[] = [
@@ -1264,23 +1195,23 @@ function ContentCard({
                       return aMatch - bMatch;
                     })
                   : allTagsTyped;
-                const visible = sortedTags.slice(0, 5);
-                const overflow = allTagsTyped.length - 5;
+                const visible = sortedTags.slice(0, 4);
+                const overflow = allTagsTyped.length - 4;
                 return (
-                  <div className="mt-1" data-testid="card-keyword-tags">
+                  <div data-testid="card-keyword-tags">
                     {matchingTags.length > 0 && (
                       <div className="text-[8px] text-[#00D657]/80 mb-0.5" data-testid="text-tag-match">
                         Matched: {tagTypeLabels[matchingTags[0].type]} — {matchingTags[0].tag}
                       </div>
                     )}
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-0.5">
                       {visible.map((item, i) => {
                         const isMatch = searchLower && item.tag.toLowerCase().includes(searchLower);
                         return (
                           <Badge
                             key={i}
                             variant="outline"
-                            className={`rounded-full text-[8px] px-1.5 py-0 font-medium border ${tagStyles[item.type]} ${
+                            className={`rounded-full text-[7px] px-1 py-0 font-medium border ${tagStyles[item.type]} ${
                               isMatch ? "ring-1 ring-[#00D657] shadow-[0_0_6px_rgba(0,214,87,0.4)]" : ""
                             }`}
                           >
@@ -1289,7 +1220,7 @@ function ContentCard({
                         );
                       })}
                       {overflow > 0 && (
-                        <span className="text-[8px] text-muted-foreground self-center">+{overflow}</span>
+                        <span className="text-[7px] text-muted-foreground self-center">+{overflow}</span>
                       )}
                     </div>
                   </div>
@@ -1464,7 +1395,7 @@ function StageCarousel({
 
       <div
         ref={scrollRef}
-        className="flex items-stretch gap-3 overflow-x-auto pt-2 pb-3 scrollbar-thin"
+        className="flex items-stretch gap-2 overflow-x-auto pt-2 pb-3 scrollbar-thin"
         style={{ scrollSnapType: "x mandatory", maxWidth: "100%" }}
         data-testid={`scroll-lane-${stage.toLowerCase()}`}
       >
@@ -1472,7 +1403,7 @@ function StageCarousel({
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-[220px] w-[280px] shrink-0 animate-pulse rounded-2xl border bg-muted/30"
+              className="h-[180px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
               data-testid={`skeleton-${stage.toLowerCase()}-${i}`}
             />
           ))}
@@ -1502,7 +1433,7 @@ function StageCarousel({
           Array.from({ length: 2 }).map((_, i) => (
             <div
               key={`loading-${i}`}
-              className="h-[220px] w-[280px] shrink-0 animate-pulse rounded-2xl border bg-muted/30"
+              className="h-[180px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
             />
           ))}
 
