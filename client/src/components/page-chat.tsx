@@ -738,8 +738,8 @@ export default function PageChat({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleChatKeyDown}
           placeholder={placeholder}
-          className="flex-1 resize-none rounded-xl border border-border/30 bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[40px] max-h-[120px] transition-colors text-foreground placeholder:text-muted-foreground"
-          rows={1}
+          className="flex-1 resize-none rounded-xl border border-border/30 bg-muted/30 px-3 py-2.5 text-sm outline-none focus:border-[#00D657]/50 focus:ring-1 focus:ring-[#00D657]/20 min-h-[80px] max-h-[200px] transition-colors text-foreground placeholder:text-muted-foreground"
+          rows={3}
           disabled={isStreaming}
           data-testid={`input-chat-${agent}`}
         />
