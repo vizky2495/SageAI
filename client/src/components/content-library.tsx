@@ -1014,7 +1014,7 @@ function ContentCard({
   return (
     <>
       <div
-        className="w-[220px] shrink-0 relative flex flex-col"
+        className="w-[220px] h-[210px] shrink-0 relative flex flex-col"
         style={{ paddingTop: 4, paddingBottom: 4 }}
         onMouseEnter={() => {
           setHovered(true);
@@ -1403,7 +1403,7 @@ function StageCarousel({
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-[180px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
+              className="h-[210px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
               data-testid={`skeleton-${stage.toLowerCase()}-${i}`}
             />
           ))}
@@ -1433,7 +1433,7 @@ function StageCarousel({
           Array.from({ length: 2 }).map((_, i) => (
             <div
               key={`loading-${i}`}
-              className="h-[180px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
+              className="h-[210px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
             />
           ))}
 
