@@ -1146,11 +1146,6 @@ function ContentCard({
                 </div>
               ))}
             </div>
-            {stage === "BOFU" && asset.sqoCount === 0 && (
-              <div className="mt-1 rounded bg-chart-4/10 px-1.5 py-0.5 text-[9px] text-chart-4 text-center">
-                BOFU tag from CONTENT
-              </div>
-            )}
           </div>
 
           {contentStatus && contentStatus.fetchStatus === "success" && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
