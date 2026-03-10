@@ -13,6 +13,7 @@ import {
   TrendingUp,
   LayoutDashboard,
   CalendarDays,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   Bar,
@@ -43,24 +44,27 @@ import {
   filterRowsByDateRange,
   dateRangeLabels,
   type StageKey,
+  type FunnelStage,
   type DateRangePreset,
 } from "@/hooks/use-funnel-data";
 
 export default function FunnelDashboard() {
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
   const [dateRange, setDateRange] = useState<DateRangePreset>("all");
+  const [stageFilter, setStageFilter] = useState<FunnelStage | null>(null);
 
-  const filtered = useMemo(() => filterRowsByDateRange(rows, dateRange), [rows, dateRange]);
+  const dateFiltered = useMemo(() => filterRowsByDateRange(rows, dateRange), [rows, dateRange]);
+  const filtered = useMemo(() => stageFilter ? dateFiltered.filter(r => r.stage === stageFilter) : dateFiltered, [dateFiltered, stageFilter]);
 
-  const byStage = useMemo(() => {
-    const groups: Record<string, typeof filtered> = { TOFU: [], MOFU: [], BOFU: [], UNKNOWN: [] };
-    for (const r of filtered) groups[r.stage].push(r);
+  const byStageAll = useMemo(() => {
+    const groups: Record<string, typeof dateFiltered> = { TOFU: [], MOFU: [], BOFU: [], UNKNOWN: [] };
+    for (const r of dateFiltered) groups[r.stage].push(r);
     return groups;
-  }, [filtered]);
+  }, [dateFiltered]);
 
-  const tofuBase = byStage.TOFU;
-  const mofuBase = byStage.MOFU;
-  const bofuBase = byStage.BOFU;
+  const tofuBase = byStageAll.TOFU;
+  const mofuBase = byStageAll.MOFU;
+  const bofuBase = byStageAll.BOFU;
 
   const tofuEngaged = sum(tofuBase, "engagedSessions");
   const tofuSessions = sum(tofuBase, "sessions");
@@ -90,9 +94,9 @@ export default function FunnelDashboard() {
   const funnelSeries = useMemo(() => {
     if (uploadDiagnostics) {
       return [
-        { stage: "TOFU", "Content Assets": byStage.TOFU.length, "Page Views": sum(byStage.TOFU, "pageViews"), "Downloads": sum(byStage.TOFU, "downloads"), "Leads": sum(byStage.TOFU, "newContacts") },
-        { stage: "MOFU", "Content Assets": byStage.MOFU.length, "Page Views": sum(byStage.MOFU, "pageViews"), "Downloads": sum(byStage.MOFU, "downloads"), "Leads": sum(byStage.MOFU, "newContacts") },
-        { stage: "BOFU", "Content Assets": byStage.BOFU.length, "Page Views": sum(byStage.BOFU, "pageViews"), "Downloads": sum(byStage.BOFU, "downloads"), "Leads": sum(byStage.BOFU, "newContacts") },
+        { stage: "TOFU", "Content Assets": byStageAll.TOFU.length, "Page Views": sum(byStageAll.TOFU, "pageViews"), "Downloads": sum(byStageAll.TOFU, "downloads"), "Leads": sum(byStageAll.TOFU, "newContacts") },
+        { stage: "MOFU", "Content Assets": byStageAll.MOFU.length, "Page Views": sum(byStageAll.MOFU, "pageViews"), "Downloads": sum(byStageAll.MOFU, "downloads"), "Leads": sum(byStageAll.MOFU, "newContacts") },
+        { stage: "BOFU", "Content Assets": byStageAll.BOFU.length, "Page Views": sum(byStageAll.BOFU, "pageViews"), "Downloads": sum(byStageAll.BOFU, "downloads"), "Leads": sum(byStageAll.BOFU, "newContacts") },
       ];
     }
     return [
@@ -100,7 +104,7 @@ export default function FunnelDashboard() {
       { stage: "MOFU", "Engaged Sessions": sum(mofuBase, "engagedSessions"), "New Contacts": mofuNewContacts, "MQLs": mofuMqls },
       { stage: "BOFU", "SQOs": bofuSqos },
     ];
-  }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStage]);
+  }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStageAll]);
 
   const topChannels = useMemo(() => {
     const roll = new Map<string, { key: string; count: number; views: number; sqos: number }>();
@@ -224,13 +228,32 @@ export default function FunnelDashboard() {
 
           <AiInsightsBar page="performance" />
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+          {stageFilter && (
+            <div className="mt-4 flex items-center gap-2">
+              <Badge variant="secondary" className="rounded-xl text-xs">
+                Filtered to {stageFilter}
+              </Badge>
+              <button
+                onClick={() => setStageFilter(null)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                data-testid="btn-clear-stage-filter"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
+
+          <div className={`mt-4 grid gap-3 md:grid-cols-3 ${stageFilter ? "" : ""}`}>
+            <Card
+              className={`rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur cursor-pointer transition-all hover:shadow-md hover:border-primary/30 ${stageFilter === "TOFU" ? "ring-2 ring-primary/50 border-primary/40" : stageFilter && stageFilter !== "TOFU" ? "opacity-50" : ""}`}
+              onClick={() => setStageFilter(prev => prev === "TOFU" ? null : "TOFU")}
+              data-testid="card-stage-tofu"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs text-muted-foreground">TOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-tofu-hero">
-                    {formatCompact(uploadDiagnostics ? byStage.TOFU.length : tofuHero)}
+                    {formatCompact(uploadDiagnostics ? byStageAll.TOFU.length : tofuHero)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "New users / contacts"}
@@ -238,23 +261,27 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.TOFU.tone}`} data-testid="badge-tofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(byStage.TOFU.length, filtered.length))} of total`
+                    ? `${formatPct(pct(byStageAll.TOFU.length, dateFiltered.length))} of total`
                     : `${formatPct(tofuConv)} new-user rate`}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-tofu-notes">
                 {uploadDiagnostics
-                  ? `${byStage.TOFU.length} unique content IDs classified as Top-of-Funnel`
+                  ? `${byStageAll.TOFU.length} unique content IDs classified as Top-of-Funnel`
                   : `Hero metric uses ${tofuNewUsers ? "new users" : "new contacts"}. Denominator uses ${tofuEngaged ? "engaged sessions" : "sessions"}.`}
               </div>
             </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+            <Card
+              className={`rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur cursor-pointer transition-all hover:shadow-md hover:border-primary/30 ${stageFilter === "MOFU" ? "ring-2 ring-primary/50 border-primary/40" : stageFilter && stageFilter !== "MOFU" ? "opacity-50" : ""}`}
+              onClick={() => setStageFilter(prev => prev === "MOFU" ? null : "MOFU")}
+              data-testid="card-stage-mofu"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs text-muted-foreground">MOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-mofu-mqls">
-                    {formatCompact(uploadDiagnostics ? byStage.MOFU.length : mofuMqls)}
+                    {formatCompact(uploadDiagnostics ? byStageAll.MOFU.length : mofuMqls)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "MQLs"}
@@ -262,13 +289,13 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.MOFU.tone}`} data-testid="badge-mofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(byStage.MOFU.length, filtered.length))} of total`
+                    ? `${formatPct(pct(byStageAll.MOFU.length, dateFiltered.length))} of total`
                     : `${formatPct(mofuConv)} MQL rate`}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-mofu-notes">
                 {uploadDiagnostics
-                  ? `${byStage.MOFU.length} unique content IDs classified as Middle-of-Funnel`
+                  ? `${byStageAll.MOFU.length} unique content IDs classified as Middle-of-Funnel`
                   : <>
                       {avgMqlScore !== undefined
                         ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
@@ -278,12 +305,16 @@ export default function FunnelDashboard() {
               </div>
             </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
+            <Card
+              className={`rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur cursor-pointer transition-all hover:shadow-md hover:border-primary/30 ${stageFilter === "BOFU" ? "ring-2 ring-primary/50 border-primary/40" : stageFilter && stageFilter !== "BOFU" ? "opacity-50" : ""}`}
+              onClick={() => setStageFilter(prev => prev === "BOFU" ? null : "BOFU")}
+              data-testid="card-stage-bofu"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs text-muted-foreground">BOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-bofu-sqos">
-                    {formatCompact(uploadDiagnostics ? byStage.BOFU.length : bofuSqos)}
+                    {formatCompact(uploadDiagnostics ? byStageAll.BOFU.length : bofuSqos)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "SQOs"}
@@ -291,13 +322,13 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.BOFU.tone}`} data-testid="badge-bofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(byStage.BOFU.length, filtered.length))} of total`
+                    ? `${formatPct(pct(byStageAll.BOFU.length, dateFiltered.length))} of total`
                     : bofuQdcs ? `${formatCompact(bofuQdcs)} QDCs` : "QDC not tracked"}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-bofu-notes">
                 {uploadDiagnostics
-                  ? `${byStage.BOFU.length} unique content IDs classified as Bottom-of-Funnel`
+                  ? `${byStageAll.BOFU.length} unique content IDs classified as Bottom-of-Funnel`
                   : bofuQdcs ? `QDC \u2192 SQO: ${formatPct(pct(bofuSqos, bofuQdcs))}` : "QDC \u2192 SQO conversion is skipped (no QDC data)."}
               </div>
             </Card>
@@ -314,7 +345,7 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge variant="secondary" className="rounded-xl">
                   <TrendingUp className="mr-1.5 h-3 w-3" />
-                  {byStage.TOFU.length + byStage.MOFU.length + byStage.BOFU.length} classified
+                  {byStageAll.TOFU.length + byStageAll.MOFU.length + byStageAll.BOFU.length} classified
                 </Badge>
               </div>
               <div className="h-[260px]" data-testid="chart-funnel">
@@ -332,9 +363,9 @@ export default function FunnelDashboard() {
                       />
                       <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                       <Bar dataKey="Content Assets" fill="#00D657" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Page Views" fill="#00A65C" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Downloads" fill="#006362" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Leads" fill="#1DD6A4" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Page Views" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Downloads" fill="#67E8F9" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Leads" fill="#006362" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -379,6 +410,9 @@ export default function FunnelDashboard() {
                     </div>
                   ))}
                 </div>
+                <Link href="/analytics" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pt-2 border-t border-border/30" data-testid="link-view-all-channels">
+                  View all channels <ArrowRight className="h-3 w-3" />
+                </Link>
               </Card>
 
               <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-top-products-overview">
@@ -398,13 +432,16 @@ export default function FunnelDashboard() {
                     </div>
                   ))}
                 </div>
+                <Link href="/analytics" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pt-2 border-t border-border/30" data-testid="link-view-all-products">
+                  View all products <ArrowRight className="h-3 w-3" />
+                </Link>
               </Card>
             </div>
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <Link href="/analytics" data-testid="link-analytics-page-from-performance">
-              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
+              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
                     <BarChart3 className="h-5 w-5" />
@@ -421,7 +458,7 @@ export default function FunnelDashboard() {
             </Link>
 
             <Link href="/content-library" data-testid="link-content-library-page-from-performance">
-              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
+              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
                     <Library className="h-5 w-5" />
@@ -437,8 +474,25 @@ export default function FunnelDashboard() {
               </Card>
             </Link>
 
+            <Link href="/content-library" data-testid="link-content-comparison-from-performance">
+              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
+                    <ArrowLeftRight className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-[650]">Content Comparison</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      Compare 2–5 content pieces side-by-side with AI-powered resonance analysis
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
+                </div>
+              </Card>
+            </Link>
+
             <Link href="/reports" data-testid="link-my-reports-from-performance">
-              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer">
+              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
                     <LayoutDashboard className="h-5 w-5" />

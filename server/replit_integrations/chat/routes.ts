@@ -1218,31 +1218,76 @@ export function registerChatRoutes(app: Express): void {
     }
 
     if (page === "performance") {
+      const totalAssets = summary.dataset_info.total_rows;
+      const stages = summary.stage_summary;
+
+      if (summary.metric_availability.leads && totalAssets > 0) {
+        const leadStages = stages.filter(s => s.leads > 0);
+        const topLeadStage = leadStages.length > 0 ? leadStages.reduce((a, b) => b.leads > a.leads ? b : a) : null;
+        if (topLeadStage) {
+          const stagePct = totalAssets > 0 ? Math.round((topLeadStage.count / totalAssets) * 100) : 0;
+          const leadPct = summary.metric_totals.leads > 0 ? Math.round((topLeadStage.leads / summary.metric_totals.leads) * 100) : 0;
+          insights.push(`${topLeadStage.stage} generates ${leadPct}% of leads from ${stagePct}% of content`);
+        }
+      }
+
       if (summary.channel_mix.length > 1) {
+        const channelsSorted = [...summary.channel_mix].sort((a, b) => {
+          const aRatio = a.count > 0 ? a.sqos / a.count : 0;
+          const bRatio = b.count > 0 ? b.sqos / b.count : 0;
+          return bRatio - aRatio;
+        });
+        const bestRatio = channelsSorted[0];
+        if (bestRatio && bestRatio.sqos > 0) {
+          insights.push(`${bestRatio.channel} has the highest SQO-per-asset ratio (${(bestRatio.sqos / bestRatio.count).toFixed(1)} SQOs per asset)`);
+        }
         const topChannel = summary.channel_mix[0];
-        const secondChannel = summary.channel_mix[1];
-        insights.push(`${topChannel.channel} dominates with ${topChannel.count} assets vs ${secondChannel.channel} at ${secondChannel.count}`);
+        insights.push(`${topChannel.channel} leads with ${topChannel.count} assets and ${topChannel.pageviews.toLocaleString()} views`);
       }
 
       if (summary.metric_availability.sqos) {
         const totalSqos = summary.metric_totals.sqos;
-        const topSqoStage = summary.stage_summary.reduce((a, b) => (b.sqos > a.sqos ? b : a), summary.stage_summary[0]);
-        if (topSqoStage) {
-          insights.push(`${topSqoStage.stage} drives ${topSqoStage.sqos} of ${totalSqos} total SQOs (${totalSqos > 0 ? Math.round((topSqoStage.sqos / totalSqos) * 100) : 0}%)`);
+        const topSqoStage = stages.reduce((a, b) => (b.sqos > a.sqos ? b : a), stages[0]);
+        if (topSqoStage && totalSqos > 0) {
+          insights.push(`${topSqoStage.stage} drives ${Math.round((topSqoStage.sqos / totalSqos) * 100)}% of all SQOs (${topSqoStage.sqos} of ${totalSqos})`);
         }
       }
 
-      if (summary.metric_availability.pageviews) {
-        insights.push(`Total pageviews across all content: ${summary.metric_totals.pageviews.toLocaleString()}`);
-      }
+      if (summary.product_mix.length > 1) {
+        const topProduct = summary.product_mix[0];
+        const productPct = totalAssets > 0 ? Math.round((topProduct.count / totalAssets) * 100) : 0;
+        insights.push(`${topProduct.product} represents ${productPct}% of content with ${topProduct.sqos} SQOs and ${topProduct.pageviews.toLocaleString()} views`);
 
-      if (summary.metric_availability.leads) {
-        insights.push(`${summary.metric_totals.leads.toLocaleString()} total leads generated across the funnel`);
-      }
-
-      if (summary.product_mix.length > 2) {
         const withSqos = summary.product_mix.filter(p => p.sqos > 0);
-        insights.push(`${withSqos.length} of ${summary.product_mix.length} products are generating SQOs`);
+        const withoutSqos = summary.product_mix.filter(p => p.sqos === 0 && p.count >= 5);
+        if (withoutSqos.length > 0) {
+          insights.push(`${withoutSqos.length} product${withoutSqos.length > 1 ? "s" : ""} with 5+ assets ${withoutSqos.length > 1 ? "have" : "has"} zero SQOs — review content strategy for ${withoutSqos.slice(0, 2).map(p => p.product).join(", ")}`);
+        }
+        if (withSqos.length > 0 && summary.product_mix.length > 2) {
+          insights.push(`${withSqos.length} of ${summary.product_mix.length} products are converting to SQOs`);
+        }
+      }
+
+      if (summary.metric_availability.leads && summary.metric_availability.sqos) {
+        const convRate = summary.metric_totals.leads > 0 ? (summary.metric_totals.sqos / summary.metric_totals.leads * 100).toFixed(1) : "0";
+        insights.push(`Overall lead-to-SQO conversion rate: ${convRate}% across ${totalAssets} assets`);
+      }
+
+      if (stages.length >= 3) {
+        const sorted = [...stages].sort((a, b) => b.count - a.count);
+        const biggest = sorted[0];
+        const smallest = sorted.filter(s => s.stage !== "UNKNOWN" && s.count > 0).pop();
+        if (biggest && smallest && biggest.count > smallest.count * 3) {
+          insights.push(`Funnel imbalance: ${biggest.stage} has ${biggest.count} assets while ${smallest.stage} has only ${smallest.count} — consider rebalancing`);
+        }
+      }
+
+      if (summary.metric_availability.pageviews && summary.metric_availability.leads) {
+        const stagesWithConv = stages.filter(s => s.pageviews > 0 && s.leads > 0);
+        if (stagesWithConv.length > 0) {
+          const bestConv = stagesWithConv.reduce((a, b) => (b.leads / b.pageviews) > (a.leads / a.pageviews) ? b : a);
+          insights.push(`${bestConv.stage} has the best view-to-lead conversion at ${((bestConv.leads / bestConv.pageviews) * 100).toFixed(1)}%`);
+        }
       }
     }
 
