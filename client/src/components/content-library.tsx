@@ -995,7 +995,7 @@ function ContentCard({
           </div>
         )}
         <Card
-          className={`flex h-full flex-col rounded-2xl border p-4 backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
+          className={`flex h-full flex-col overflow-hidden rounded-2xl border p-4 backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
           style={{
             transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease",
             transform: hovered ? "translateY(-4px)" : "translateY(0)",
@@ -1075,12 +1075,13 @@ function ContentCard({
           )}
 
           {tags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1" data-testid="card-tags">
+            <div className="mt-2 flex flex-wrap gap-1 overflow-hidden" data-testid="card-tags">
               {tags.map((t, i) => (
                 <Badge
                   key={`${t}-${i}`}
                   variant="secondary"
-                  className="rounded-lg border bg-card/60 text-[10px]"
+                  className="max-w-full truncate rounded-lg border bg-card/60 text-[10px]"
+                  title={t}
                 >
                   {t}
                 </Badge>
