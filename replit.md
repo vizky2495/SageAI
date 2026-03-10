@@ -54,7 +54,7 @@ Organized into `client/`, `server/`, `shared/`, and `attached_assets/` directori
 -   **PostgreSQL**: Primary database.
 -   **Authentication System**: Custom email/password authentication with user/admin roles and session management.
 -   **Claude AI (Anthropic)**: Utilized for:
-    -   CIA Agent for data-grounded answers.
+    -   CIA Agent (Performance Analyst) for data-grounded answers. Uses analytics-brief tone: no emojis, no dramatic language, data-first insights, plain section headers, clean tables with observations below, "Summary" labels. 17 strict rules enforced.
     -   Campaign Planner for generating campaign strategies.
     -   Content Comparison for resonance analysis.
     -   Content Librarian for classification, comparison, and recommendations. Has full access to all uploaded content analysis (summaries, topics, CTAs, messaging themes, structure, keyword tags) via `buildContentLibraryContext()`. Capped at 50 assets with truncated summaries for prompt stability.
