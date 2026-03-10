@@ -1,7 +1,7 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import AiInsightsBar from "@/components/ai-insights-bar";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import {
@@ -12,6 +12,7 @@ import {
   ArrowRight,
   TrendingUp,
   LayoutDashboard,
+  CalendarDays,
 } from "lucide-react";
 import {
   Bar,
@@ -26,17 +27,36 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useFunnelData,
   sum,
   pct,
   formatCompact,
   formatPct,
   stageMeta,
+  filterRowsByDateRange,
+  dateRangeLabels,
   type StageKey,
+  type DateRangePreset,
 } from "@/hooks/use-funnel-data";
 
 export default function FunnelDashboard() {
-  const { rows, dataLoading, uploadDiagnostics, byStage } = useFunnelData();
+  const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
+  const [dateRange, setDateRange] = useState<DateRangePreset>("all");
+
+  const filtered = useMemo(() => filterRowsByDateRange(rows, dateRange), [rows, dateRange]);
+
+  const byStage = useMemo(() => {
+    const groups: Record<string, typeof filtered> = { TOFU: [], MOFU: [], BOFU: [], UNKNOWN: [] };
+    for (const r of filtered) groups[r.stage].push(r);
+    return groups;
+  }, [filtered]);
 
   const tofuBase = byStage.TOFU;
   const mofuBase = byStage.MOFU;
@@ -84,7 +104,7 @@ export default function FunnelDashboard() {
 
   const topChannels = useMemo(() => {
     const roll = new Map<string, { key: string; count: number; views: number; sqos: number }>();
-    for (const r of rows) {
+    for (const r of filtered) {
       const key = r.utmChannel || "(unattributed)";
       const cur = roll.get(key) || { key, count: 0, views: 0, sqos: 0 };
       cur.count += 1;
@@ -95,11 +115,11 @@ export default function FunnelDashboard() {
     return Array.from(roll.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [rows]);
+  }, [filtered]);
 
   const topProducts = useMemo(() => {
     const roll = new Map<string, { key: string; count: number; views: number; sqos: number }>();
-    for (const r of rows) {
+    for (const r of filtered) {
       const key = r.productFranchise || "(unattributed)";
       const cur = roll.get(key) || { key, count: 0, views: 0, sqos: 0 };
       cur.count += 1;
@@ -110,7 +130,7 @@ export default function FunnelDashboard() {
     return Array.from(roll.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [rows]);
+  }, [filtered]);
 
   if (dataLoading) {
     return (
@@ -165,8 +185,27 @@ export default function FunnelDashboard() {
                 </div>
               </div>
               {rows.length > 0 && (
-                <div className="text-xs text-muted-foreground" data-testid="text-asset-count">
-                  {rows.length.toLocaleString()} content assets loaded
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangePreset)}>
+                      <SelectTrigger className="h-8 w-[140px] rounded-xl text-xs" data-testid="select-date-range">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.entries(dateRangeLabels) as [DateRangePreset, string][]).map(([key, label]) => (
+                          <SelectItem key={key} value={key} data-testid={`option-date-range-${key}`}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="text-xs text-muted-foreground" data-testid="text-asset-count">
+                    {dateRange === "all"
+                      ? `${rows.length.toLocaleString()} content assets loaded`
+                      : `${filtered.length.toLocaleString()} of ${rows.length.toLocaleString()} assets`}
+                  </div>
                 </div>
               )}
             </div>
@@ -191,7 +230,7 @@ export default function FunnelDashboard() {
                 <div>
                   <div className="text-xs text-muted-foreground">TOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-tofu-hero">
-                    {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.TOFU ?? 0) : tofuHero)}
+                    {formatCompact(uploadDiagnostics ? byStage.TOFU.length : tofuHero)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "New users / contacts"}
@@ -199,13 +238,13 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.TOFU.tone}`} data-testid="badge-tofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.TOFU ?? 0, rows.length))} of total`
+                    ? `${formatPct(pct(byStage.TOFU.length, filtered.length))} of total`
                     : `${formatPct(tofuConv)} new-user rate`}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-tofu-notes">
                 {uploadDiagnostics
-                  ? `${uploadDiagnostics.stageBreakdown.TOFU ?? 0} unique content IDs classified as Top-of-Funnel`
+                  ? `${byStage.TOFU.length} unique content IDs classified as Top-of-Funnel`
                   : `Hero metric uses ${tofuNewUsers ? "new users" : "new contacts"}. Denominator uses ${tofuEngaged ? "engaged sessions" : "sessions"}.`}
               </div>
             </Card>
@@ -215,7 +254,7 @@ export default function FunnelDashboard() {
                 <div>
                   <div className="text-xs text-muted-foreground">MOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-mofu-mqls">
-                    {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.MOFU ?? 0) : mofuMqls)}
+                    {formatCompact(uploadDiagnostics ? byStage.MOFU.length : mofuMqls)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "MQLs"}
@@ -223,13 +262,13 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.MOFU.tone}`} data-testid="badge-mofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.MOFU ?? 0, rows.length))} of total`
+                    ? `${formatPct(pct(byStage.MOFU.length, filtered.length))} of total`
                     : `${formatPct(mofuConv)} MQL rate`}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-mofu-notes">
                 {uploadDiagnostics
-                  ? `${uploadDiagnostics.stageBreakdown.MOFU ?? 0} unique content IDs classified as Middle-of-Funnel`
+                  ? `${byStage.MOFU.length} unique content IDs classified as Middle-of-Funnel`
                   : <>
                       {avgMqlScore !== undefined
                         ? `Avg MQL lead score: ${avgMqlScore.toFixed(1)}`
@@ -244,7 +283,7 @@ export default function FunnelDashboard() {
                 <div>
                   <div className="text-xs text-muted-foreground">BOFU</div>
                   <div className="mt-1 text-2xl font-[650] tracking-tight" data-testid="text-bofu-sqos">
-                    {formatCompact(uploadDiagnostics ? (uploadDiagnostics.stageBreakdown.BOFU ?? 0) : bofuSqos)}
+                    {formatCompact(uploadDiagnostics ? byStage.BOFU.length : bofuSqos)}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {uploadDiagnostics ? "Content assets" : "SQOs"}
@@ -252,13 +291,13 @@ export default function FunnelDashboard() {
                 </div>
                 <Badge className={`border ${stageMeta.BOFU.tone}`} data-testid="badge-bofu">
                   {uploadDiagnostics
-                    ? `${formatPct(pct(uploadDiagnostics.stageBreakdown.BOFU ?? 0, rows.length))} of total`
+                    ? `${formatPct(pct(byStage.BOFU.length, filtered.length))} of total`
                     : bofuQdcs ? `${formatCompact(bofuQdcs)} QDCs` : "QDC not tracked"}
                 </Badge>
               </div>
               <div className="mt-3 text-xs text-muted-foreground" data-testid="text-bofu-notes">
                 {uploadDiagnostics
-                  ? `${uploadDiagnostics.stageBreakdown.BOFU ?? 0} unique content IDs classified as Bottom-of-Funnel`
+                  ? `${byStage.BOFU.length} unique content IDs classified as Bottom-of-Funnel`
                   : bofuQdcs ? `QDC \u2192 SQO: ${formatPct(pct(bofuSqos, bofuQdcs))}` : "QDC \u2192 SQO conversion is skipped (no QDC data)."}
               </div>
             </Card>

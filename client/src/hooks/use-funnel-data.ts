@@ -17,6 +17,8 @@ export type NormalizedRow = {
   contentType?: string;
   cta?: string;
   campaignName?: string;
+  createdAt?: string;
+  dateStamp?: string;
   engagedSessions?: number;
   sessions?: number;
   pageViews?: number;
@@ -44,6 +46,43 @@ export type TopContentRow = {
 };
 
 export type TopByStage = Record<StageKey, TopContentRow[]>;
+
+export type DateRangePreset = "7d" | "30d" | "quarter" | "ytd" | "all";
+
+export const dateRangeLabels: Record<DateRangePreset, string> = {
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  quarter: "Last 3 months",
+  ytd: "Year to date",
+  all: "All time",
+};
+
+export function getDateRangeCutoff(preset: DateRangePreset): Date | null {
+  if (preset === "all") return null;
+  const now = new Date();
+  switch (preset) {
+    case "7d":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    case "30d":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    case "quarter":
+      return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    case "ytd":
+      return new Date(now.getFullYear(), 0, 1);
+  }
+}
+
+export function filterRowsByDateRange(rows: NormalizedRow[], preset: DateRangePreset): NormalizedRow[] {
+  const cutoff = getDateRangeCutoff(preset);
+  if (!cutoff) return rows;
+  return rows.filter((r) => {
+    const dateStr = r.dateStamp || r.createdAt;
+    if (!dateStr) return true;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    return d >= cutoff;
+  });
+}
 
 export function sum(rows: NormalizedRow[], key: keyof NormalizedRow) {
   return rows.reduce(
@@ -106,6 +145,8 @@ export function useFunnelData() {
             contentType: a.typecampaignmember || undefined,
             cta: a.cta || undefined,
             campaignName: a.campaignName || undefined,
+            createdAt: a.createdAt || undefined,
+            dateStamp: a.dateStamp || undefined,
             engagedSessions: undefined,
             sessions: undefined,
             pageViews: a.pageviewsSum || 0,
