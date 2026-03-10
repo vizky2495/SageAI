@@ -84,6 +84,8 @@ interface WidgetConfig {
   secondaryMeasure?: Measure;
   stageFilter?: StageKey | "";
   size: WidgetSize;
+  colSpan?: number;
+  heightPx?: number;
 }
 
 interface ReportPage {
@@ -142,6 +144,25 @@ const SIZE_CLASSES: Record<WidgetSize, string> = {
   md: "col-span-1 lg:col-span-1",
   lg: "col-span-1 md:col-span-2",
 };
+
+const DEFAULT_WIDGET_HEIGHT = 280;
+const MIN_WIDGET_HEIGHT = 180;
+const MAX_WIDGET_HEIGHT = 700;
+const HEADER_HEIGHT = 44;
+
+function getEffectiveColSpan(w: WidgetConfig): number {
+  if (w.colSpan) return w.colSpan;
+  if (w.size === "lg") return 2;
+  return 1;
+}
+
+function getEffectiveHeight(w: WidgetConfig): number {
+  return w.heightPx || DEFAULT_WIDGET_HEIGHT;
+}
+
+function getContentHeight(w: WidgetConfig): number {
+  return getEffectiveHeight(w) - HEADER_HEIGHT;
+}
 
 const STORAGE_KEY = "cia_reports_v2";
 
@@ -310,7 +331,7 @@ function BarChartWidget({ rows, config }: { rows: NormalizedRow[]; config: Widge
   const data = useMemo(() => aggregateData(rows, config.dimension, config.measure, config.stageFilter).slice(0, 10), [rows, config]);
 
   return (
-    <div className="h-52" data-testid={`widget-bar-${config.id}`}>
+    <div style={{ height: getContentHeight(config) }} data-testid={`widget-bar-${config.id}`}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" />
@@ -330,7 +351,7 @@ function StackedBarWidget({ rows, config }: { rows: NormalizedRow[]; config: Wid
   const data = useMemo(() => aggregateStackedData(rows, config.dimension, config.measure), [rows, config]);
 
   return (
-    <div className="h-56" data-testid={`widget-stacked-${config.id}`}>
+    <div style={{ height: getContentHeight(config) }} data-testid={`widget-stacked-${config.id}`}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" />
@@ -359,8 +380,8 @@ function PieWidget({ rows, config }: { rows: NormalizedRow[]; config: WidgetConf
   const total = data.reduce((a, d) => a + d.value, 0);
 
   return (
-    <div className="flex items-center gap-4" data-testid={`widget-pie-${config.id}`}>
-      <div className="w-28 h-28 shrink-0">
+    <div className="flex items-center gap-4 h-full" data-testid={`widget-pie-${config.id}`}>
+      <div className="shrink-0" style={{ width: Math.min(140, getContentHeight(config) - 16), height: Math.min(140, getContentHeight(config) - 16) }}>
         <ResponsiveContainer width="100%" height="100%">
           <RPieChart>
             <Pie data={data} cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={3} dataKey="value" strokeWidth={0}>
@@ -370,7 +391,7 @@ function PieWidget({ rows, config }: { rows: NormalizedRow[]; config: WidgetConf
           </RPieChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex flex-col gap-1.5 flex-1 min-w-0 max-h-28 overflow-y-auto">
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0 overflow-y-auto" style={{ maxHeight: getContentHeight(config) - 16 }}>
         {data.map((d) => (
           <div key={d.name} className="flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -430,7 +451,7 @@ function TableWidget({ rows, config }: { rows: NormalizedRow[]; config: WidgetCo
   ];
 
   return (
-    <div className="overflow-x-auto max-h-64" data-testid={`widget-table-${config.id}`}>
+    <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: getContentHeight(config) }} data-testid={`widget-table-${config.id}`}>
       <table className="w-full text-xs">
         <thead className="sticky top-0 bg-card/90 backdrop-blur">
           <tr className="border-b border-border/30 text-muted-foreground/60">
@@ -501,7 +522,7 @@ function AreaChartWidget({ rows, config }: { rows: NormalizedRow[]; config: Widg
   }, [rows, config]);
 
   return (
-    <div className="h-48" data-testid={`widget-area-${config.id}`}>
+    <div style={{ height: getContentHeight(config) }} data-testid={`widget-area-${config.id}`}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
           <defs>
@@ -561,7 +582,7 @@ function HeatmapWidget({ rows, config }: { rows: NormalizedRow[]; config: Widget
   }
 
   return (
-    <div className="overflow-x-auto" data-testid={`widget-heatmap-${config.id}`}>
+    <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: getContentHeight(config) }} data-testid={`widget-heatmap-${config.id}`}>
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border/30">
@@ -862,36 +883,110 @@ function SortableWidget({
   config,
   rows,
   byStage,
+  gridRef,
   onRemove,
   onResize,
+  onSetSize,
   onDownload,
 }: {
   config: WidgetConfig;
   rows: NormalizedRow[];
   byStage: Record<string, NormalizedRow[]>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
   onRemove: (id: string) => void;
   onResize: (id: string) => void;
+  onSetSize: (id: string, colSpan: number, heightPx: number) => void;
   onDownload: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: config.id });
+  const [isResizing, setIsResizing] = useState(false);
+  const [previewSpan, setPreviewSpan] = useState<number | null>(null);
+  const [previewHeight, setPreviewHeight] = useState<number | null>(null);
+  const widgetRef = useRef<HTMLDivElement>(null);
+
+  const effectiveSpan = previewSpan ?? getEffectiveColSpan(config);
+  const effectiveHeight = previewHeight ?? getEffectiveHeight(config);
+
+  const spanClasses = effectiveSpan === 3
+    ? "col-span-1 md:col-span-2 lg:col-span-3"
+    : effectiveSpan === 2
+    ? "col-span-1 md:col-span-2"
+    : "col-span-1";
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isResizing ? undefined : transition,
+    height: effectiveHeight,
   };
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const widgetEl = widgetRef.current;
+    const gridEl = gridRef.current;
+    if (!widgetEl || !gridEl) return;
+
+    const rect = widgetEl.getBoundingClientRect();
+    const gridStyles = window.getComputedStyle(gridEl);
+    const cols = gridStyles.getPropertyValue("grid-template-columns").split(" ");
+    const colWidth = cols.length > 0 ? parseFloat(cols[0]) : rect.width;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+
+    setIsResizing(true);
+    document.body.style.cursor = "nwse-resize";
+    document.body.style.userSelect = "none";
+
+    let lastSpan = getEffectiveColSpan(config);
+    let lastHeight = getEffectiveHeight(config);
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      lastSpan = Math.max(1, Math.min(3, Math.round((startWidth + dx) / colWidth)));
+      lastHeight = Math.max(MIN_WIDGET_HEIGHT, Math.min(MAX_WIDGET_HEIGHT, Math.round((startHeight + dy) / 10) * 10));
+
+      setPreviewSpan(lastSpan);
+      setPreviewHeight(lastHeight);
+    };
+
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setIsResizing(false);
+      setPreviewSpan(null);
+      setPreviewHeight(null);
+      onSetSize(config.id, lastSpan, lastHeight);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [config, gridRef, onSetSize]);
 
   const meta = CHART_TYPE_META[config.chartType];
   const Icon = meta.icon;
 
+  const spanLabel = effectiveSpan === 1 ? "1 col" : effectiveSpan === 2 ? "2 cols" : "3 cols (full)";
+
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        (widgetRef as any).current = node;
+      }}
       style={style}
-      className={`${SIZE_CLASSES[config.size]} ${isDragging ? "opacity-40 z-50" : ""}`}
+      className={`relative group ${spanClasses} ${isDragging ? "opacity-40 z-50" : ""}`}
     >
       <motion.div
-        layout
-        className="h-full rounded-2xl border border-border/40 bg-card/60 backdrop-blur overflow-hidden group"
+        layout={!isResizing}
+        className={`h-full rounded-2xl border bg-card/60 backdrop-blur overflow-hidden ${isResizing ? "border-[#00D657]/50 ring-1 ring-[#00D657]/20" : "border-border/40"}`}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -914,7 +1009,10 @@ function SortableWidget({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className={`flex items-center gap-0.5 transition-opacity ${isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            {isResizing && (
+              <span className="text-[9px] text-[#00D657] font-medium mr-1">{spanLabel} / {effectiveHeight}px</span>
+            )}
             <button
               onClick={() => onDownload(config.id)}
               className="p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
@@ -926,10 +1024,10 @@ function SortableWidget({
             <button
               onClick={() => onResize(config.id)}
               className="p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
-              title={config.size === "lg" ? "Make smaller" : "Make wider"}
+              title={getEffectiveColSpan(config) >= 2 ? "Make smaller" : "Make wider"}
               data-testid={`resize-${config.id}`}
             >
-              {config.size === "lg" ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+              {getEffectiveColSpan(config) >= 2 ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
             </button>
             <button
               onClick={() => onRemove(config.id)}
@@ -941,10 +1039,21 @@ function SortableWidget({
             </button>
           </div>
         </div>
-        <div className="p-4">
-          <WidgetContent config={config} rows={rows} byStage={byStage} />
+        <div className="p-4 overflow-hidden" style={{ height: `calc(100% - ${HEADER_HEIGHT}px)` }}>
+          <WidgetContent config={{ ...config, heightPx: effectiveHeight }} rows={rows} byStage={byStage} />
         </div>
       </motion.div>
+
+      <div
+        onMouseDown={handleResizeStart}
+        className={`absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-10 transition-opacity ${isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        title="Drag to resize"
+        data-testid={`resize-handle-${config.id}`}
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" className="text-muted-foreground/40 hover:text-[#00D657] transition-colors">
+          <path d="M 14 20 L 20 14 M 10 20 L 20 10 M 6 20 L 20 6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -1091,13 +1200,35 @@ export default function ReportsDashboard() {
       p.id === activePage.id
         ? {
             ...p,
-            widgets: p.widgets.map((w) =>
-              w.id === widgetId ? { ...w, size: w.size === "lg" ? "md" : w.size === "md" ? "sm" : "lg" as WidgetSize } : w
-            ),
+            widgets: p.widgets.map((w) => {
+              if (w.id !== widgetId) return w;
+              const currentSpan = getEffectiveColSpan(w);
+              const nextSpan = currentSpan >= 3 ? 1 : currentSpan + 1;
+              const nextSize: WidgetSize = nextSpan >= 2 ? "lg" : "md";
+              return { ...w, size: nextSize, colSpan: nextSpan };
+            }),
           }
         : p
     ));
   }, [activePage]);
+
+  const setWidgetSize = useCallback((widgetId: string, colSpan: number, heightPx: number) => {
+    if (!activePage) return;
+    setPages((prev) => prev.map((p) =>
+      p.id === activePage.id
+        ? {
+            ...p,
+            widgets: p.widgets.map((w) => {
+              if (w.id !== widgetId) return w;
+              const newSize: WidgetSize = colSpan >= 2 ? "lg" : "md";
+              return { ...w, size: newSize, colSpan, heightPx };
+            }),
+          }
+        : p
+    ));
+  }, [activePage]);
+
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const downloadWidget = useCallback((widgetId: string) => {
     if (!activePage) return;
@@ -1258,7 +1389,7 @@ export default function ReportsDashboard() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={widgetIds} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{ gridAutoRows: "min-content" }}>
                 <AnimatePresence>
                   {activePage.widgets.map((w) => (
                     <SortableWidget
@@ -1266,8 +1397,10 @@ export default function ReportsDashboard() {
                       config={w}
                       rows={rows}
                       byStage={byStage}
+                      gridRef={gridRef}
                       onRemove={removeWidget}
                       onResize={resizeWidget}
+                      onSetSize={setWidgetSize}
                       onDownload={downloadWidget}
                     />
                   ))}
