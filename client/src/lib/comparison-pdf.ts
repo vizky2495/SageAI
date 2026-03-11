@@ -735,3 +735,280 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 
   doc.save(`Comparison_Report_${sA.replace(/[^a-zA-Z0-9]/g, "_")}_vs_${sB.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
 }
+
+interface MultiComparisonData {
+  contents: { name: string; summary: string; resonance: any | null; keyTopics: { topic: string; detail: string }[] | null; whatWorks: any[] | null; improvements: any[] | null; keywordTags: string[] }[];
+  crossAnalysis: { sharedThemes: string[]; differentiators: string[]; contentGaps: string[] };
+  rankings: { overall: { name: string; score: number; reason: string }[]; bestForLeads?: string; bestForEngagement?: string; bestForConversion?: string };
+  verdict: string;
+  suggestions: { text: string; source: string }[];
+  contentNames: string[];
+  contentMetrics: { name: string; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number; hasData: boolean } }[];
+  contentMetadata: { name: string; stage: string; product: string; type: string; country: string; industry: string }[];
+}
+
+export function generateMultiComparisonPdf(data: MultiComparisonData) {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  let y = 0;
+  let pageNum = 0;
+
+  function setColor(hex: string) { doc.setTextColor(...hexToRgb(hex)); }
+  function setFill(hex: string) { doc.setFillColor(...hexToRgb(hex)); }
+
+  function addFooter() {
+    pageNum++;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    setColor(SAGE.dimGreen);
+    doc.text("Sage", MARGIN, FOOTER_Y);
+    setColor(SAGE.green);
+    doc.text("CONFIDENTIAL: INTERNAL USE ONLY", PAGE_W / 2, FOOTER_Y, { align: "center" });
+    setColor(SAGE.dimGreen);
+    doc.text(`${pageNum}`, PAGE_W - MARGIN, FOOTER_Y, { align: "right" });
+    doc.setFontSize(5.5);
+    doc.text(`\u00A9 ${new Date().getFullYear()} The Sage Group plc, or its licensors. All rights reserved.`, PAGE_W / 2, FOOTER_Y + 3, { align: "center" });
+  }
+
+  function addBlackPage() {
+    setFill(SAGE.black);
+    doc.rect(0, 0, PAGE_W, PAGE_H, "F");
+  }
+
+  function newPage() {
+    if (pageNum > 0) doc.addPage();
+    addBlackPage();
+    addFooter();
+    y = MARGIN + 2;
+  }
+
+  function checkPage(needed: number) {
+    if (y + needed > FOOTER_Y - 8) newPage();
+  }
+
+  function sectionTitle(title: string) {
+    checkPage(14);
+    setColor(SAGE.white);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(title, MARGIN, y);
+    y += 3;
+    doc.setDrawColor(...hexToRgb(SAGE.green));
+    doc.setLineWidth(0.5);
+    doc.line(MARGIN, y, MARGIN + 50, y);
+    doc.setLineWidth(0.2);
+    y += 5;
+  }
+
+  function wrappedText(text: string, color: string, size: number, maxW: number, addGap = true) {
+    setColor(color);
+    doc.setFontSize(size);
+    doc.setFont("helvetica", "normal");
+    const lines = doc.splitTextToSize(text, maxW);
+    const lineH = size * 0.45;
+    for (const line of lines) {
+      checkPage(lineH + 2);
+      doc.text(line, MARGIN, y);
+      y += lineH;
+    }
+    if (addGap) y += 2;
+  }
+
+  function bulletPoint(text: string, color: string = SAGE.bodyText) {
+    const lineH = 3.5;
+    const lines = doc.splitTextToSize(text, CONTENT_W - 6);
+    checkPage(lineH * lines.length + 2);
+    setColor(SAGE.green);
+    doc.setFontSize(8);
+    doc.text("\u2022", MARGIN + 1, y);
+    setColor(color);
+    doc.setFontSize(7.5);
+    for (let i = 0; i < lines.length; i++) {
+      doc.text(lines[i], MARGIN + 5, y);
+      y += lineH;
+    }
+    y += 0.5;
+  }
+
+  function sourceTag(label: string) {
+    doc.setFontSize(6);
+    setColor(SAGE.dimGreen);
+    doc.setFont("helvetica", "italic");
+    doc.text(label, MARGIN, y);
+    doc.setFont("helvetica", "normal");
+    y += 3;
+  }
+
+  function drawTableRow(cells: string[], widths: number[], isHeader: boolean, isAlt: boolean) {
+    const rowH = 7;
+    checkPage(rowH + 2);
+    let x = MARGIN;
+    if (isHeader) {
+      setFill(SAGE.headerRow);
+      doc.rect(x, y - 4.5, widths.reduce((a, b) => a + b, 0), rowH, "F");
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      setColor(SAGE.headerText);
+    } else {
+      if (isAlt) {
+        setFill(SAGE.darkRow);
+        doc.rect(x, y - 4.5, widths.reduce((a, b) => a + b, 0), rowH, "F");
+      }
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      setColor(SAGE.bodyText);
+    }
+    cells.forEach((cell, i) => {
+      const align = i === 0 ? "left" : "right";
+      const tx = i === 0 ? x + 1 : x + widths[i] - 1;
+      doc.text(cell.substring(0, 30), tx, y, { align });
+      x += widths[i];
+    });
+    y += rowH - 2;
+  }
+
+  newPage();
+
+  setFill(SAGE.green);
+  doc.rect(0, 0, PAGE_W, 50, "F");
+  setColor(SAGE.black);
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text("Multi-Content Comparison", MARGIN, 22);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${data.contents.length} content pieces analyzed`, MARGIN, 30);
+  doc.setFontSize(9);
+  doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), MARGIN, 38);
+  y = 58;
+
+  sectionTitle("Rankings");
+  const rankWidths = [70, 20, CONTENT_W - 90];
+  drawTableRow(["Content", "Score", "Reason"], rankWidths, true, false);
+  data.rankings.overall.forEach((r, i) => {
+    drawTableRow([r.name.substring(0, 35), `${r.score}/100`, r.reason.substring(0, 50)], rankWidths, false, i % 2 === 0);
+  });
+  y += 3;
+
+  if (data.rankings.bestForLeads || data.rankings.bestForEngagement || data.rankings.bestForConversion) {
+    checkPage(15);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    setColor(SAGE.green);
+    if (data.rankings.bestForLeads) { doc.text(`Best for Leads: ${data.rankings.bestForLeads}`, MARGIN, y); y += 4; }
+    if (data.rankings.bestForEngagement) { doc.text(`Best for Engagement: ${data.rankings.bestForEngagement}`, MARGIN, y); y += 4; }
+    if (data.rankings.bestForConversion) { doc.text(`Best for Conversion: ${data.rankings.bestForConversion}`, MARGIN, y); y += 4; }
+    y += 2;
+  }
+
+  sectionTitle("AI Verdict");
+  wrappedText(data.verdict, SAGE.bodyText, 8, CONTENT_W);
+
+  if (data.suggestions.length > 0) {
+    sectionTitle("Recommendations");
+    data.suggestions.forEach((s) => {
+      bulletPoint(s.text, SAGE.bodyText);
+      sourceTag(`[${s.source}]`);
+    });
+  }
+
+  if (data.crossAnalysis.sharedThemes.length > 0) {
+    sectionTitle("Shared Themes");
+    data.crossAnalysis.sharedThemes.forEach((t) => bulletPoint(t));
+  }
+
+  if (data.crossAnalysis.differentiators.length > 0) {
+    sectionTitle("Differentiators");
+    data.crossAnalysis.differentiators.forEach((t) => bulletPoint(t));
+  }
+
+  if (data.crossAnalysis.contentGaps.length > 0) {
+    sectionTitle("Content Gaps");
+    data.crossAnalysis.contentGaps.forEach((t) => bulletPoint(t));
+  }
+
+  const metricsWithData = data.contentMetrics.filter((cm) => cm.metrics.hasData);
+  if (metricsWithData.length > 0) {
+    sectionTitle("Performance Comparison");
+    const colW = Math.min(30, (CONTENT_W - 40) / metricsWithData.length);
+    const metricWidths = [40, ...metricsWithData.map(() => colW)];
+    drawTableRow(["Metric", ...metricsWithData.map((cm) => cm.name.substring(0, 12))], metricWidths, true, false);
+    const metricKeys: { label: string; key: "pageviews" | "downloads" | "leads" | "sqos" | "avgTime" }[] = [
+      { label: "Views", key: "pageviews" },
+      { label: "Downloads", key: "downloads" },
+      { label: "Leads", key: "leads" },
+      { label: "SQOs", key: "sqos" },
+      { label: "Avg Time (s)", key: "avgTime" },
+    ];
+    metricKeys.forEach(({ label, key }, i) => {
+      drawTableRow([label, ...metricsWithData.map((cm) => cm.metrics[key].toLocaleString())], metricWidths, false, i % 2 === 0);
+    });
+  }
+
+  data.contents.forEach((content, idx) => {
+    newPage();
+    sectionTitle(`${idx + 1}. ${content.name}`);
+
+    if (content.summary) {
+      checkPage(10);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      setColor(SAGE.white);
+      doc.text("Summary", MARGIN, y);
+      y += 4;
+      wrappedText(content.summary, SAGE.bodyText, 7.5, CONTENT_W);
+    }
+
+    if (content.resonance) {
+      checkPage(12);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      setColor(SAGE.white);
+      doc.text("Content Resonance", MARGIN, y);
+      y += 4;
+      const dims = ["product", "stage", "country", "industry"] as const;
+      dims.forEach((dim) => {
+        const val = content.resonance?.[dim];
+        if (val) {
+          checkPage(8);
+          doc.setFontSize(7);
+          doc.setFont("helvetica", "bold");
+          setColor(SAGE.green);
+          doc.text(`${dim.charAt(0).toUpperCase() + dim.slice(1)}: ${val.rating}`, MARGIN + 2, y);
+          y += 3.5;
+          if (val.detail) {
+            doc.setFont("helvetica", "normal");
+            setColor(SAGE.muted);
+            const detLines = doc.splitTextToSize(val.detail, CONTENT_W - 8);
+            detLines.forEach((l: string) => { doc.text(l, MARGIN + 4, y); y += 3; });
+            y += 1;
+          }
+        }
+      });
+    }
+
+    if (content.keyTopics && content.keyTopics.length > 0) {
+      checkPage(10);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      setColor(SAGE.white);
+      doc.text("Key Topics", MARGIN, y);
+      y += 4;
+      content.keyTopics.forEach((t) => {
+        bulletPoint(`${t.topic}: ${t.detail}`);
+      });
+    }
+
+    if (content.keywordTags && content.keywordTags.length > 0) {
+      checkPage(10);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      setColor(SAGE.white);
+      doc.text("Keywords", MARGIN, y);
+      y += 4;
+      wrappedText(content.keywordTags.join(", "), SAGE.muted, 7, CONTENT_W);
+    }
+  });
+
+  const names = data.contentNames.map((n) => n.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 15)).join("_");
+  doc.save(`Multi_Comparison_${names}.pdf`);
+}

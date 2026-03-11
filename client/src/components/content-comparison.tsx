@@ -2245,9 +2245,11 @@ function SlotSourcePicker({
 function MultiComparisonResults({
   data,
   onPlanCampaign,
+  onDownloadPdf,
 }: {
   data: MultiComparisonResult;
   onPlanCampaign: () => void;
+  onDownloadPdf: () => void;
 }) {
   const contentCount = data.contents.length;
   const rankColors = ["text-amber-400", "text-gray-300", "text-amber-600", "text-muted-foreground", "text-muted-foreground"];
@@ -2488,7 +2490,11 @@ function MultiComparisonResults({
       )}
 
       <div className="flex gap-3" data-testid="multi-comparison-actions">
-        <Button onClick={onPlanCampaign} className="flex-1 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold" data-testid="btn-plan-campaign-multi">
+        <Button onClick={onDownloadPdf} className="flex-1 rounded-xl bg-[#00D657] hover:bg-[#00C04E] text-black font-semibold" data-testid="btn-download-multi-pdf">
+          <FileText className="h-4 w-4 mr-2" />
+          Download Comparison Report (PDF)
+        </Button>
+        <Button onClick={onPlanCampaign} variant="outline" className="flex-1 rounded-xl border-[#00D657]/50 text-[#00D657] hover:bg-[#00D657]/10 font-semibold" data-testid="btn-plan-campaign-multi">
           <TrendingUp className="h-4 w-4 mr-2" />
           Plan Campaign With Top Content &rarr;
         </Button>
@@ -2766,6 +2772,11 @@ export default function ContentComparison() {
     generateComparisonPdf(data);
   }
 
+  async function handleDownloadMultiPdf(data: MultiComparisonResult) {
+    const { generateMultiComparisonPdf } = await import("@/lib/comparison-pdf");
+    generateMultiComparisonPdf(data);
+  }
+
   return (
     <div className="space-y-4" data-testid="content-comparison-tool">
       <motion.div
@@ -3006,6 +3017,7 @@ export default function ContentComparison() {
         <MultiComparisonResults
           data={multiResult}
           onPlanCampaign={() => setShowCampaignModal(true)}
+          onDownloadPdf={() => handleDownloadMultiPdf(multiResult)}
         />
       )}
 
