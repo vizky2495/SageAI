@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, createContext, useContext } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import {
   Plus,
   Upload,
   Tag,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -56,6 +58,8 @@ interface ContentStatusEntry {
   dateStored: string | null;
   dateLastUpdated: string | null;
   uploadedByName: string | null;
+  contentFormat: string | null;
+  hasFile: boolean;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -797,6 +801,99 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function ContentFileThumbnail({ assetId, contentFormat, hasFile }: { assetId: string; contentFormat: string | null; hasFile: boolean }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect(); } },
+      { rootMargin: "100px" }
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || !hasFile) return;
+    let cancelled = false;
+    const token = localStorage.getItem("cia_token");
+    fetch(`/api/content/${encodeURIComponent(assetId)}/preview-file`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("fetch failed");
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        setBlobUrl(URL.createObjectURL(blob));
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) { setError(true); setLoading(false); }
+      });
+    return () => { cancelled = true; };
+  }, [isVisible, hasFile, assetId]);
+
+  useEffect(() => {
+    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
+  }, [blobUrl]);
+
+  if (!hasFile) return null;
+
+  const fmt = (contentFormat || "").toLowerCase();
+  const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(fmt);
+  const isPdf = fmt === "pdf";
+
+  return (
+    <div
+      ref={containerRef}
+      className="mx-3 mb-1.5 rounded-md overflow-hidden bg-muted/30 border border-border/40"
+      style={{ height: 80 }}
+      data-testid="card-file-thumbnail"
+    >
+      {!isVisible || loading ? (
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
+          <FileText className="h-4 w-4" />
+          <span className="text-[9px]">Preview unavailable</span>
+        </div>
+      ) : isImage && blobUrl ? (
+        <img
+          src={blobUrl}
+          alt="Content preview"
+          className="w-full h-full object-cover"
+        />
+      ) : isPdf && blobUrl ? (
+        <object
+          data={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+          type="application/pdf"
+          className="w-full h-full pointer-events-none"
+          style={{ overflow: "hidden" }}
+        >
+          <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
+            <FileText className="h-4 w-4" />
+            <span className="text-[9px]">PDF preview</span>
+          </div>
+        </object>
+      ) : (
+        <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
+          <FileText className="h-4 w-4" />
+          <span className="text-[9px] uppercase">{contentFormat || "File"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContentStatusIndicator({ status, assetId, assetName }: { status: string | undefined; assetId: string; assetName?: string }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -1152,6 +1249,14 @@ function ContentCard({
             >
               Campaign: {asset.utmCampaign}
             </div>
+          )}
+
+          {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && contentStatus.hasFile && (
+            <ContentFileThumbnail
+              assetId={asset.contentId}
+              contentFormat={contentStatus.contentFormat}
+              hasFile={contentStatus.hasFile}
+            />
           )}
 
           <div className="mx-3 my-1.5 h-px bg-border/50" />

@@ -59,7 +59,7 @@ export interface IStorage {
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
-  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }>>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }>>;
   getAllStoredContentAnalysis(): Promise<Array<{ assetId: string; fetchStatus: string; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; messagingThemes: string[] | null; contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null; contentFormat: string | null; sourceType: string; originalFilename: string | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: Date | null; dateLastUpdated: Date | null }>>;
   getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }>;
   updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
@@ -285,7 +285,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }>> {
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }>> {
     const rows = await db
       .select({
         assetId: contentStored.assetId,
@@ -298,9 +298,11 @@ export class DatabaseStorage implements IStorage {
         dateStored: contentStored.dateStored,
         dateLastUpdated: contentStored.dateLastUpdated,
         uploadedByName: contentStored.uploadedByName,
+        contentFormat: contentStored.contentFormat,
+        hasFile: sql<boolean>`${contentStored.storedFileBase64} IS NOT NULL`.as("has_file"),
       })
       .from(contentStored);
-    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }> = {};
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }> = {};
     for (const r of rows) {
       map[r.assetId] = {
         fetchStatus: r.fetchStatus,
@@ -312,6 +314,8 @@ export class DatabaseStorage implements IStorage {
         dateStored: r.dateStored ? r.dateStored.toISOString() : null,
         dateLastUpdated: r.dateLastUpdated ? r.dateLastUpdated.toISOString() : null,
         uploadedByName: r.uploadedByName,
+        contentFormat: r.contentFormat,
+        hasFile: !!r.hasFile,
       };
     }
     return map;

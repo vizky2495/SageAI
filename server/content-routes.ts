@@ -518,6 +518,33 @@ export function registerContentRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/content/:assetId/preview-file", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const content = await storage.getContentByAssetId(req.params.assetId);
+      if (!content || !content.storedFileBase64) {
+        return res.status(404).json({ message: "No file stored for this asset" });
+      }
+      const buffer = Buffer.from(content.storedFileBase64, "base64");
+      const format = (content.contentFormat || "").toLowerCase();
+      const mimeMap: Record<string, string> = {
+        pdf: "application/pdf",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+      };
+      const mime = mimeMap[format] || "application/octet-stream";
+      res.setHeader("Content-Type", mime);
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to serve preview" });
+    }
+  });
+
   app.delete("/api/content/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deleteContent(req.params.assetId);
