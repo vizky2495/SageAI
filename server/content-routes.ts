@@ -193,10 +193,35 @@ function extractHtmlContent(html: string): { text: string; headings: string[]; i
 }
 
 async function extractPdfText(buffer: Buffer): Promise<{ text: string; pageCount: number }> {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  return { text: result.text || "", pageCount: result.total || 1 };
+  try {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const uint8 = new Uint8Array(buffer);
+    const doc = await pdfjsLib.getDocument({ data: uint8, useSystemFonts: true }).promise;
+    const pageCount = doc.numPages;
+    const textParts: string[] = [];
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .filter((item: any) => "str" in item)
+        .map((item: any) => item.str)
+        .join(" ");
+      if (pageText.trim()) textParts.push(pageText);
+    }
+    await doc.destroy();
+    return { text: textParts.join("\n\n"), pageCount };
+  } catch (pdfjsError: any) {
+    console.warn("pdfjs-dist extraction failed, trying pdf-parse fallback:", pdfjsError.message);
+    try {
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      return { text: result.text || "", pageCount: result.total || 1 };
+    } catch (fallbackError: any) {
+      console.error("Both PDF extraction methods failed:", fallbackError.message);
+      throw fallbackError;
+    }
+  }
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
@@ -636,18 +661,37 @@ export function registerContentRoutes(app: Express): void {
     try {
       const { assetId } = req.params;
       const content = await storage.getContentByAssetId(assetId);
-      if (!content || !content.contentText || content.contentText.length < 50) {
+      if (!content) {
+        return res.status(404).json({ message: "Content not found" });
+      }
+
+      let textToAnalyze = content.contentText || "";
+
+      if (textToAnalyze.length < 50 && content.storedFileBase64 && content.contentFormat === "pdf") {
+        try {
+          const fileBuffer = Buffer.from(content.storedFileBase64, "base64");
+          const extracted = await extractPdfText(fileBuffer);
+          textToAnalyze = extracted.text || "";
+          if (textToAnalyze.trim().length < 10) {
+            return res.status(400).json({ message: "Could not extract readable text from this PDF. The file may be image-based or encrypted." });
+          }
+        } catch (extractErr: any) {
+          console.error("PDF re-extraction failed:", extractErr.message);
+          return res.status(400).json({ message: `PDF text extraction failed: ${extractErr.message}` });
+        }
+      } else if (textToAnalyze.length < 50) {
         return res.status(400).json({ message: "No readable content to re-analyze" });
       }
+
       const existingTags = normalizeKeywordTags(content.keywordTags as any);
-      const analysis = await analyzeContentWithAI(content.contentText, content.sourceUrl || undefined);
+      const analysis = await analyzeContentWithAI(textToAnalyze, content.sourceUrl || undefined);
       const newTags: StructuredKeywordTags = {
         ...analysis.keywordTags,
         user_added_tags: existingTags.user_added_tags,
       };
       await storage.upsertContent({
         assetId,
-        contentText: content.contentText,
+        contentText: textToAnalyze,
         contentSummary: analysis.summary,
         extractedTopics: analysis.topics,
         extractedCta: analysis.cta,
