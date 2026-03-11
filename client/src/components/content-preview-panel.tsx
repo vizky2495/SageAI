@@ -374,7 +374,10 @@ export default function ContentPreviewPanel({
                         a.href = url;
                         const disposition = res.headers.get("Content-Disposition");
                         const match = disposition?.match(/filename="(.+?)"/);
-                        a.download = match?.[1] || `${asset.contentId}.pdf`;
+                        const originalName = match?.[1] || "file";
+                        const ext = originalName.includes(".") ? originalName.substring(originalName.lastIndexOf(".")) : ".pdf";
+                        const baseName = originalName.includes(".") ? originalName.substring(0, originalName.lastIndexOf(".")) : originalName;
+                        a.download = `${asset.contentId}_${baseName}${ext}`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
