@@ -364,7 +364,25 @@ export default function ContentPreviewPanel({
                     variant="outline"
                     size="sm"
                     className="gap-1.5"
-                    onClick={() => window.open(`/api/content/${encodeURIComponent(asset.contentId)}/download`, "_blank")}
+                    onClick={async () => {
+                      try {
+                        const res = await authFetch(`/api/content/${encodeURIComponent(asset.contentId)}/download`);
+                        if (!res.ok) throw new Error("Download failed");
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        const disposition = res.headers.get("Content-Disposition");
+                        const match = disposition?.match(/filename="(.+?)"/);
+                        a.download = match?.[1] || `${asset.contentId}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      } catch (err) {
+                        console.error("Download error:", err);
+                      }
+                    }}
                     data-testid="button-download-original"
                   >
                     <Download className="h-3.5 w-3.5" />
