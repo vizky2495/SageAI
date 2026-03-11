@@ -400,9 +400,10 @@ Benchmarks: ${benchmarkSummary}`
 
       try {
         const { PDFParse } = await import("pdf-parse");
-        const result = await PDFParse(buffer, { max: MAX_PDF_PAGES });
+        const parser = new PDFParse({ data: buffer });
+        const result = await parser.getText();
         text = (result.text || "").trim();
-        pageCount = result.numpages || 0;
+        pageCount = result.total || 0;
       } catch (parseErr: any) {
         console.error("PDF extraction error:", parseErr);
         return res.status(422).json({

@@ -194,8 +194,9 @@ function extractHtmlContent(html: string): { text: string; headings: string[]; i
 
 async function extractPdfText(buffer: Buffer): Promise<{ text: string; pageCount: number }> {
   const { PDFParse } = await import("pdf-parse");
-  const result = await PDFParse(buffer, { max: 20 });
-  return { text: result.text || "", pageCount: result.numpages || 1 };
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  return { text: result.text || "", pageCount: result.total || 1 };
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
