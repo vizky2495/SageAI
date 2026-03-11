@@ -399,8 +399,8 @@ Benchmarks: ${benchmarkSummary}`
       let extractionMethod = "pdf-parse";
 
       try {
-        const pdfParse = (await import("pdf-parse")).default;
-        const result = await pdfParse(buffer, { max: MAX_PDF_PAGES });
+        const { PDFParse } = await import("pdf-parse");
+        const result = await PDFParse(buffer, { max: MAX_PDF_PAGES });
         text = (result.text || "").trim();
         pageCount = result.numpages || 0;
       } catch (parseErr: any) {
