@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,102 @@ import {
   Pencil,
 } from "lucide-react";
 import type { AssetAgg } from "@shared/schema";
+
+function ContentFilePreview({ assetId, contentFormat, hasFile }: { assetId: string; contentFormat: string | null; hasFile: boolean }) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!hasFile) return;
+    let cancelled = false;
+    const token = localStorage.getItem("cia_token");
+    const fmt = (contentFormat || "").toLowerCase();
+    const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(fmt);
+    const isPdf = fmt === "pdf";
+
+    fetch(`/api/content/${encodeURIComponent(assetId)}/preview-file`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("fetch failed");
+        return res.arrayBuffer();
+      })
+      .then(async (buffer) => {
+        if (cancelled) return;
+        if (isImage) {
+          const blob = new Blob([buffer], { type: `image/${fmt === "svg" ? "svg+xml" : fmt}` });
+          setThumbnailUrl(URL.createObjectURL(blob));
+          setLoading(false);
+        } else if (isPdf) {
+          try {
+            const pdfjsLib = await import("pdfjs-dist");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+            const page = await pdf.getPage(1);
+            const scale = 400 / page.getViewport({ scale: 1 }).width;
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d")!;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            setThumbnailUrl(canvas.toDataURL("image/png"));
+            setLoading(false);
+          } catch {
+            if (!cancelled) { setError(true); setLoading(false); }
+          }
+        } else {
+          setError(true);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) { setError(true); setLoading(false); }
+      });
+    return () => { cancelled = true; };
+  }, [hasFile, assetId, contentFormat]);
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailUrl && thumbnailUrl.startsWith("blob:")) URL.revokeObjectURL(thumbnailUrl);
+    };
+  }, [thumbnailUrl]);
+
+  if (!hasFile) return null;
+
+  return (
+    <section>
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+        <Eye className="h-3.5 w-3.5" />
+        Document Preview
+      </div>
+      <div
+        className="rounded-xl overflow-hidden border border-border/50 bg-white"
+        style={{ maxHeight: 300 }}
+        data-testid="panel-file-preview"
+      >
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+          </div>
+        ) : error || !thumbnailUrl ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground/50">
+            <FileText className="h-5 w-5" />
+            <span className="text-xs">Preview unavailable</span>
+          </div>
+        ) : (
+          <img
+            src={thumbnailUrl}
+            alt="Document preview"
+            className="w-full object-contain object-top"
+            style={{ maxHeight: 300 }}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
 
 function normalizeKeywordTags(raw: StructuredKeywordTags | string[] | null | undefined): StructuredKeywordTags {
   if (!raw) return { topic_tags: [], audience_tags: [], intent_tags: [], user_added_tags: [] };
@@ -264,6 +360,14 @@ export default function ContentPreviewPanel({
                     )}
                   </div>
                 </div>
+              )}
+
+              {content.hasFile && (
+                <ContentFilePreview
+                  assetId={asset.contentId}
+                  contentFormat={content.contentFormat}
+                  hasFile={content.hasFile}
+                />
               )}
 
               <UploadNewVersion onFileSelect={handleFileSelect} />

@@ -1261,14 +1261,6 @@ function ContentCard({
             </div>
           )}
 
-          {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && contentStatus.hasFile && (
-            <ContentFileThumbnail
-              assetId={asset.contentId}
-              contentFormat={contentStatus.contentFormat}
-              hasFile={contentStatus.hasFile}
-            />
-          )}
-
           <div className="mx-3 my-1.5 h-px bg-border/50" />
 
           <div className="px-3 pb-2" data-testid="card-metrics">
