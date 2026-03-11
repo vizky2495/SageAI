@@ -802,7 +802,7 @@ function formatFileSize(bytes: number) {
 }
 
 function ContentFileThumbnail({ assetId, contentFormat, hasFile }: { assetId: string; contentFormat: string | null; hasFile: boolean }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -822,33 +822,59 @@ function ContentFileThumbnail({ assetId, contentFormat, hasFile }: { assetId: st
     if (!isVisible || !hasFile) return;
     let cancelled = false;
     const token = localStorage.getItem("cia_token");
+    const fmt = (contentFormat || "").toLowerCase();
+    const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(fmt);
+    const isPdf = fmt === "pdf";
+
     fetch(`/api/content/${encodeURIComponent(assetId)}/preview-file`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((res) => {
         if (!res.ok) throw new Error("fetch failed");
-        return res.blob();
+        return res.arrayBuffer();
       })
-      .then((blob) => {
+      .then(async (buffer) => {
         if (cancelled) return;
-        setBlobUrl(URL.createObjectURL(blob));
-        setLoading(false);
+        if (isImage) {
+          const blob = new Blob([buffer], { type: `image/${fmt === "svg" ? "svg+xml" : fmt}` });
+          setThumbnailUrl(URL.createObjectURL(blob));
+          setLoading(false);
+        } else if (isPdf) {
+          try {
+            const pdfjsLib = await import("pdfjs-dist");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+            const page = await pdf.getPage(1);
+            const scale = 200 / page.getViewport({ scale: 1 }).width;
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d")!;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            setThumbnailUrl(canvas.toDataURL("image/png"));
+            setLoading(false);
+          } catch {
+            if (!cancelled) { setError(true); setLoading(false); }
+          }
+        } else {
+          setError(true);
+          setLoading(false);
+        }
       })
       .catch(() => {
         if (!cancelled) { setError(true); setLoading(false); }
       });
     return () => { cancelled = true; };
-  }, [isVisible, hasFile, assetId]);
+  }, [isVisible, hasFile, assetId, contentFormat]);
 
   useEffect(() => {
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
-  }, [blobUrl]);
+    return () => {
+      if (thumbnailUrl && thumbnailUrl.startsWith("blob:")) URL.revokeObjectURL(thumbnailUrl);
+    };
+  }, [thumbnailUrl]);
 
   if (!hasFile) return null;
-
-  const fmt = (contentFormat || "").toLowerCase();
-  const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(fmt);
-  const isPdf = fmt === "pdf";
 
   return (
     <div
@@ -861,34 +887,18 @@ function ContentFileThumbnail({ assetId, contentFormat, hasFile }: { assetId: st
         <div className="flex items-center justify-center h-full">
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
         </div>
-      ) : error ? (
+      ) : error || !thumbnailUrl ? (
         <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
           <FileText className="h-4 w-4" />
           <span className="text-[9px]">Preview unavailable</span>
         </div>
-      ) : isImage && blobUrl ? (
-        <img
-          src={blobUrl}
-          alt="Content preview"
-          className="w-full h-full object-cover"
-        />
-      ) : isPdf && blobUrl ? (
-        <object
-          data={`${blobUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-          type="application/pdf"
-          className="w-full h-full pointer-events-none"
-          style={{ overflow: "hidden" }}
-        >
-          <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
-            <FileText className="h-4 w-4" />
-            <span className="text-[9px]">PDF preview</span>
-          </div>
-        </object>
       ) : (
-        <div className="flex items-center justify-center h-full gap-1.5 text-muted-foreground/50">
-          <FileText className="h-4 w-4" />
-          <span className="text-[9px] uppercase">{contentFormat || "File"}</span>
-        </div>
+        <img
+          src={thumbnailUrl}
+          alt="Content preview"
+          className="w-full h-full object-contain object-top"
+          style={{ background: "white" }}
+        />
       )}
     </div>
   );
