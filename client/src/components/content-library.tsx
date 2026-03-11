@@ -1177,7 +1177,7 @@ function ContentCard({
             </div>
           )}
 
-          {contentStatus && contentStatus.fetchStatus === "success" && contentStatus.contentSummary && (
+          {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && contentStatus.contentSummary && contentStatus.contentSummary !== "No text content available for analysis" && (
             <div className="px-3 pb-2 space-y-1" data-testid="card-content-preview">
               <div className="text-[10px] text-muted-foreground leading-snug line-clamp-2" data-testid="card-content-summary">
                 {contentStatus.contentSummary}
