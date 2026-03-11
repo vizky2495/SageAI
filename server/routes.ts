@@ -1551,6 +1551,65 @@ Return ONLY valid JSON matching this schema:
     }
   });
 
+  app.get("/api/comparison-history", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetId, performedBy, limit, offset } = req.query as { assetId?: string; performedBy?: string; limit?: string; offset?: string };
+      const result = await storage.getComparisonHistory({
+        assetId,
+        performedBy,
+        limit: limit ? parseInt(limit) : 50,
+        offset: offset ? parseInt(offset) : 0,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch comparison history" });
+    }
+  });
+
+  app.get("/api/comparison-history/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const entry = await storage.getComparisonHistoryById(id);
+      if (!entry) return res.status(404).json({ message: "Comparison not found" });
+      res.json(entry);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch comparison" });
+    }
+  });
+
+  app.post("/api/comparison-history", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const entry = await storage.createComparisonHistory(req.body);
+      res.json(entry);
+    } catch (err: any) {
+      console.error("Failed to save comparison:", err);
+      res.status(500).json({ message: "Failed to save comparison" });
+    }
+  });
+
+  app.patch("/api/comparison-history/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateComparisonHistory(id, req.body);
+      if (!updated) return res.status(404).json({ message: "Comparison not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update comparison" });
+    }
+  });
+
+  app.get("/api/comparison-counts", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { assetIds } = req.query as { assetIds?: string };
+      if (!assetIds) return res.json({});
+      const ids = assetIds.split(",").filter(Boolean);
+      const counts = await storage.getComparisonCountsForAssets(ids);
+      res.json(counts);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch comparison counts" });
+    }
+  });
+
   app.post("/api/assets/upload-excel", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { base64, filename } = req.body as { base64: string; filename: string };
@@ -2001,6 +2060,10 @@ Respond with ONLY valid JSON in this exact format:
         description: (description || "").trim(),
       });
 
+      const uploadUserId = (req as any).userId;
+      const uploadUser = uploadUserId ? await storage.getUserById(uploadUserId) : null;
+      const uploadUserName = uploadUser?.displayName || "Unknown";
+
       if (contentText && contentText.length > 20) {
         try {
           const analysis = await analyzeContentWithAI(contentText, undefined);
@@ -2018,7 +2081,9 @@ Respond with ONLY valid JSON in this exact format:
             messagingThemes: analysis.messagingThemes,
             keywordTags: analysis.keywordTags,
             dateStored: new Date(),
-            storedBy: (req as any).userId || "user",
+            storedBy: uploadUserId || "user",
+            uploadedByUserId: uploadUserId,
+            uploadedByName: uploadUserName,
           });
         } catch (storeErr) {
           console.error("Failed to store content text for uploaded asset:", storeErr);
@@ -2034,7 +2099,9 @@ Respond with ONLY valid JSON in this exact format:
               fetchStatus: "success",
               contentStructure: { wordCount: wordCount || 0, sectionCount: 1, pageCount: pageCount || 0, headings: [] },
               dateStored: new Date(),
-              storedBy: (req as any).userId || "user",
+              storedBy: uploadUserId || "user",
+              uploadedByUserId: uploadUserId,
+              uploadedByName: uploadUserName,
             });
           } catch (fallbackErr) {
             console.error("Fallback content storage also failed:", fallbackErr);

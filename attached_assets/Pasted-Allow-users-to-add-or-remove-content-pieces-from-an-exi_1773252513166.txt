@@ -1,0 +1,91 @@
+Allow users to add or remove content pieces from an existing comparison without starting over. The comparison should be flexible — users can build it up or trim it down as they explore.
+
+ADD CONTENT TO AN EXISTING COMPARISON
+When a comparison is already showing results (2-5 content pieces compared), the user should be able to add more content without losing the current analysis:
+"Add content" button:
+
+Show a "+ Add content" button in the top section where the selected content pieces are displayed
+Positioned after the last content card in the row
+Clicking it opens the content selector (same options as initial selection): search library, upload new file, or enter manually
+When a new piece is selected:
+
+Add it to the comparison set
+Re-run the AI analysis with all content pieces (existing + new)
+Show loading state: "Re-analyzing with [X] content pieces..."
+Update all sections: rankings, resonance, topics, shared/different, verdict
+The previously generated analysis is replaced with the new comprehensive analysis
+
+
+Maximum 5 content pieces in a single comparison (as the UI already supports)
+If already at 5, the "+ Add" button is disabled with tooltip: "Maximum 5 content pieces per comparison"
+
+
+REMOVE CONTENT FROM AN EXISTING COMPARISON
+Each content card in the comparison header should have a remove option:
+"X" button on each content card:
+
+Small X button in the top-right corner of each content card (this may already exist based on the UI)
+Clicking it shows a brief confirmation: "Remove [content name] from this comparison?"
+On confirm:
+
+Remove that content piece from the comparison set
+If 2 or more pieces remain: re-run the AI analysis with the remaining pieces, update all sections
+If only 1 piece remains: show a message "Add at least one more content piece to compare" and keep the single piece selected — don't clear the entire comparison
+If 0 pieces remain: reset to the empty comparison selector (same as "Start Over")
+
+
+The re-analysis should be automatic after removal — the user shouldn't have to click "Compare" again
+
+
+SWAP CONTENT IN AN EXISTING COMPARISON
+Allow replacing one content piece with another without removing and re-adding:
+
+On each content card, add a small "Replace" or swap icon button (beside the X)
+Clicking it opens the content selector
+When a new piece is selected, it replaces the current one in the same position
+Re-runs analysis with the updated set
+This is faster than remove + add when the user wants to try a different asset in the same slot
+
+
+HOW RE-ANALYSIS WORKS
+When the comparison set changes (add, remove, or swap):
+
+Show a loading state over the results area: "Updating comparison with [X] content pieces..."
+Keep the current results visible but dimmed while the new analysis generates — this lets the user see what's changing
+When new results arrive, smoothly replace the old results
+The rankings, scores, verdicts, and suggestions all update to reflect the new set
+Duplicate detection runs again — if a newly added piece is identical to an existing one, flag it immediately
+Save the updated comparison to comparison_history as a new entry (don't overwrite the previous version — keep both so the user can see how the comparison evolved)
+
+
+UI LAYOUT FOR ADD/REMOVE/SWAP
+The content cards at the top of the comparison should be interactive:
+┌─────────────────────────────────────────────────────────────────────┐
+│  Content Comparison                                    Start Over  │
+│  Add 2-5 content pieces                                            │
+│                                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────┐ │
+│  │ Buyer's  ↻✕│  │ Revenue  ↻✕│  │ Revenue  ↻✕│  │ eBook UK ↻✕│  │  +  │ │
+│  │ Guide    │  │ Recog.   │  │ Recog.#2 │  │          │  │ Add │ │
+│  │ TOFU     │  │ MOFU     │  │ MOFU     │  │ TOFU     │  └─────┘ │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘           │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+↻ = swap/replace button
+✕ = remove button
++ Add = add another content piece
+
+Each card has ↻ (swap) and ✕ (remove) icons in the top-right corner
+Icons are small and muted by default, become visible on card hover
+The "+ Add" card is always shown after the last content card (unless at 5 maximum)
+The "+ Add" card is styled as a dashed border placeholder card with a green "+" icon
+
+
+EDGE CASES
+
+Adding content that's already in the comparison: Show a warning: "[Content name] is already in this comparison." Don't add duplicates of the same asset_id.
+Removing the highest-ranked content: Rankings recalculate. The #2 becomes #1. All scores and verdicts update.
+Adding content that hasn't been uploaded (no stored content): Allow it — it participates in the comparison with engagement data only. Show the same "content not uploaded" indicator. The resonance and topic sections note which pieces could not be fully analyzed.
+Network or AI failure during re-analysis: Keep the previous results visible and show an error: "Could not update comparison. [Retry]". Don't lose the existing analysis.
+User adds and removes multiple times rapidly: Debounce the re-analysis — wait 2 seconds after the last add/remove action before triggering the AI call. This prevents unnecessary API calls if the user is adjusting multiple pieces quickly.

@@ -1,0 +1,123 @@
+Fix two important issues: content uploads must be shared across all users (single source of truth), and comparison history must be saved permanently so users can go back and review past comparisons and reports.
+
+FIX 1: SHARED CONTENT LIBRARY — SINGLE SOURCE OF TRUTH FOR ALL USERS
+Currently uploaded content may only be visible to the user who uploaded it. The Content Library must be the same for everyone — when one user uploads content for an asset, every user should see it.
+Rules:
+
+The content_stored table is a shared, global table — not per-user
+When User A uploads a PDF for asset "ACG_17Q3_C4L_CA_E", every other user who views that asset in the library sees the green checkmark, the summary, the tags, and the upload date
+When User B opens the content preview for that same asset, they see the same uploaded content, the same AI analysis, and the same tags that User A's upload generated
+The upload date should show who uploaded it: "Uploaded: Mar 6, 2026 by [username]" — this creates accountability and helps teams know who enriched which content
+If User B wants to replace the content (upload a newer version), they can — but it replaces it for everyone, not just for themselves. Show a confirmation: "This will replace the current content uploaded by [User A] on [date]. All users will see the new version. Continue?"
+The engagement data (from admin Excel) is already shared — the content storage must follow the same pattern
+File storage path remains: /data/content_files/{asset_id}/ — one folder per asset, shared across all users
+All AI analysis (summaries, tags, resonance assessments) generated from uploaded content is shared
+Search results, tag filters, and content status indicators (green/gray dots) reflect the shared state — if content is uploaded, all users see it as uploaded
+
+What is NOT shared (per-user):
+
+Chat conversation history — each user has their own chat threads
+Comparison session state (the current active comparison in progress) — per user's browser session
+User preferences and settings
+
+What IS shared (global):
+
+Uploaded content files and AI analysis
+Content summaries, tags, and keyword tags
+Upload dates and uploader identity
+Comparison reports that have been saved/exported (see Fix 2)
+Campaign plans that have been completed
+
+
+FIX 2: COMPARISON HISTORY — SAVE AND ACCESS PAST COMPARISONS
+Every completed comparison should be saved permanently so any user can go back and review it. This is not just browser session state — it's a permanent record.
+Create a new table: comparison_history
+comparison_history:
+  - comparison_id (auto-generated unique ID)
+  - baseline_asset_id (Content A / Baseline)
+  - baseline_name (short readable name)
+  - challenger_asset_id (Content B / Challenger)
+  - challenger_name (short readable name)
+  - comparison_date (timestamp)
+  - performed_by (username of who ran the comparison)
+  - comparison_results (JSON — full AI analysis results: 
+      overview, tags, resonance, topics, shared/different, 
+      what works, improvements, verdict, suggestions)
+  - pdf_file_path (path to saved PDF report if generated)
+  - campaign_plan_id (link to campaign plan if one was 
+      created from this comparison, null otherwise)
+  - status ("completed" | "in_progress")
+When to save:
+
+Automatically save when a comparison completes (AI analysis finishes and results display on screen)
+No explicit "save" action needed from the user — every completed comparison is automatically recorded
+If the user downloads the PDF, save the PDF file path to the record
+If the user clicks "Plan Campaign With This Content," link the campaign plan ID to the record
+
+Comparison history UI:
+Add a "Comparison History" section to the Content Comparison tool, visible when no active comparison is loaded:
+┌──────────────────────────────────────────────────────┐
+│  Comparison History                                   │
+│                                                       │
+│  Human Firm Guide vs Human Firm Case Study            │
+│  Mar 6, 2026 · by [username] · DUPLICATE DETECTED     │
+│  [View Report] [Download PDF] [Open in Planner]       │
+│                                                       │
+│  Freedom Accounting vs Mining Brochure                 │
+│  Mar 6, 2026 · by [username]                          │
+│  [View Report] [Download PDF]                         │
+│                                                       │
+│  Human Firm EN vs Whitepaper Every Visit Matters       │
+│  Mar 6, 2026 · by [username]                          │
+│  [View Report] [Download PDF] [Campaign Plan ↗]       │
+│                                                       │
+└──────────────────────────────────────────────────────┘
+Each history entry shows:
+
+Short readable names of both content pieces (not "Content A vs Content B")
+Date and who performed the comparison
+Key finding flag if applicable: "DUPLICATE DETECTED" in amber, or "Winner: [name]" in green
+Action buttons:
+
+"View Report" — opens the full comparison results on screen (loaded from saved comparison_results JSON)
+"Download PDF" — downloads the saved PDF if it exists, or generates one from the saved results
+"Open in Planner" — if a campaign plan was created from this comparison, link to it
+"Re-run" — runs the comparison again with fresh data (useful if content was updated since the original comparison)
+
+
+
+This history is shared across all users:
+
+All users can see all comparisons performed by anyone on the team
+This prevents duplicate work — if User A already compared two assets, User B can see the results without re-running
+Show "by [username]" so users know who performed each comparison
+
+Filtering and search in history:
+
+Search by content name or asset ID
+Filter by date range
+Filter by performer (username)
+Sort by most recent (default)
+Show total count: "23 comparisons performed"
+
+Also accessible from:
+
+Content Library cards: if an asset has been compared before, show a small indicator on the card: "Compared 3 times" — clicking it shows the comparison history filtered to that asset
+Chat: user can ask "Show me past comparisons for the Human Firm Guide" and the Librarian pulls from comparison_history
+Campaign Planner: when selecting content for a campaign, show if the content has been compared and what the verdict was: "This content was compared against 2 other assets. Latest verdict: recommended for TOFU campaigns."
+
+
+CONNECT COMPARISON HISTORY TO THE CHAT LIBRARIAN:
+The Librarian should be able to access comparison_history:
+
+"Show me all comparisons we've done this month" → lists from history
+"What was the verdict when we compared the Human Firm Guide against the Mining Brochure?" → pulls the saved verdict
+"Has anyone compared Content X before?" → searches history
+"Show me comparisons where duplicates were found" → filters by duplicate flag
+
+
+RE-RUNNING VS VIEWING SAVED COMPARISONS
+Important distinction:
+
+"View Report" loads the SAVED results from the database — fast, no AI call needed. Shows exactly what was generated at the time of the comparison. The data may be outdated if content or engagement data has changed since then. Show a note: "This comparison was performed on [date]. Content or performance data may have changed since then. [Re-run comparison] to get updated results."
+"Re-run" performs a fresh comparison with current content and engagement data. Generates new AI analysis. Saves as a new entry in comparison_history (does not overwrite the old one — both are preserved). This way users can see how analysis changed over time if content or data was updated.

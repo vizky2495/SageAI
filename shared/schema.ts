@@ -221,6 +221,8 @@ export const contentStored = pgTable("content_stored", {
   fetchStatus: text("fetch_status").notNull().default("not_stored"),
   fetchNotes: text("fetch_notes"),
   storedBy: text("stored_by").notNull().default("user"),
+  uploadedByUserId: text("uploaded_by_user_id"),
+  uploadedByName: text("uploaded_by_name"),
 });
 
 export const insertContentStoredSchema = createInsertSchema(contentStored).omit({
@@ -228,3 +230,29 @@ export const insertContentStoredSchema = createInsertSchema(contentStored).omit(
 });
 export type InsertContentStored = z.infer<typeof insertContentStoredSchema>;
 export type ContentStored = typeof contentStored.$inferSelect;
+
+export const comparisonStatusEnum = pgEnum("comparison_status", ["completed", "in_progress"]);
+export const comparisonTypeEnum = pgEnum("comparison_type", ["standard", "multi"]);
+
+export const comparisonHistory = pgTable("comparison_history", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  comparisonType: comparisonTypeEnum("comparison_type").notNull().default("standard"),
+  assetIds: jsonb("asset_ids").$type<string[]>().notNull(),
+  assetNames: jsonb("asset_names").$type<string[]>().notNull(),
+  comparisonDate: timestamp("comparison_date").notNull().defaultNow(),
+  performedByUserId: text("performed_by_user_id"),
+  performedByName: text("performed_by_name").notNull().default("Unknown"),
+  comparisonResults: jsonb("comparison_results").notNull(),
+  pdfFilePath: text("pdf_file_path"),
+  campaignPlanId: integer("campaign_plan_id"),
+  status: comparisonStatusEnum("status").notNull().default("completed"),
+  isDuplicate: boolean("is_duplicate").notNull().default(false),
+  winnerName: text("winner_name"),
+});
+
+export const insertComparisonHistorySchema = createInsertSchema(comparisonHistory).omit({
+  id: true,
+  comparisonDate: true,
+});
+export type InsertComparisonHistory = z.infer<typeof insertComparisonHistorySchema>;
+export type ComparisonHistory = typeof comparisonHistory.$inferSelect;

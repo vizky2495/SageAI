@@ -55,6 +55,7 @@ interface ContentStatusEntry {
   keywordTags: StructuredKeywordTags;
   dateStored: string | null;
   dateLastUpdated: string | null;
+  uploadedByName: string | null;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;

@@ -14,6 +14,9 @@ import {
   type ContentStored,
   type InsertContentStored,
   contentStored,
+  type ComparisonHistory,
+  type InsertComparisonHistory,
+  comparisonHistory,
   type StructuredKeywordTags,
   normalizeKeywordTags,
 } from "@shared/schema";
@@ -56,7 +59,7 @@ export interface IStorage {
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
-  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null }>>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }>>;
   getAllStoredContentAnalysis(): Promise<Array<{ assetId: string; fetchStatus: string; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; messagingThemes: string[] | null; contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null; contentFormat: string | null; sourceType: string; originalFilename: string | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: Date | null; dateLastUpdated: Date | null }>>;
   getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }>;
   updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
@@ -66,6 +69,11 @@ export interface IStorage {
   getAllStoredContent(): Promise<ContentStored[]>;
   getUnfetchedWithUrls(): Promise<{ assetId: string; sourceUrl: string }[]>;
   getContentCoverage(): Promise<Record<string, { total: number; withContent: number }>>;
+  createComparisonHistory(data: InsertComparisonHistory): Promise<ComparisonHistory>;
+  getComparisonHistory(opts?: { assetId?: string; performedBy?: string; limit?: number; offset?: number }): Promise<{ data: ComparisonHistory[]; total: number }>;
+  getComparisonHistoryById(id: number): Promise<ComparisonHistory | null>;
+  updateComparisonHistory(id: number, data: Partial<{ pdfFilePath: string; campaignPlanId: number; status: string }>): Promise<ComparisonHistory | null>;
+  getComparisonCountsForAssets(assetIds: string[]): Promise<Record<string, number>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -277,7 +285,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null }>> {
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }>> {
     const rows = await db
       .select({
         assetId: contentStored.assetId,
@@ -289,9 +297,10 @@ export class DatabaseStorage implements IStorage {
         keywordTags: contentStored.keywordTags,
         dateStored: contentStored.dateStored,
         dateLastUpdated: contentStored.dateLastUpdated,
+        uploadedByName: contentStored.uploadedByName,
       })
       .from(contentStored);
-    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null }> = {};
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null }> = {};
     for (const r of rows) {
       map[r.assetId] = {
         fetchStatus: r.fetchStatus,
@@ -302,6 +311,7 @@ export class DatabaseStorage implements IStorage {
         keywordTags: normalizeKeywordTags(r.keywordTags as any),
         dateStored: r.dateStored ? r.dateStored.toISOString() : null,
         dateLastUpdated: r.dateLastUpdated ? r.dateLastUpdated.toISOString() : null,
+        uploadedByName: r.uploadedByName,
       };
     }
     return map;
@@ -466,6 +476,65 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    return result;
+  }
+
+  async createComparisonHistory(data: InsertComparisonHistory): Promise<ComparisonHistory> {
+    const [row] = await db.insert(comparisonHistory).values(data).returning();
+    return row;
+  }
+
+  async getComparisonHistory(opts?: { assetId?: string; performedBy?: string; limit?: number; offset?: number }): Promise<{ data: ComparisonHistory[]; total: number }> {
+    const conditions: any[] = [];
+    if (opts?.assetId) {
+      conditions.push(sql`${comparisonHistory.assetIds}::jsonb @> ${JSON.stringify([opts.assetId])}::jsonb`);
+    }
+    if (opts?.performedBy) {
+      conditions.push(eq(comparisonHistory.performedByName, opts.performedBy));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(comparisonHistory)
+      .where(whereClause);
+
+    const rows = await db
+      .select()
+      .from(comparisonHistory)
+      .where(whereClause)
+      .orderBy(desc(comparisonHistory.comparisonDate))
+      .limit(opts?.limit ?? 50)
+      .offset(opts?.offset ?? 0);
+
+    return { data: rows, total: totalResult.count };
+  }
+
+  async getComparisonHistoryById(id: number): Promise<ComparisonHistory | null> {
+    const [row] = await db.select().from(comparisonHistory).where(eq(comparisonHistory.id, id));
+    return row ?? null;
+  }
+
+  async updateComparisonHistory(id: number, data: Partial<{ pdfFilePath: string; campaignPlanId: number; status: string }>): Promise<ComparisonHistory | null> {
+    const [row] = await db
+      .update(comparisonHistory)
+      .set(data as any)
+      .where(eq(comparisonHistory.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async getComparisonCountsForAssets(assetIds: string[]): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+    if (assetIds.length === 0) return result;
+    const rows = await db.select().from(comparisonHistory);
+    for (const aid of assetIds) result[aid] = 0;
+    for (const row of rows) {
+      const ids = row.assetIds as string[];
+      for (const aid of ids) {
+        if (result[aid] !== undefined) result[aid]++;
+      }
+    }
     return result;
   }
 }

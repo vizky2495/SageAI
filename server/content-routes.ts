@@ -331,6 +331,9 @@ export function registerContentRoutes(app: Express): void {
       if (!assetId || !fileBase64 || !filename) {
         return res.status(400).json({ message: "assetId, fileBase64, and filename are required" });
       }
+      const userId = (req as any).userId;
+      const user = userId ? await storage.getUserById(userId) : null;
+      const uploaderName = user?.displayName || "Unknown";
 
       const buffer = Buffer.from(fileBase64, "base64");
       const ext = filename.toLowerCase().split(".").pop() || "";
@@ -405,6 +408,8 @@ export function registerContentRoutes(app: Express): void {
         fetchStatus: text.trim() ? "success" : "partial",
         fetchNotes,
         storedBy: "user",
+        uploadedByUserId: userId,
+        uploadedByName: uploaderName,
       });
 
       res.json({
