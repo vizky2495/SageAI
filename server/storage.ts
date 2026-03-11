@@ -136,11 +136,11 @@ export class DatabaseStorage implements IStorage {
 
     if (opts.contentAvailability === "with_content") {
       conditions.push(
-        sql`${assetsAgg.contentId} IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} = 'success')`
+        sql`${assetsAgg.contentId} IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} IN ('success', 'partial'))`
       );
     } else if (opts.contentAvailability === "without_content") {
       conditions.push(
-        sql`${assetsAgg.contentId} NOT IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} = 'success')`
+        sql`${assetsAgg.contentId} NOT IN (SELECT ${contentStored.assetId} FROM ${contentStored} WHERE ${contentStored.fetchStatus} IN ('success', 'partial'))`
       );
     }
 
@@ -456,7 +456,7 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             inArray(assetsAgg.stage, [...stages]),
-            eq(contentStored.fetchStatus, "success")
+            sql`${contentStored.fetchStatus} IN ('success', 'partial')`
           )
         )
         .groupBy(assetsAgg.stage),
