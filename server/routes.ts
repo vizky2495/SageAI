@@ -1579,7 +1579,17 @@ Return ONLY valid JSON matching this schema:
 
   app.post("/api/comparison-history", requireAuth, async (req: Request, res: Response) => {
     try {
-      const entry = await storage.createComparisonHistory(req.body);
+      const userId = (req as any).userId;
+      let performedByName = "Unknown";
+      if (userId) {
+        const u = await storage.getUserById(userId);
+        if (u) performedByName = u.displayName || u.email;
+      }
+      const entry = await storage.createComparisonHistory({
+        ...req.body,
+        performedByUserId: userId || null,
+        performedByName,
+      });
       res.json(entry);
     } catch (err: any) {
       console.error("Failed to save comparison:", err);

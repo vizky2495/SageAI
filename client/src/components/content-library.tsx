@@ -1152,9 +1152,9 @@ function ContentCard({
           {contentStatus && contentStatus.fetchStatus === "success" && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
             <div className="px-3 pb-1 text-[10px]" style={{ color: "#888888" }} data-testid="card-upload-date">
               {contentStatus.dateLastUpdated && contentStatus.dateStored && contentStatus.dateLastUpdated !== contentStatus.dateStored
-                ? `Updated: ${formatUploadDate(contentStatus.dateLastUpdated)}`
+                ? `Updated: ${formatUploadDate(contentStatus.dateLastUpdated)}${contentStatus.uploadedByName ? ` by ${contentStatus.uploadedByName}` : ""}`
                 : contentStatus.dateStored
-                  ? `Uploaded: ${formatUploadDate(contentStatus.dateStored)}`
+                  ? `Uploaded: ${formatUploadDate(contentStatus.dateStored)}${contentStatus.uploadedByName ? ` by ${contentStatus.uploadedByName}` : ""}`
                   : null}
             </div>
           )}

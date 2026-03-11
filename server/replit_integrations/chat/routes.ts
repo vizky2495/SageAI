@@ -744,6 +744,21 @@ async function buildContentLibraryContext(): Promise<string | null> {
       ctx += `\n`;
     }
 
+    try {
+      const { data: recentComparisons } = await storage.getComparisonHistory({ limit: 10 });
+      if (recentComparisons.length > 0) {
+        ctx += `\n=== RECENT COMPARISONS ===\n`;
+        ctx += `Total recent comparisons: ${recentComparisons.length}\n\n`;
+        for (const c of recentComparisons) {
+          ctx += `- ${c.assetNames.join(" vs ")} (${c.comparisonType}, ${new Date(c.comparisonDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})`;
+          if (c.winnerName) ctx += ` — Winner: ${c.winnerName}`;
+          if (c.isDuplicate) ctx += ` [DUPLICATE DETECTED]`;
+          ctx += ` by ${c.performedByName}\n`;
+        }
+        ctx += `\n`;
+      }
+    } catch {}
+
     return ctx;
   } catch (err) {
     console.error("Content library context error:", err);

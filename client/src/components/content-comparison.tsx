@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { authFetch } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import {
   Upload,
   FileText,
@@ -37,6 +38,11 @@ import {
   Trophy,
   Crown,
   Medal,
+  RefreshCw,
+  History,
+  Eye,
+  RotateCcw,
+  Download,
 } from "lucide-react";
 
 export interface ComparisonContextContent {
@@ -2503,7 +2509,194 @@ function MultiComparisonResults({
   );
 }
 
+interface ComparisonHistoryEntry {
+  id: number;
+  comparisonType: "standard" | "multi";
+  assetIds: string[];
+  assetNames: string[];
+  comparisonDate: string;
+  performedByUserId: string | null;
+  performedByName: string;
+  comparisonResults: any;
+  pdfFilePath: string | null;
+  campaignPlanId: number | null;
+  status: "completed" | "in_progress";
+  isDuplicate: boolean;
+  winnerName: string | null;
+}
+
+function ComparisonHistoryList({
+  onViewReport,
+  onRerun,
+}: {
+  onViewReport: (entry: ComparisonHistoryEntry) => void;
+  onRerun: (entry: ComparisonHistoryEntry) => void;
+}) {
+  const [history, setHistory] = useState<ComparisonHistoryEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  async function loadHistory() {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const res = await authFetch("/api/comparison-history?limit=50");
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.data || []);
+        setTotal(data.total || 0);
+      } else {
+        setLoadError(true);
+      }
+    } catch {
+      setLoadError(true);
+    }
+    setLoading(false);
+  }
+
+  async function handleDownloadPdf(entry: ComparisonHistoryEntry) {
+    const results = entry.comparisonResults;
+    if (entry.comparisonType === "standard") {
+      const { generateComparisonPdf } = await import("@/lib/comparison-pdf");
+      generateComparisonPdf(results);
+    } else {
+      const { generateMultiComparisonPdf } = await import("@/lib/comparison-pdf");
+      generateMultiComparisonPdf(results);
+    }
+  }
+
+  const filteredHistory = searchQuery.trim()
+    ? history.filter(e => e.assetNames.some(n => n.toLowerCase().includes(searchQuery.toLowerCase())))
+    : history;
+
+  if (loading) {
+    return (
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="comparison-history-loading">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Loading comparison history...</span>
+        </div>
+      </Card>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card className="rounded-2xl border border-amber-500/20 bg-card/80 p-4 backdrop-blur" data-testid="comparison-history-error">
+        <div className="flex items-center gap-2 text-xs text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>Could not load comparison history.</span>
+          <button onClick={loadHistory} className="underline hover:no-underline ml-1">Retry</button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (history.length === 0) return null;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur space-y-3" data-testid="comparison-history-panel">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Comparison History</h3>
+            <span className="text-[10px] text-muted-foreground">{total} comparison{total !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="relative w-48">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-7 pl-7 pr-2 rounded-lg bg-muted/30 border border-border/30 text-xs focus:outline-none focus:border-primary/50"
+              data-testid="input-history-search"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+          {filteredHistory.map((entry) => (
+            <div
+              key={entry.id}
+              className="rounded-xl border border-border/20 bg-muted/5 hover:bg-muted/15 p-3 transition-colors"
+              data-testid={`history-entry-${entry.id}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate" data-testid={`history-names-${entry.id}`}>
+                    {entry.assetNames.join(" vs ")}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(entry.comparisonDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">by {entry.performedByName}</span>
+                    {entry.isDuplicate && (
+                      <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[9px] px-1.5 py-0" data-testid={`history-duplicate-${entry.id}`}>
+                        DUPLICATE DETECTED
+                      </Badge>
+                    )}
+                    {entry.winnerName && !entry.isDuplicate && (
+                      <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[9px] px-1.5 py-0">
+                        Winner: {entry.winnerName}
+                      </Badge>
+                    )}
+                    <Badge className={`text-[9px] px-1.5 py-0 ${entry.comparisonType === "multi" ? "bg-violet-500/15 text-violet-400 border-violet-500/30" : "bg-primary/15 text-primary border-primary/30"}`}>
+                      {entry.comparisonType === "multi" ? `${entry.assetNames.length}-way` : "1:1"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    onClick={() => onViewReport(entry)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] rounded-lg"
+                    data-testid={`btn-view-report-${entry.id}`}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    View
+                  </Button>
+                  <Button
+                    onClick={() => handleDownloadPdf(entry)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] rounded-lg"
+                    data-testid={`btn-download-history-${entry.id}`}
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    PDF
+                  </Button>
+                  <Button
+                    onClick={() => onRerun(entry)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] rounded-lg"
+                    data-testid={`btn-rerun-${entry.id}`}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Re-run
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
 export default function ContentComparison() {
+  const { user } = useAuth();
   const [slots, setSlots] = useState<ContentSlot[]>([EMPTY_CONTENT_SLOT(1), EMPTY_CONTENT_SLOT(2)]);
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
   const [activeSource, setActiveSource] = useState<SlotSource | null>(null);
@@ -2515,6 +2708,11 @@ export default function ContentComparison() {
   const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
+  const [viewingHistoryEntry, setViewingHistoryEntry] = useState<ComparisonHistoryEntry | null>(null);
+  const [reanalysisOverlay, setReanalysisOverlay] = useState(false);
+  const [modifySlotIndex, setModifySlotIndex] = useState<number | null>(null);
+  const [modifySource, setModifySource] = useState<SlotSource | null>(null);
+  const reanalysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filledSlots = slots.filter(s => s.filled);
   const canCompare = filledSlots.length >= 2;
@@ -2561,6 +2759,162 @@ export default function ContentComparison() {
     setActiveSlotIndex(null);
     setActiveSource(null);
     setCollapsed(false);
+  }
+
+  async function saveComparisonToHistory(
+    type: "standard" | "multi",
+    assetIds: string[],
+    assetNames: string[],
+    results: any,
+    isDuplicate: boolean,
+    winnerName: string | null,
+  ) {
+    try {
+      const res = await authFetch("/api/comparison-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          comparisonType: type,
+          assetIds,
+          assetNames,
+          comparisonResults: results,
+          status: "completed",
+          isDuplicate,
+          winnerName,
+        }),
+      });
+      if (!res.ok) {
+        console.error("Failed to save comparison to history:", res.status);
+      }
+    } catch (e) {
+      console.error("Failed to save comparison to history:", e);
+    }
+  }
+
+  function handleViewHistoryReport(entry: ComparisonHistoryEntry) {
+    const results = entry.comparisonResults;
+    setViewingHistoryEntry(entry);
+    if (entry.comparisonType === "standard") {
+      setComparisonResult(results);
+      setMultiResult(null);
+    } else {
+      setMultiResult(results);
+      setComparisonResult(null);
+    }
+    setStep("results");
+    setCollapsed(true);
+    setComparisonLoading(false);
+    setComparisonError(null);
+  }
+
+  const pendingRerunRef = useRef(false);
+
+  function handleRerunFromHistory(entry: ComparisonHistoryEntry) {
+    setViewingHistoryEntry(null);
+    const newSlots: ContentSlot[] = entry.assetIds.map((id, i) => ({
+      id: i + 1,
+      source: "library" as SlotSource,
+      pdfResult: null,
+      libraryAsset: { contentId: id, name: entry.assetNames[i] || id, stage: "UNKNOWN", product: "", type: "", country: "", industry: "", pageviews: 0, downloads: 0, leads: 0, sqos: 0, avgTime: 0 } as AssetPickerItem,
+      label: entry.assetNames[i] || id,
+      filled: true,
+      expanded: false,
+    }));
+    setSlots(newSlots);
+    setStep("results");
+    setCollapsed(true);
+    setComparisonResult(null);
+    setMultiResult(null);
+    setComparisonLoading(true);
+    setComparisonError(null);
+    pendingRerunRef.current = true;
+  }
+
+  useEffect(() => {
+    if (pendingRerunRef.current && filledSlots.length >= 2 && comparisonLoading) {
+      pendingRerunRef.current = false;
+      handleRunComparison();
+    }
+  }, [slots]);
+
+  useEffect(() => {
+    return () => {
+      if (reanalysisTimerRef.current) clearTimeout(reanalysisTimerRef.current);
+    };
+  }, []);
+
+  function triggerReanalysis() {
+    if (reanalysisTimerRef.current) clearTimeout(reanalysisTimerRef.current);
+    reanalysisTimerRef.current = setTimeout(() => {
+      const currentFilled = slots.filter(s => s.filled);
+      if (currentFilled.length >= 2) {
+        setReanalysisOverlay(true);
+        handleRunComparison();
+      } else if (currentFilled.length === 1) {
+        setComparisonResult(null);
+        setMultiResult(null);
+        setComparisonError("Add at least one more content piece to compare.");
+      } else {
+        handleReset();
+      }
+    }, 1500);
+  }
+
+  function handleRemoveFromResults(index: number) {
+    const currentFilled = slots.filter(s => s.filled);
+    if (currentFilled.length <= 1) {
+      handleReset();
+      return;
+    }
+    const actualIndex = slots.indexOf(currentFilled[index]);
+    if (actualIndex === -1) return;
+
+    if (slots.filter(s => s.filled).length <= 2 && slots.length <= 2) {
+      clearSlot(actualIndex);
+    } else if (slots.length > 2) {
+      setSlots(prev => prev.filter((_, i) => i !== actualIndex));
+    } else {
+      clearSlot(actualIndex);
+    }
+    triggerReanalysis();
+  }
+
+  function handleSwapInResults(index: number) {
+    const currentFilled = slots.filter(s => s.filled);
+    const actualIndex = slots.indexOf(currentFilled[index]);
+    if (actualIndex === -1) return;
+    setModifySlotIndex(actualIndex);
+    setModifySource(null);
+  }
+
+  function handleModifySlotFilled(result: PdfResult | null, asset: AssetPickerItem | null, source: SlotSource) {
+    if (modifySlotIndex === null) return;
+    const existingIds = slots.filter(s => s.filled).map(s => s.libraryAsset?.contentId || s.pdfResult?.contentId || s.pdfResult?.filename);
+    const newId = asset?.contentId || result?.contentId || result?.filename;
+    if (newId && existingIds.includes(newId)) {
+      setModifySlotIndex(null);
+      setModifySource(null);
+      return;
+    }
+    updateSlot(modifySlotIndex, {
+      source,
+      pdfResult: result,
+      libraryAsset: asset,
+      label: result?.filename || asset?.name || `Content ${slots[modifySlotIndex].id}`,
+      filled: true,
+      expanded: false,
+    });
+    setModifySlotIndex(null);
+    setModifySource(null);
+    triggerReanalysis();
+  }
+
+  function handleAddInResults() {
+    if (slots.length >= 5) return;
+    const newId = Math.max(...slots.map(s => s.id)) + 1;
+    setSlots(prev => [...prev, EMPTY_CONTENT_SLOT(newId)]);
+    setModifySlotIndex(slots.length);
+    setModifySource(null);
   }
 
   function handleViewStandaloneAnalysis(result: PdfResult) {
@@ -2612,8 +2966,10 @@ export default function ContentComparison() {
     setStep("results");
     setComparisonLoading(true);
     setComparisonError(null);
-    setComparisonResult(null);
-    setMultiResult(null);
+    if (!reanalysisOverlay) {
+      setComparisonResult(null);
+      setMultiResult(null);
+    }
 
     const pieces = filledSlots.map(slot => {
       if (slot.libraryAsset) {
@@ -2656,6 +3012,16 @@ export default function ContentComparison() {
         if (!res.ok) throw new Error("Comparison analysis failed");
         const data = await res.json();
         setComparisonResult(data);
+        setReanalysisOverlay(false);
+
+        saveComparisonToHistory(
+          "standard",
+          pieces.map(p => p.contentId),
+          pieces.map(p => p.name),
+          data,
+          !!data.isDuplicate,
+          data.verdict?.winner || null,
+        );
 
         const ctxA = buildContentCtx(filledSlots[0], pieces[0]);
         const ctxB = buildContentCtx(filledSlots[1], pieces[1]);
@@ -2683,6 +3049,7 @@ export default function ContentComparison() {
         });
       } catch (err: any) {
         setComparisonError(err.message || "Failed to run comparison analysis.");
+        setReanalysisOverlay(false);
       }
     } else {
       try {
@@ -2727,6 +3094,18 @@ export default function ContentComparison() {
           })),
         };
         setMultiResult(mapped);
+        setReanalysisOverlay(false);
+
+        const overallRankings = mapped.rankings?.overall || [];
+        const topRanked = overallRankings.length > 0 ? overallRankings[0]?.name || null : null;
+        saveComparisonToHistory(
+          "multi",
+          pieces.map(p => p.contentId),
+          pieces.map(p => p.name),
+          mapped,
+          false,
+          topRanked,
+        );
 
         const multiCtxContents = filledSlots.map((slot, i) => {
           const ctx = buildContentCtx(slot, pieces[i]);
@@ -2749,6 +3128,7 @@ export default function ContentComparison() {
         });
       } catch (err: any) {
         setComparisonError(err.message || "Failed to run multi-content comparison.");
+        setReanalysisOverlay(false);
       }
     }
     setComparisonLoading(false);
@@ -2943,19 +3323,96 @@ export default function ContentComparison() {
         {!collapsed && step === "results" && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
             <div className={`grid gap-2 ${filledSlots.length === 2 ? "sm:grid-cols-2" : filledSlots.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
-              {filledSlots.map((slot, i) => (
-                <div key={slot.id} className="rounded-xl bg-muted/10 border border-border/30 p-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{i + 1}</div>
-                    <span className="text-xs font-medium truncate">{slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label}</span>
-                    {(slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage) && (
-                      <Badge className={`${stageBadgeColors[slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage || ""] || "bg-muted"} border text-[9px] shrink-0 ml-auto`}>
-                        {slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage}
-                      </Badge>
+              {filledSlots.map((slot, i) => {
+                const isModifying = modifySlotIndex !== null && slots.indexOf(slot) === modifySlotIndex;
+                return (
+                  <div key={slot.id} className="group relative rounded-xl bg-muted/10 border border-border/30 hover:border-primary/30 p-3 transition-colors" data-testid={`results-slot-${i}`}>
+                    {isModifying ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Replace content</span>
+                          <button
+                            onClick={() => { setModifySlotIndex(null); setModifySource(null); }}
+                            className="text-[10px] text-muted-foreground hover:text-foreground"
+                            data-testid={`btn-cancel-modify-${i}`}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {!modifySource && <SlotSourcePicker slotIndex={i} onSelectSource={(src) => setModifySource(src)} />}
+                        <AnimatePresence mode="wait">
+                          {modifySource === "upload" && (
+                            <motion.div key="mod-upload" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                              <UploadAndSavePanel onAnalyzed={(result) => handleModifySlotFilled(result, null, "upload")} />
+                            </motion.div>
+                          )}
+                          {modifySource === "library" && (
+                            <motion.div key="mod-library" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                              <LibraryPickerPanel onSelect={(asset) => {
+                                const manualResult: PdfResult = {
+                                  filename: asset.name || asset.contentId,
+                                  pageCount: 0, wordCount: 0, text: "",
+                                  classification: { contentType: asset.type || "Document", stage: asset.stage, product: asset.product || "General", industry: "General", topic: asset.name || asset.contentId, confidence: 1.0 },
+                                  isFallback: true, contentId: asset.contentId,
+                                  metrics: { pageviews: asset.pageviews, downloads: asset.downloads, leads: asset.leads, sqos: asset.sqos, avgTime: asset.avgTime },
+                                };
+                                handleModifySlotFilled(manualResult, asset, "library");
+                              }} />
+                            </motion.div>
+                          )}
+                          {modifySource === "manual" && (
+                            <motion.div key="mod-manual" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                              <ManualEntryPanel onSubmit={(result) => handleModifySlotFilled(result, null, "manual")} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{i + 1}</div>
+                          <span className="text-xs font-medium truncate">{slot.pdfResult?.filename || slot.libraryAsset?.name || slot.label}</span>
+                          {(slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage) && (
+                            <Badge className={`${stageBadgeColors[slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage || ""] || "bg-muted"} border text-[9px] shrink-0 ml-auto`}>
+                              {slot.pdfResult?.classification?.stage || slot.libraryAsset?.stage}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleSwapInResults(i)}
+                            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-primary/10"
+                            data-testid={`btn-swap-result-${i}`}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Swap
+                          </button>
+                          {filledSlots.length > 2 && (
+                            <button
+                              onClick={() => handleRemoveFromResults(i)}
+                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded-md hover:bg-destructive/10"
+                              data-testid={`btn-remove-result-${i}`}
+                            >
+                              <X className="h-3 w-3" />
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              {slots.length < 5 && modifySlotIndex === null && (
+                <button
+                  onClick={handleAddInResults}
+                  className="rounded-xl border-2 border-dashed border-border/20 bg-transparent p-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:border-primary/30 transition-all min-h-[60px]"
+                  data-testid="btn-add-in-results"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -3004,20 +3461,50 @@ export default function ContentComparison() {
         </motion.div>
       )}
 
-      {step === "results" && comparisonResult && (
-        <ComparisonResults
-          comparisonData={comparisonResult}
-          isLoadingVerdict={comparisonLoading}
-          onDownloadPdf={() => handleDownloadPdf(comparisonResult)}
-          onPlanCampaign={() => setShowCampaignModal(true)}
-        />
+      {step === "results" && (comparisonResult || multiResult) && (
+        <div className="relative">
+          {reanalysisOverlay && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute inset-0 z-20 bg-background/70 backdrop-blur-sm rounded-2xl flex items-center justify-center"
+              data-testid="reanalysis-overlay"
+            >
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Re-analyzing comparison</p>
+                  <p className="text-xs text-muted-foreground mt-1">Updating results with modified content...</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {comparisonResult && (
+            <ComparisonResults
+              comparisonData={comparisonResult}
+              isLoadingVerdict={comparisonLoading}
+              onDownloadPdf={() => handleDownloadPdf(comparisonResult)}
+              onPlanCampaign={() => setShowCampaignModal(true)}
+            />
+          )}
+
+          {multiResult && (
+            <MultiComparisonResults
+              data={multiResult}
+              onPlanCampaign={() => setShowCampaignModal(true)}
+              onDownloadPdf={() => handleDownloadMultiPdf(multiResult)}
+            />
+          )}
+        </div>
       )}
 
-      {step === "results" && multiResult && (
-        <MultiComparisonResults
-          data={multiResult}
-          onPlanCampaign={() => setShowCampaignModal(true)}
-          onDownloadPdf={() => handleDownloadMultiPdf(multiResult)}
+      {step === "intake" && !comparisonLoading && (
+        <ComparisonHistoryList
+          onViewReport={handleViewHistoryReport}
+          onRerun={handleRerunFromHistory}
         />
       )}
 
