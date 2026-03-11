@@ -847,7 +847,7 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
     if (file) handleFile(file);
   }, [handleFile]);
 
-  if (status === "success" || status === "partial") {
+  if (status === "success") {
     return (
       <TooltipProvider>
         <Tooltip>
@@ -858,7 +858,25 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
             />
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
-            {status === "success" ? "Content uploaded — preview and analysis available" : "Content uploaded — analysis pending"}
+            Content uploaded — preview and analysis available
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (status === "partial") {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="h-2 w-2 rounded-full bg-orange-500 shrink-0 cursor-default"
+              data-testid="status-dot-partial"
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Content uploaded — analysis pending or incomplete
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
