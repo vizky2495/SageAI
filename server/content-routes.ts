@@ -545,6 +545,53 @@ export function registerContentRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/content/:assetId/thumbnail", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const content = await storage.getContentByAssetId(req.params.assetId);
+      if (!content || !content.storedFileBase64) {
+        return res.status(404).json({ message: "No file stored for this asset" });
+      }
+      const fileBuffer = Buffer.from(content.storedFileBase64, "base64");
+      const format = (content.contentFormat || "").toLowerCase();
+      const imageFormats = ["png", "jpg", "jpeg", "gif", "webp"];
+      if (imageFormats.includes(format)) {
+        const mimeMap: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+        res.setHeader("Content-Type", mimeMap[format] || "image/png");
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        return res.send(fileBuffer);
+      }
+      if (format === "pdf") {
+        try {
+          const { createCanvas } = await import("canvas");
+          const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+          const data = new Uint8Array(fileBuffer);
+          const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true, disableFontFace: true } as any).promise;
+          const page = await doc.getPage(1);
+          const targetWidth = 600;
+          const scale = targetWidth / page.getViewport({ scale: 1 }).width;
+          const viewport = page.getViewport({ scale });
+          const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+          const ctx = canvas.getContext("2d") as any;
+          await page.render({
+            canvasContext: ctx,
+            viewport,
+          } as any).promise;
+          const pngBuffer = canvas.toBuffer("image/png");
+          res.setHeader("Content-Type", "image/png");
+          res.setHeader("Cache-Control", "private, max-age=3600");
+          return res.send(pngBuffer);
+        } catch (pdfErr: any) {
+          console.error("PDF thumbnail rendering failed:", pdfErr?.message || pdfErr);
+          return res.status(500).json({ message: "PDF thumbnail rendering failed" });
+        }
+      }
+      return res.status(400).json({ message: "Unsupported format for thumbnail" });
+    } catch (err: any) {
+      console.error("Thumbnail error:", err?.message || err);
+      res.status(500).json({ message: "Failed to generate thumbnail" });
+    }
+  });
+
   app.delete("/api/content/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deleteContent(req.params.assetId);
