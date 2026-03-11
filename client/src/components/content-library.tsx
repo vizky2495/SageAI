@@ -847,7 +847,7 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
     if (file) handleFile(file);
   }, [handleFile]);
 
-  if (status === "success") {
+  if (status === "success" || status === "partial") {
     return (
       <TooltipProvider>
         <Tooltip>
@@ -858,7 +858,7 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
             />
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
-            Content uploaded — preview and analysis available
+            {status === "success" ? "Content uploaded — preview and analysis available" : "Content uploaded — analysis pending"}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -1149,7 +1149,7 @@ function ContentCard({
             </div>
           </div>
 
-          {contentStatus && contentStatus.fetchStatus === "success" && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
+          {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && (contentStatus.dateStored || contentStatus.dateLastUpdated) && (
             <div className="px-3 pb-1 text-[10px]" style={{ color: "#888888" }} data-testid="card-upload-date">
               {contentStatus.dateLastUpdated && contentStatus.dateStored && contentStatus.dateLastUpdated !== contentStatus.dateStored
                 ? `Updated: ${formatUploadDate(contentStatus.dateLastUpdated)}${contentStatus.uploadedByName ? ` by ${contentStatus.uploadedByName}` : ""}`

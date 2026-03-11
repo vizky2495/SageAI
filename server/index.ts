@@ -24,6 +24,16 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith("/api")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.removeHeader("ETag");
+  }
+  next();
+});
+
 app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
   if (err.type === "entity.too.large") {
     return res.status(413).json({ message: "File is too large. Please upload a smaller file (max 50 MB)." });
