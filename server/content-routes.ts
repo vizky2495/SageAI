@@ -564,19 +564,36 @@ export function registerContentRoutes(app: Express): void {
         try {
           const { createCanvas } = await import("canvas");
           const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+          class NodeCanvasFactory {
+            create(width: number, height: number) {
+              const canvas = createCanvas(width, height);
+              const context = canvas.getContext("2d");
+              return { canvas, context };
+            }
+            reset(canvasAndContext: any, width: number, height: number) {
+              canvasAndContext.canvas.width = width;
+              canvasAndContext.canvas.height = height;
+            }
+            destroy(canvasAndContext: any) {
+              canvasAndContext.canvas.width = 0;
+              canvasAndContext.canvas.height = 0;
+              canvasAndContext.canvas = null;
+              canvasAndContext.context = null;
+            }
+          }
+          const canvasFactory = new NodeCanvasFactory();
           const data = new Uint8Array(fileBuffer);
-          const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true, disableFontFace: true } as any).promise;
+          const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true, disableFontFace: true, canvasFactory } as any).promise;
           const page = await doc.getPage(1);
           const targetWidth = 600;
           const scale = targetWidth / page.getViewport({ scale: 1 }).width;
           const viewport = page.getViewport({ scale });
-          const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
-          const ctx = canvas.getContext("2d") as any;
+          const canvasAndCtx = canvasFactory.create(Math.floor(viewport.width), Math.floor(viewport.height));
           await page.render({
-            canvasContext: ctx,
+            canvasContext: canvasAndCtx.context,
             viewport,
           } as any).promise;
-          const pngBuffer = canvas.toBuffer("image/png");
+          const pngBuffer = canvasAndCtx.canvas.toBuffer("image/png");
           res.setHeader("Content-Type", "image/png");
           res.setHeader("Cache-Control", "private, max-age=3600");
           return res.send(pngBuffer);
