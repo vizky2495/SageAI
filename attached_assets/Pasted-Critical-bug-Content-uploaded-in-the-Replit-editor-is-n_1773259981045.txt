@@ -1,0 +1,120 @@
+Critical bug: Content uploaded in the Replit editor is not visible in the external deployed app. Users see different content libraries depending on how they access the app. Some content shows in Replit but not in the external browser. Green dots for uploaded content are missing externally. MOFU and BOFU content that exists in Replit shows "No content found" externally. Fix this immediately — the content library must be identical for all users regardless of how they access the app.
+
+DIAGNOSE THE ROOT CAUSE
+This is almost certainly a storage/database issue. Check these in order:
+Check 1 — Where is content_stored data being saved?
+
+Is the content_stored table using an in-memory database (like SQLite in memory) that resets on each deployment or connection?
+Is it using a file-based SQLite database stored in a non-persistent directory?
+Is it using Replit's built-in database, an external database (Supabase, PostgreSQL), or local file storage?
+The fix: content_stored must use a persistent database that is accessible from all instances of the app — both the Replit editor preview and the external deployed URL. Use one of these:
+
+Replit's built-in Key-Value database (if using Replit DB)
+An external database like Supabase, PlanetScale, Neon, or any hosted PostgreSQL
+Replit's persistent /data directory for file storage (but database records must still be in a shared DB)
+
+
+Do NOT use: in-memory storage, session storage, localStorage, or file-based SQLite in a non-persistent directory
+
+Check 2 — Where are uploaded files stored?
+
+Are the actual PDF/DOCX files stored in a directory that persists across deployments?
+Replit's file system outside of /data or designated persistent directories can be wiped on redeployment
+The fix: All uploaded content files must be stored in a persistent location:
+
+Option A: Replit's persistent /data/content_files/{asset_id}/ directory
+Option B: An external file storage service (S3, Cloudflare R2, Supabase Storage)
+Option C: Store the file content as a blob or base64 in the database itself (works for smaller files)
+
+
+Verify the files are actually accessible from the external deployed URL by checking the file path
+
+Check 3 — Is the engagement data (Excel) loading differently?
+
+The MOFU showing 0 assets and BOFU showing 0 assets externally but content existing in Replit suggests the engagement data Excel may also not be loading properly in the deployed version
+Check if the Excel data is being read from a file path that only exists in the Replit editor
+The fix: The engagement data should be loaded from the same persistent database as content_stored. When admin uploads an Excel, parse it and store the data in the database — don't read from the Excel file at runtime
+
+Check 4 — Are there separate database instances?
+
+Sometimes Replit editor and the deployed app connect to different database instances
+Verify both environments point to the exact same database connection string
+Log the database connection details in both environments and compare
+
+
+THE CORRECT ARCHITECTURE FOR SHARED ACCESS
+All users (Replit editor + External browser + Any device)
+        │
+        ▼
+┌─────────────────────┐
+│   Single Database    │  ← One database for everything
+│   (Hosted/External)  │
+│                      │
+│  - engagement_data   │  ← From admin Excel upload
+│  - content_stored    │  ← From user content uploads
+│  - comparison_history│  ← From comparisons
+│  - campaign_plans    │  ← From campaign planner
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│  File Storage        │  ← One storage for all files
+│  (Persistent)        │
+│                      │
+│  /content_files/     │  ← Uploaded PDFs, DOCX, etc.
+│  /thumbnails/        │  ← Generated previews
+│  /reports/           │  ← Saved PDF reports
+└─────────────────────┘
+Every read and write from every user goes to the same database and file storage. No exceptions.
+
+SPECIFIC FIXES TO IMPLEMENT
+1. Move to a hosted database if not already using one:
+
+If currently using SQLite or in-memory DB, migrate to a hosted database
+Recommended for Replit: Supabase (free tier, PostgreSQL, easy setup) or Replit's built-in PostgreSQL if available
+Create all tables in the hosted database: engagement_data, content_stored, comparison_history
+Migrate any existing data from the local database to the hosted one
+
+2. Move file storage to persistent location:
+
+If files are stored in the project directory (e.g., /home/runner/project/uploads/), they will be lost on redeployment
+Move all file storage to /data/content_files/ (Replit persistent storage) or an external service
+Update all file paths in the database to point to the new persistent location
+For maximum reliability, consider storing file contents as base64 in the database itself — this eliminates file system dependency entirely, though it increases database size
+
+3. Verify the deployment serves the same data:
+
+After making the database changes, test by:
+
+Uploading content in the external browser
+Checking it appears in the Replit editor
+Uploading content in the Replit editor
+Checking it appears in the external browser
+Having two different browser sessions open simultaneously — both should show identical content
+
+
+
+4. Fix the engagement data loading for external access:
+
+The MOFU and BOFU sections showing "0 assets" and "No content found" externally means the engagement data itself isn't loading
+Make sure the admin Excel data is parsed and stored in the database at upload time, not read from the file at runtime
+The app should never read directly from an Excel file during normal operation — only during the admin upload process
+
+
+VERIFICATION CHECKLIST
+After implementing the fixes, verify all of these work from an external browser (not the Replit editor):
+
+ Content Library shows the correct count of TOFU, MOFU, and BOFU assets
+ Content cards show engagement metrics (views, avg time, downloads)
+ Content cards with uploaded content show the green dot indicator
+ Content cards with uploaded content show summary and tags
+ Clicking a card with uploaded content shows the preview panel with the actual content
+ Uploading new content from the external browser saves it and it appears for all users
+ Content comparison works and shows full AI analysis
+ Comparison history is visible and accessible
+ Chat agent can access uploaded content and provide analysis
+ All of the above also work from a second external browser or incognito window simultaneously
+
+
+THIS IS THE HIGHEST PRIORITY FIX
+Nothing else matters if users can't see the same data. Every feature we've built — content upload, tags, comparison, campaign planning — is useless if it only works in the Replit editor. Fix the shared storage first, verify it works externally, then continue with other improvements.

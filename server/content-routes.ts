@@ -754,4 +754,84 @@ export function registerContentRoutes(app: Express): void {
       }
     }
   });
+
+  app.get("/api/admin/export-content", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const allContent = await storage.getAllStoredContent();
+      const exportData = allContent.map(c => ({
+        assetId: c.assetId,
+        contentText: c.contentText,
+        contentSummary: c.contentSummary,
+        extractedTopics: c.extractedTopics,
+        extractedCta: c.extractedCta,
+        contentStructure: c.contentStructure,
+        messagingThemes: c.messagingThemes,
+        keywordTags: c.keywordTags,
+        contentFormat: c.contentFormat,
+        sourceType: c.sourceType,
+        sourceUrl: c.sourceUrl,
+        storedFileBase64: c.storedFileBase64,
+        originalFilename: c.originalFilename,
+        fileSizeBytes: c.fileSizeBytes,
+        fetchStatus: c.fetchStatus,
+        fetchNotes: c.fetchNotes,
+        storedBy: c.storedBy,
+        dateStored: c.dateStored,
+        dateLastUpdated: c.dateLastUpdated,
+        uploadedByUserId: c.uploadedByUserId,
+        uploadedByName: c.uploadedByName,
+      }));
+      res.json({ count: exportData.length, data: exportData });
+    } catch (err: any) {
+      console.error("Export content error:", err);
+      res.status(500).json({ message: "Failed to export content" });
+    }
+  });
+
+  app.post("/api/admin/import-content", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { data } = req.body;
+      if (!Array.isArray(data) || data.length === 0) {
+        return res.status(400).json({ message: "No content data provided" });
+      }
+      let imported = 0;
+      let skipped = 0;
+      let errors = 0;
+      for (const item of data) {
+        try {
+          if (!item.assetId) { skipped++; continue; }
+          await storage.upsertContent({
+            assetId: item.assetId,
+            contentText: item.contentText || null,
+            contentSummary: item.contentSummary || null,
+            extractedTopics: item.extractedTopics || null,
+            extractedCta: item.extractedCta || null,
+            contentStructure: item.contentStructure || null,
+            messagingThemes: item.messagingThemes || null,
+            keywordTags: item.keywordTags || null,
+            contentFormat: item.contentFormat || null,
+            sourceType: item.sourceType || "upload",
+            sourceUrl: item.sourceUrl || null,
+            storedFileBase64: item.storedFileBase64 || null,
+            originalFilename: item.originalFilename || null,
+            fileSizeBytes: item.fileSizeBytes || null,
+            fetchStatus: item.fetchStatus || "success",
+            fetchNotes: item.fetchNotes || null,
+            storedBy: item.storedBy || "admin",
+            dateStored: item.dateStored ? new Date(item.dateStored) : new Date(),
+            uploadedByUserId: item.uploadedByUserId || null,
+            uploadedByName: item.uploadedByName || null,
+          });
+          imported++;
+        } catch (itemErr: any) {
+          console.error(`Import error for ${item.assetId}:`, itemErr.message);
+          errors++;
+        }
+      }
+      res.json({ imported, skipped, errors, total: data.length });
+    } catch (err: any) {
+      console.error("Import content error:", err);
+      res.status(500).json({ message: "Failed to import content" });
+    }
+  });
 }

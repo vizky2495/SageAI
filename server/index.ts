@@ -24,12 +24,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+app.set("etag", false);
+
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
-    res.removeHeader("ETag");
   }
   next();
 });
