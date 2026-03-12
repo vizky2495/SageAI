@@ -3538,41 +3538,56 @@ export default function ContentComparison() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border border-primary/30 bg-card/70 backdrop-blur p-5"
+        className={`rounded-2xl border border-primary/30 bg-card/70 backdrop-blur ${collapsed ? "px-4 py-2.5" : "p-5"}`}
         data-testid="panel-content-intake"
       >
-        <div
-          className={`flex items-center gap-2 w-full ${collapsed ? "" : step === "standalone" ? "mb-0" : "mb-4"}`}
-        >
+        {collapsed ? (
           <div
-            onClick={() => setCollapsed(c => !c)}
-            className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+            onClick={() => setCollapsed(false)}
+            className="flex items-center gap-3 w-full cursor-pointer group"
             role="button"
             tabIndex={0}
-            aria-expanded={!collapsed}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(c => !c); } }}
+            aria-expanded={false}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(false); } }}
             data-testid="btn-toggle-comparison-panel"
           >
-            <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30 shrink-0">
-              <ArrowLeftRight className="h-4 w-4 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
-              {!collapsed && step !== "standalone" && (
-                <p className="text-xs text-muted-foreground">Add 2–5 content pieces to compare — upload, pick from library, or enter manually</p>
-              )}
-              {collapsed && (
-                <p className="text-xs text-muted-foreground">Click to expand — upload, pick from library, or enter manually</p>
-              )}
-            </div>
-            <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${collapsed ? "" : "rotate-180"}`} />
+            <ArrowLeftRight className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+              Content Comparison — drag cards here or click to expand
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-auto" />
           </div>
-          {!collapsed && step !== "intake" && (
-            <Button onClick={handleReset} variant="outline" size="sm" className="rounded-lg text-xs shrink-0" data-testid="btn-reset-comparison">
-              Start Over
-            </Button>
-          )}
-        </div>
+        ) : (
+          <div
+            className={`flex items-center gap-2 w-full ${step === "standalone" ? "mb-0" : "mb-4"}`}
+          >
+            <div
+              onClick={() => setCollapsed(true)}
+              className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+              role="button"
+              tabIndex={0}
+              aria-expanded={true}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(true); } }}
+              data-testid="btn-toggle-comparison-panel"
+            >
+              <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30 shrink-0">
+                <ArrowLeftRight className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold">{step === "standalone" ? "Content Analysis" : "Content Comparison"}</h3>
+                {step !== "standalone" && (
+                  <p className="text-xs text-muted-foreground">Add 2–5 content pieces to compare — upload, pick from library, or enter manually</p>
+                )}
+              </div>
+              <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+            {step !== "intake" && (
+              <Button onClick={handleReset} variant="outline" size="sm" className="rounded-lg text-xs shrink-0" data-testid="btn-reset-comparison">
+                Start Over
+              </Button>
+            )}
+          </div>
+        )}
 
         {!collapsed && step === "intake" && (
           <div className="space-y-3">

@@ -1802,8 +1802,12 @@ function StageCarousel({
   if (stage === "UNKNOWN" && total === 0 && !isLoading) return null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-testid={`carousel-${stage.toLowerCase()}`}>
-      <div className="flex items-center justify-between">
+    <div
+      className="flex min-w-0 flex-col gap-3 rounded-xl pl-3"
+      style={{ borderLeft: `3px solid ${tone.accent}`, backgroundColor: `color-mix(in srgb, ${tone.accent} 3%, transparent)` }}
+      data-testid={`carousel-${stage.toLowerCase()}`}
+    >
+      <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-2">
           <Badge className={`border ${tone.bg} ${tone.text} ${tone.border}`}>
             {stage}
@@ -2257,7 +2261,7 @@ export default function ContentLibrary() {
           <Card className="rounded-2xl border bg-card/80 shadow-sm overflow-hidden" data-testid="tag-filter-bar">
             <button
               onClick={() => { setTagExplorerOpen((v) => !v); setTagSearch(""); setTagShowAll(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/20 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/20 transition-colors"
               data-testid="button-toggle-tag-explorer"
             >
               <Tag className="h-3.5 w-3.5 text-muted-foreground" />
@@ -2309,7 +2313,7 @@ export default function ContentLibrary() {
             )}
 
             {tagExplorerOpen && (
-              <div className="px-3 pb-3 space-y-2.5 border-t border-border/20 pt-2.5">
+              <div className="px-3 pb-2 space-y-1.5 border-t border-border/20 pt-2">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -2389,7 +2393,7 @@ export default function ContentLibrary() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto" data-testid="tag-filter-pills">
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto" data-testid="tag-filter-pills">
                   {(() => {
                     const tagStyles: Record<string, { bg: string; activeBg: string; text: string; border: string }> = {
                       topic: { bg: "bg-[#006362]/60", activeBg: "bg-[#006362]", text: "text-white", border: "border-[#006362]/60" },
@@ -2474,10 +2478,12 @@ export default function ContentLibrary() {
           </Card>
         )}
 
-        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
-        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
-        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
-        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+        <div className="flex flex-col gap-6 mt-2">
+          <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+          <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+          <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+          <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+        </div>
       </div>
 
       {comparisonPair && (
