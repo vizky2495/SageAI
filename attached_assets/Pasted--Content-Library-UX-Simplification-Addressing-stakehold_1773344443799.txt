@@ -1,0 +1,172 @@
+# Content Library UX Simplification
+### Addressing stakeholder and mentor feedback
+
+---
+
+## THE CORE PROBLEM
+
+The Content Library was designed for performance analysts who think in Content IDs, metrics, and funnel stages. But the primary daily users will be campaign managers and content teams who think in titles, visuals, and "which asset do I use for this campaign?"
+
+James's feedback: "Too complicated for Campaign Managers. Too data-heavy. Tailored for performance-driven people."
+
+This is a design audience mismatch, not a feature problem. The data is right — the presentation needs to shift.
+
+---
+
+## WHAT CHANGES
+
+The cards need to flip from data-first to visual-first:
+
+**Today:** Content ID → tags → metrics → (no image)
+**Target:** Thumbnail image → human-readable title → stage badge → metrics on hover/expand
+
+The comparison tool needs to feel like dragging assets into a workspace, not filling out a form.
+
+The quick-feedback popup needs to work as a proper modal, not an inline form hidden inside a card.
+
+---
+
+## REPLIT PROMPTS
+
+### PROMPT 1: FIX THE QUICK-FEEDBACK POPUP
+
+```
+The quick-feedback button on content cards opens the feedback form inside the card itself where it gets clipped and hidden. Users can't see or interact with the form.
+
+Fix this by making the quick-feedback form open as a centered modal overlay instead of inline on the card. When a user clicks the feedback icon on any content card:
+
+1. Open a modal/dialog centered on screen with a semi-transparent backdrop
+2. Show the content title and stage badge at the top of the modal so the user knows which asset they're leaving feedback for
+3. Show the same feedback form: tag pills grouped by Prospect Reaction and Content Quality, optional note field, optional Salesforce reference field, and Submit button
+4. Close on backdrop click, escape key, or X button
+5. Show the success confirmation inside the modal, then auto-close after 1.5 seconds
+
+Don't change the feedback data model or API — just move the form from inline-on-card to a proper modal.
+```
+
+---
+
+### PROMPT 2: SIMPLIFY CONTENT CARDS FOR CREATIVE USERS
+
+```
+The content cards in the Content Library are too data-heavy for non-technical users like campaign managers and content teams. Redesign the cards to be visual-first:
+
+1. Add a thumbnail/preview area at the top of each card. For now, use a colored placeholder that shows the content type icon (document icon for PDFs, presentation icon for PPTXs, globe icon for web pages, video icon for video content). Size it as a landscape rectangle taking up roughly the top third of the card. Later we'll replace these with actual asset thumbnails.
+
+2. Replace the Content ID as the primary card title. Instead:
+   - If the asset has a URL, derive a readable name from it (e.g., "sage.com/products/sage-50" becomes "Sage 50 Product Page")
+   - If there's a campaign name, use a shortened version of it
+   - Fall back to the Content ID only if nothing else is available
+   - Show the Content ID as small secondary text below the title, not as the headline
+
+3. Reduce the visible metrics to just 2 per card — the primary metric for that funnel stage and one secondary:
+   - TOFU: Views + Downloads
+   - MOFU: Leads + Views  
+   - BOFU: SQOs + Leads
+   Show them as a compact single row at the bottom of the card. The other metrics are still available in the detail panel when you click the card.
+
+4. Reduce the attribute tags to a maximum of 3 visible, with a "+N" overflow indicator. The full tag list shows in the detail panel.
+
+5. Make the overall card shorter and more uniform in height. Every card should be the same height regardless of content.
+
+The goal: a campaign manager glances at the library and immediately recognizes content by its visual and title, not by decoding a Content ID.
+```
+
+---
+
+### PROMPT 3: ADD DRAG AND DROP TO COMPARISON TOOL
+
+```
+Add drag-and-drop capability so users can drag content cards from the library directly into the comparison tool slots.
+
+1. Make each content card in the library draggable. When a user starts dragging a card, show a subtle drag ghost/preview of the card thumbnail and title.
+
+2. When the Content Comparison panel is expanded, the Baseline and Challenger slots should be visible drop targets. When a card is dragged over a slot, highlight it with a green border glow to indicate it's a valid drop zone.
+
+3. When a card is dropped into a slot, populate that slot with the asset's data (same as clicking "select from library" does today).
+
+4. Also support dragging between slots — if a user drags an asset from Baseline to Challenger, swap them.
+
+5. Keep the existing click-to-search method as an alternative. Drag-and-drop is an addition, not a replacement.
+
+6. Add a subtle instruction hint in the comparison panel when both slots are empty: "Drag content cards here or click to search"
+
+This should feel like dragging files into folders — natural and immediate.
+```
+
+---
+
+### PROMPT 4: ADD A SIMPLIFIED VIEW TOGGLE
+
+```
+Add a view toggle to the Content Library that lets users switch between two modes:
+
+1. "Card View" (new default) — The simplified visual cards with thumbnails, readable titles, and minimal metrics. This is what campaign managers and content teams will use.
+
+2. "Data View" — The current detailed cards with full Content IDs, all metrics, all tags, and campaign associations. This is what performance analysts need.
+
+Add the toggle as a pair of small icons (grid icon for Card View, list/table icon for Data View) next to the Filters button. Remember the user's preference.
+
+Card View should be the default since the primary audience is campaign managers and content teams.
+```
+
+---
+
+### PROMPT 5: IMPROVE THE CONTENT LIBRARY VISUAL HIERARCHY
+
+```
+Adjust the overall Content Library page layout to feel less overwhelming:
+
+1. The Content Comparison panel should default to collapsed. Show it as a slim bar: "Content Comparison — drag cards here or click to expand" with a subtle expand arrow. Only show the full Baseline/Challenger slots when expanded.
+
+2. The stage section headers (TOFU · 258 assets · Awareness metrics) are good — keep these. But add a subtle colored left border or background tint matching the stage color so each section feels visually distinct when scrolling.
+
+3. Add more breathing room between the card rows. Currently the MOFU row starts immediately after the TOFU carousel with minimal spacing. Add slightly more vertical padding between stage sections.
+
+4. The search bar and filters row should stay pinned/sticky at the top when scrolling so users always have access to search and filters without scrolling back up.
+
+5. The Tag Explorer section is useful but takes up space. Default it to collapsed and make it more compact when expanded.
+```
+
+---
+
+### PROMPT 6: PREPARE FOR ASSET THUMBNAILS
+
+```
+Add support for content asset thumbnails that will eventually come from the Digital Asset Manager integration. For now:
+
+1. Add a thumbnail_url field to the content asset data model (optional, nullable). Don't break existing assets — it's just a new optional field.
+
+2. On the content cards, if thumbnail_url exists, display it as the card's preview image. If it doesn't exist, show the content-type-based placeholder icon we already added.
+
+3. In the content detail panel, if thumbnail_url exists, show it as a larger preview at the top of the panel.
+
+4. Add an "Upload Thumbnail" option in the content detail panel that lets users manually upload a preview image for an asset. Store it and set it as the thumbnail_url. This is a manual bridge until the Digital Asset Manager integration is reconnected.
+
+This sets up the data model and UI so that when the Adobe Workfront / Digital Asset Manager sync is restored, thumbnails will automatically populate on cards without any further frontend changes.
+```
+
+---
+
+## FUTURE: DIGITAL ASSET MANAGER INTEGRATION
+
+When the Workfront integration is restored, the sync should:
+- Automatically populate thumbnail_url for each asset from the DAM
+- Match assets by Content ID or campaign association
+- Keep a fallback to the placeholder if no DAM match is found
+- Surface a "Synced from DAM" indicator on assets that have been matched
+
+This doesn't need to be built now — the thumbnail_url field from Prompt 6 is the hook point. When the integration comes back online, it just needs to write to that field.
+
+---
+
+## SUGGESTED ORDER
+
+1. Fix the quick-feedback popup (Prompt 1) — broken feature, quick fix
+2. Simplify content cards (Prompt 2) — addresses James's core feedback directly
+3. Add view toggle (Prompt 4) — preserves the data view for analysts while defaulting to creative-friendly
+4. Improve visual hierarchy (Prompt 5) — makes the page feel calmer
+5. Add drag-and-drop (Prompt 3) — biggest UX upgrade for the comparison workflow
+6. Prepare for thumbnails (Prompt 6) — future-proofing for DAM integration
+
+Prompts 1-2 are the highest priority. They directly address the feedback that the library is too data-heavy and complicated for creative users.
