@@ -60,6 +60,7 @@ interface ContentStatusEntry {
   uploadedByName: string | null;
   contentFormat: string | null;
   hasFile: boolean;
+  originalFilename: string | null;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -1103,6 +1104,12 @@ function ContentCard({
 
   const { primary: readableName, showId: showIdBelow } = deriveReadableName(asset.contentId, asset);
 
+  const hasContent = contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial");
+  const pdfDisplayName = hasContent && contentStatus.originalFilename
+    ? contentStatus.originalFilename.replace(/\.[^.]+$/, "")
+    : null;
+  const cardTitle = pdfDisplayName || readableName;
+
   const allTags = [
     asset.utmChannel,
     asset.productFranchise,
@@ -1198,16 +1205,16 @@ function ContentCard({
                     WebkitBoxOrient: "vertical",
                     overflow: "hidden",
                   }}
-                  title={`${asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
+                  title={`${pdfDisplayName ? contentStatus.originalFilename : asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
                   onClick={(e) => {
                     if (compareMode) { e.preventDefault(); return; }
                     setShowDetail(true);
                   }}
                   data-testid="card-title"
                 >
-                  {readableName}
+                  {cardTitle}
                 </button>
-                {showIdBelow && (
+                {(pdfDisplayName || showIdBelow) && (
                   <div
                     className="mt-0.5 truncate text-[10px] text-muted-foreground/60 font-mono"
                     title={asset.contentId}

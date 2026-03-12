@@ -59,7 +59,7 @@ export interface IStorage {
   updateUploadedAsset(id: string, data: Partial<InsertUploadedAsset>): Promise<UploadedAsset | null>;
   getContentByAssetId(assetId: string): Promise<ContentStored | null>;
   upsertContent(data: InsertContentStored): Promise<ContentStored>;
-  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }>>;
+  getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean; originalFilename: string | null }>>;
   getAllStoredContentAnalysis(): Promise<Array<{ assetId: string; fetchStatus: string; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; messagingThemes: string[] | null; contentStructure: { wordCount: number; sectionCount: number; pageCount: number; headings: string[] } | null; contentFormat: string | null; sourceType: string; originalFilename: string | null; keywordTags: import("@shared/schema").StructuredKeywordTags; dateStored: Date | null; dateLastUpdated: Date | null }>>;
   getTagsSummary(): Promise<{ topic_tags: Record<string, number>; audience_tags: Record<string, number>; intent_tags: Record<string, number>; user_added_tags: Record<string, number>; total_assets_with_tags: number; total_assets: number }>;
   updateAssetTags(assetId: string, tags: import("@shared/schema").StructuredKeywordTags): Promise<void>;
@@ -285,7 +285,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }>> {
+  async getContentStatusMap(): Promise<Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean; originalFilename: string | null }>> {
     const rows = await db
       .select({
         assetId: contentStored.assetId,
@@ -299,10 +299,11 @@ export class DatabaseStorage implements IStorage {
         dateLastUpdated: contentStored.dateLastUpdated,
         uploadedByName: contentStored.uploadedByName,
         contentFormat: contentStored.contentFormat,
+        originalFilename: contentStored.originalFilename,
         hasFile: sql<boolean>`${contentStored.storedFileBase64} IS NOT NULL`.as("has_file"),
       })
       .from(contentStored);
-    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean }> = {};
+    const map: Record<string, { fetchStatus: string; sourceUrl: string | null; contentSummary: string | null; extractedTopics: string[] | null; extractedCta: { text: string; type: string; strength: string; location: string } | null; keywordTags: StructuredKeywordTags; dateStored: string | null; dateLastUpdated: string | null; uploadedByName: string | null; contentFormat: string | null; hasFile: boolean; originalFilename: string | null }> = {};
     for (const r of rows) {
       map[r.assetId] = {
         fetchStatus: r.fetchStatus,
@@ -316,6 +317,7 @@ export class DatabaseStorage implements IStorage {
         uploadedByName: r.uploadedByName,
         contentFormat: r.contentFormat,
         hasFile: !!r.hasFile,
+        originalFilename: r.originalFilename,
       };
     }
     return map;
