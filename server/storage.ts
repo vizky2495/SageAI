@@ -107,6 +107,7 @@ export class DatabaseStorage implements IStorage {
         sql`(${ilike(assetsAgg.contentId, `%${opts.search}%`)} OR ${assetsAgg.contentId} IN (
           SELECT ${contentStored.assetId} FROM ${contentStored}
           WHERE ${contentStored.keywordTags}::text ILIKE ${'%' + opts.search + '%'}
+          OR ${contentStored.originalFilename} ILIKE ${'%' + opts.search + '%'}
         ))`
       );
     }
