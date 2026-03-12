@@ -1,0 +1,217 @@
+Build the Content Journey Mapping data upload and processing pipeline using Eloqua activity data. The user has real Eloqua export data in TSV (tab-separated) format. Here is the exact structure of their data and how to process it.
+
+DATA FORMAT
+The Eloqua data is a TSV (tab-separated values) file, NOT comma-separated. The parser must handle tab delimiters.
+
+FIELD MAPPING — ELOQUA TO JOURNEY DATA
+When the user uploads the Eloqua TSV file, map these fields:
+EMAIL_ADDRESS1    → contact_id (IMPORTANT: hash this value immediately 
+                    on upload using SHA-256 or similar. Never store 
+                    raw email addresses. Store only the hash for 
+                    privacy. The hash is sufficient to link 
+                    interactions into journeys per person.)
+
+CONTENT1          → asset_id (this directly matches your content 
+                    library asset IDs, e.g., 
+                    "CL_VAS_NG_DEM_NGDEMO_COM|BOT|GNRC")
+
+DATE_STAMP1       → interaction_timestamp (format: 
+                    "2023-04-20 01:20:48.000 +0000" — parse as 
+                    UTC datetime)
+
+CALL_TO_ACTION1   → interaction_type (e.g., "Request a Demo", 
+                    "Request a Trial". Normalize these into 
+                    standard types: "demo_request", "trial_signup", 
+                    "download", "form_submit", "page_view")
+
+UTM_MEDIUM1       → channel (e.g., "organic", "other", "email", 
+                    "paid". Clean "Missing" values to "unknown")
+
+UTM_SOURCE1       → source (e.g., "organic", "other")
+
+UTM_CAMPAIGN1     → campaign_name (may be empty)
+
+SFDC_CAMPAIGN_ID1 → salesforce_campaign_id (for linking to 
+                    Salesforce outcomes)
+
+LAST_SFDC_CAMPAIGN_STATUS1 → lead_status (e.g., "Responded". 
+                    This indicates campaign outcome.)
+
+CONTENT_TYPE1     → content_format (may be empty in some rows)
+
+FORM_NAME1        → form_name (e.g., 
+                    "NPS_18Q1_OT_GBL_DGWW_NPS_GatedContentHighScore")
+
+FORM_SCORE1       → form_score (e.g., "High Score", "No Score" 
+                    — indicates engagement quality)
+
+PAGE_URL1         → page_url (the actual page visited)
+
+CONTENT_URL1      → content_url (URL of the content asset)
+
+SEGMENT_TYPE1     → segment (e.g., "None" — user segment)
+
+REFERRER_DOMAIN1  → referrer (e.g., "youtube.com" — where they 
+                    came from)
+Fields to derive (not directly in the data but can be extracted):
+funnel_stage     → Extract from asset_id naming convention or 
+                   match against engagement_data table. Your 
+                   asset IDs contain stage info: look up the 
+                   asset_id in engagement_data to get the 
+                   funnel_stage. If not found, try to infer 
+                   from CALL_TO_ACTION1: "Request a Demo" = BOFU, 
+                   "Request a Trial" = BOFU, downloads = TOFU/MOFU.
+
+product          → Extract from asset_id by matching against 
+                   engagement_data table. Or parse from the 
+                   asset_id naming convention if possible.
+
+country          → Extract from asset_id country code 
+                   (e.g., "NG" = Nigeria, "ZA" = South Africa) 
+                   or from PAGE_URL1 domain 
+                   (e.g., sage.com/en-ng/ = Nigeria, 
+                   sage.com/en-za/ = South Africa)
+
+DATA CLEANING RULES
+Apply these during upload processing:
+
+Hash emails immediately: SHA-256 hash the EMAIL_ADDRESS1 field. Store only the hash. Never store raw emails in the journey database.
+Deduplicate: The sample data shows duplicate interactions for the same email + content + nearly identical timestamps (1 second apart). Deduplicate rows where the same contact interacts with the same content within 60 seconds — keep only the first interaction.
+Clean "Missing" values: UTM_MEDIUM1 sometimes contains "Missing" — replace with "unknown"
+Clean "None" values: SEGMENT_TYPE1 contains "None" — replace with null or "unspecified"
+Clean "undefined" values: Some fields contain "undefined" or "undefinedSLXCampaignActionCode" — replace with null
+Parse timestamps: DATE_STAMP1 format is "2023-04-20 01:20:48.000 +0000" — parse as UTC, store as standard datetime
+Normalize interaction types: Map CALL_TO_ACTION1 values to standard types:
+
+"Request a Demo" → "demo_request"
+"Request a Trial" → "trial_request"
+"Download" or similar → "download"
+Empty/null → infer from FORM_NAME1 or PAGE_URL1 if possible, otherwise "page_view"
+
+
+Extract country from URL: Parse PAGE_URL1 to get country:
+
+sage.com/en-ng/ → "Nigeria"
+sage.com/en-za/ → "South Africa"
+sage.com/en-us/ → "United States"
+sage.com/en-ca/ → "Canada"
+sage.com/en-gb/ → "United Kingdom"
+
+
+Match asset_ids to content library: For each CONTENT1 value, check if it exists in the engagement_data table. If yes, pull the funnel_stage, product, country, and industry. If not, flag as "unmatched asset."
+
+
+DATABASE TABLES
+journey_interactions:
+  - interaction_id (auto-generated)
+  - contact_hash (SHA-256 hash of email — never raw email)
+  - asset_id (from CONTENT1 — matches content library)
+  - interaction_type (normalized: demo_request, trial_request, 
+      download, form_submit, page_view)
+  - interaction_timestamp (parsed UTC datetime)
+  - funnel_stage (matched from engagement_data or inferred)
+  - product (matched from engagement_data or inferred)
+  - country (extracted from URL or asset_id)
+  - channel (from UTM_MEDIUM1, cleaned)
+  - source (from UTM_SOURCE1)
+  - campaign_name (from UTM_CAMPAIGN1)
+  - sfdc_campaign_id (from SFDC_CAMPAIGN_ID1)
+  - lead_status (from LAST_SFDC_CAMPAIGN_STATUS1)
+  - form_name (from FORM_NAME1)
+  - form_score (from FORM_SCORE1)
+  - page_url (from PAGE_URL1)
+  - referrer (from REFERRER_DOMAIN1)
+  - upload_batch_id (identifies which upload this came from)
+  - upload_date (when this data was uploaded to the platform)
+This table is shared across all users (same as content_stored).
+
+UPLOAD FLOW IN THE CIA PLATFORM
+Replace the "Coming Soon" placeholder with an actual upload interface:
+Step 1 — Upload file:
+
+"Upload Eloqua Activity Data"
+Drag-and-drop or file picker
+Accepts: TSV, CSV (auto-detect delimiter)
+Also accepts Excel (.xlsx) in case they export from Eloqua differently
+
+Step 2 — Field mapping confirmation:
+After parsing the file header, show the user the detected field mapping:
+Detected fields:
+EMAIL_ADDRESS1    → Contact identifier ✓
+CONTENT1          → Content asset ID ✓
+DATE_STAMP1       → Timestamp ✓
+CALL_TO_ACTION1   → Interaction type ✓
+UTM_MEDIUM1       → Channel ✓
+...
+
+Auto-map known Eloqua field names (the ones listed above)
+For unrecognized fields, let the user manually map or skip
+Show: "We'll hash all email addresses for privacy. Raw emails will not be stored."
+
+Step 3 — Preview and validate:
+
+"Found [X] interactions across [Y] unique contacts"
+"Date range: [earliest] to [latest]"
+"Content assets matched to library: [X] of [Y] ([Z]%)"
+"Unmatched assets: [list]" — these are asset_ids in the Eloqua data that don't exist in the content library
+"Duplicate rows removed: [X]"
+"Data quality: [summary of cleaned values]"
+
+Step 4 — Confirm and process:
+
+"Upload and process [X] interactions"
+Processing indicator with progress bar
+On completion: "Journey data uploaded. [X] interactions across [Y] contacts. Journey mapping is now available."
+Redirect to the Journey Mapping visualization
+
+
+AFTER UPLOAD — WHAT BECOMES AVAILABLE
+Once journey data is uploaded, activate the full journey mapping feature:
+Sankey diagram:
+
+Nodes = content assets or funnel stages
+Flow width = number of contacts who took that path
+Color: green flows = paths that led to SQO/conversion, gray = paths that dropped off
+Filter by: product, country, channel, date range
+
+Journey rankings:
+
+Top journeys ranked by conversion rate
+Show: journey path, number of contacts, leads, SQOs, conversion rate, avg duration
+
+Drop-off analysis:
+
+Where contacts stop engaging
+"67% of TOFU downloaders never engage with MOFU content"
+"Demo request form has 45% abandonment rate"
+
+Content-level journey context:
+
+On each content library card, show: "Appears in [X] journeys. Most common next step: [content name]"
+In the Content Librarian chat: "Users who engaged with the Human Firm Guide most commonly attended the Cloud Webinar next (34% of contacts), followed by downloading the Pricing Guide (22%)."
+
+Campaign Planner integration:
+
+When planning a campaign, the AI can recommend content sequences based on actual journey data: "Based on journey data, pair this TOFU PDF with the MOFU Webinar — contacts who follow this path convert at 25.5% vs 1.3% for single-asset campaigns."
+
+
+IMPORTANT: SQO OUTCOME DATA
+The Eloqua data has LAST_SFDC_CAMPAIGN_STATUS1 which shows campaign response status ("Responded") but may not directly tell you who became an SQO. To get full journey-to-conversion mapping:
+Option A — Merge with Salesforce data:
+
+Upload a separate Salesforce export showing which contacts became SQOs/Opportunities
+Match on SFDC_CAMPAIGN_ID1 or CAMPAIGN_MEMBER_ID1
+This gives you the complete picture: journey path → SQO outcome
+
+Option B — Use the existing engagement data:
+
+Your existing engagement Excel already has SQO counts per asset
+While this doesn't give per-contact SQO attribution, you can estimate journey conversion rates by combining journey paths with asset-level SQO rates
+
+Option C — Upload SQO data separately:
+
+Add an "Upload Outcome Data" option
+Simple CSV: contact_email (hashed), outcome (SQO/Customer/Lost), outcome_date
+Matches to journey_interactions via contact_hash
+
+Recommend starting with Option B (use existing engagement data) and adding Option A or C later for more precise attribution.

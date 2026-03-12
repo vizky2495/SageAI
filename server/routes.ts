@@ -825,6 +825,26 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
       let resonanceAnalysis: any = null;
 
+      let feedbackA: { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number } | null = null;
+      let feedbackB: { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number } | null = null;
+      try {
+        const cidA = contentA.contentId || nameA;
+        const cidB = contentB.contentId || nameB;
+        const [fa, fb] = await Promise.all([
+          storage.getSalesFeedbackStats(cidA),
+          storage.getSalesFeedbackStats(cidB),
+        ]);
+        if (fa.totalCount > 0) feedbackA = fa;
+        if (fb.totalCount > 0) feedbackB = fb;
+      } catch {}
+
+      const buildFeedbackBlock = (fb: typeof feedbackA, name: string) => {
+        if (!fb || fb.totalCount === 0) return "No sales feedback";
+        const topTags = Object.entries(fb.tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, c]) => `${t} (×${c})`).join(", ");
+        const sentLabel = fb.sentimentScore > 0.2 ? "positive" : fb.sentimentScore < -0.2 ? "negative" : "mixed";
+        return `${fb.totalCount} SDR reviews | Sentiment: ${sentLabel} (${fb.sentimentScore}) | Top tags: ${topTags}`;
+      };
+
       const hasAnyContent = !!(aTextForAnalysis || bTextForAnalysis);
 
       if (hasAnyContent) {
@@ -928,6 +948,7 @@ Tagged Stage: ${stageA} | Product: ${productA} | Country/Region: ${countryA || "
 ${aSummary ? `Summary: ${aSummary}` : ""}
 Structure: ${aStructure.wordCount || "?"} words, ${aStructure.pageCount || "?"} pages
 Engagement data: ${engagementBlockA}
+Sales feedback: ${buildFeedbackBlock(feedbackA, shortA)}
 
 ${aTextForAnalysis ? `FULL CONTENT TEXT:\n${aTextForAnalysis.slice(0, 12000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}
 
@@ -938,6 +959,7 @@ Tagged Stage: ${stageB} | Product: ${productB} | Country/Region: ${countryB || "
 ${bSummary ? `Summary: ${bSummary}` : ""}
 Structure: ${bStructure.wordCount || "?"} words, ${bStructure.pageCount || "?"} pages
 Engagement data: ${engagementBlockB}
+Sales feedback: ${buildFeedbackBlock(feedbackB, shortB)}
 
 ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}`,
             }],
@@ -1157,6 +1179,18 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
           aHasContent: !!aTextForAnalysis,
           bHasContent: !!bTextForAnalysis,
         },
+        salesSignal: (feedbackA || feedbackB) ? {
+          a: feedbackA ? {
+            totalCount: feedbackA.totalCount,
+            sentimentScore: feedbackA.sentimentScore,
+            topTags: Object.entries(feedbackA.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+          } : null,
+          b: feedbackB ? {
+            totalCount: feedbackB.totalCount,
+            sentimentScore: feedbackB.sentimentScore,
+            topTags: Object.entries(feedbackB.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+          } : null,
+        } : null,
       });
     } catch (error: any) {
       console.error("Comparison analysis failed:", error);
@@ -1255,6 +1289,25 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const readableContents = enrichedContents.filter(c => c.readable);
       const contentCount = enrichedContents.length;
 
+      const multiFeedbackMap: Record<string, { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }> = {};
+      try {
+        const allCids = enrichedContents.map(c => c.contentId).filter(Boolean);
+        const batchStats = await storage.getSalesFeedbackStatsBatch(allCids);
+        for (const cid of allCids) {
+          if (batchStats[cid] && batchStats[cid].totalCount > 0) {
+            multiFeedbackMap[cid] = await storage.getSalesFeedbackStats(cid);
+          }
+        }
+      } catch {}
+
+      const buildMultiFeedbackBlock = (contentId: string) => {
+        const fb = multiFeedbackMap[contentId];
+        if (!fb || fb.totalCount === 0) return "No sales feedback";
+        const topTags = Object.entries(fb.tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, c]) => `${t} (×${c})`).join(", ");
+        const sentLabel = fb.sentimentScore > 0.2 ? "positive" : fb.sentimentScore < -0.2 ? "negative" : "mixed";
+        return `${fb.totalCount} SDR reviews | Sentiment: ${sentLabel} (${fb.sentimentScore}) | Top tags: ${topTags}`;
+      };
+
       const contentBlocks = enrichedContents.map(c => {
         const engagementBlock = c.hasMetrics
           ? `Pageviews: ${c.metrics.pageviews}, Downloads: ${c.metrics.downloads}, Leads: ${c.metrics.leads}, SQOs: ${c.metrics.sqos}, Avg Time: ${c.metrics.avgTime}s`
@@ -1265,6 +1318,7 @@ Tagged Stage: ${c.stage} | Product: ${c.product} | Country/Region: ${c.country |
 ${c.summary ? `Summary: ${c.summary}` : ""}
 Structure: ${c.structure.wordCount || "?"} words, ${c.structure.pageCount || "?"} pages
 Engagement data: ${engagementBlock}
+Sales feedback: ${buildMultiFeedbackBlock(c.contentId)}
 
 ${c.textForAnalysis ? `FULL CONTENT TEXT:\n${c.textForAnalysis.slice(0, 8000)}` : "NO CONTENT TEXT AVAILABLE — do NOT generate tags, summaries, or analysis for this asset."}`;
       }).join("\n\n---\n\n");
@@ -1401,6 +1455,18 @@ Return ONLY valid JSON matching this schema:
         tags: c.tags,
       }));
 
+      const multiSalesSignal: Record<string, any> = {};
+      for (const c of enrichedContents) {
+        const fb = multiFeedbackMap[c.contentId];
+        if (fb && fb.totalCount > 0) {
+          multiSalesSignal[c.name] = {
+            totalCount: fb.totalCount,
+            sentimentScore: fb.sentimentScore,
+            topTags: Object.entries(fb.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+          };
+        }
+      }
+
       res.json({
         contentCount,
         contentDetails,
@@ -1409,6 +1475,7 @@ Return ONLY valid JSON matching this schema:
         rankings: multiAnalysis.rankings || { overall: [], byMetric: { bestForLeads: null, bestForEngagement: null, bestForConversion: null } },
         verdict: multiAnalysis.verdict || "",
         suggestions: multiAnalysis.suggestions || [],
+        salesSignal: Object.keys(multiSalesSignal).length > 0 ? multiSalesSignal : null,
       });
     } catch (error: any) {
       console.error("Multi-comparison analysis failed:", error);

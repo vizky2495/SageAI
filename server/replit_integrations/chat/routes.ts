@@ -75,6 +75,8 @@ STRICT RULES — follow these on every response:
 
 17. CONCISE. Keep responses focused. No preamble, no filler phrases like "Great question" or "Let me break this down for you." Start with the answer.
 
+18. SALES FEEDBACK. When sales feedback exists for content being discussed, incorporate it naturally. Reference specific tag patterns (e.g., "4 of 6 SDR reviews tagged this as strong hook") and relevant notes. Treat sales feedback as qualitative signal that complements the quantitative metrics. If feedback contradicts the performance metrics (e.g., high pageviews but reps say "no reaction"), flag that discrepancy.
+
 Dataset: ${summary.dataset_info.total_rows} content assets across ${summary.stage_summary.map(s => s.stage).join("/")} stages.`;
 }
 
@@ -118,7 +120,9 @@ Be a strategist, not just a data retriever.
 
 12. **CONTENT COVERAGE AWARENESS** — Many assets in the library only have engagement/performance metrics and don't have their actual content file uploaded yet. When recommending an asset that doesn't have stored content, mention it once naturally: "This is a top performer based on engagement data. The actual content hasn't been uploaded yet, so I can't verify messaging quality or CTA effectiveness. Upload it in the Content Library for a complete assessment." When running gap analysis or evaluations, proactively note: "Of the assets I'm analyzing, X don't have content uploaded — uploading them would enable topic, messaging, and CTA analysis." Do NOT repeat this warning every time — mention it once per conversation when relevant, not on every response.
 
-13. **UPLOAD DATE vs OTHER DATES** — The "Content uploaded to library" date indicates when the content file was uploaded to the CIA platform for analysis. This is NOT the content creation date, NOT the engagement data date, and NOT when performance data was captured. When referencing an asset, you can mention the upload date naturally: "This content was uploaded to the library on March 5, 2026. The engagement data shows 304 pageviews." Never confuse the upload date with content creation date or data freshness. If the content has been updated/re-uploaded, mention the update date.`;
+13. **UPLOAD DATE vs OTHER DATES** — The "Content uploaded to library" date indicates when the content file was uploaded to the CIA platform for analysis. This is NOT the content creation date, NOT the engagement data date, and NOT when performance data was captured. When referencing an asset, you can mention the upload date naturally: "This content was uploaded to the library on March 5, 2026. The engagement data shows 304 pageviews." Never confuse the upload date with content creation date or data freshness. If the content has been updated/re-uploaded, mention the update date.
+
+14. **SALES FEEDBACK** — When sales feedback exists for content being discussed, incorporate it naturally. Reference specific tag patterns (e.g., "4 of 6 SDR reviews tagged this as strong hook") and relevant notes. Treat sales feedback as qualitative signal that complements the quantitative metrics. If feedback contradicts the performance metrics (e.g., high pageviews but reps say "no reaction"), flag that discrepancy.`;
 
 const CAMPAIGN_PLANNER_PROMPT = `You are a senior campaign strategist at a top-tier B2B marketing agency, working with Sage's Content Intelligence Analyst platform. You produce data-driven campaign plans that are presentation-ready for CMO-level stakeholders. You follow industry best practices (HubSpot, Salesforce, Google Ads benchmarks) and ground every recommendation in the data provided.
 
@@ -712,7 +716,7 @@ async function buildContentLibraryContext(): Promise<string | null> {
 
     let ctx = `\n\n=== CONTENT LIBRARY: UPLOADED & ANALYZED CONTENT ===\n`;
     ctx += `Total assets with content uploaded: ${allContent.length}\n`;
-    ctx += `Use this data to answer questions about content quality, topics, CTAs, messaging themes, structure, and keyword tags.\n\n`;
+    ctx += `Use this data to answer questions about content quality, topics, CTAs, messaging themes, structure, keyword tags, and sales feedback.\n\n`;
 
     const analyzed = allContent.filter(c => c.contentSummary || c.extractedTopics?.length || c.extractedCta);
     const displayList = analyzed.length > 0 ? analyzed : allContent;
@@ -720,6 +724,12 @@ async function buildContentLibraryContext(): Promise<string | null> {
     if (capped.length < displayList.length) {
       ctx += `(Showing ${capped.length} of ${displayList.length} assets with uploaded content)\n\n`;
     }
+
+    const allIds = capped.map(c => c.assetId);
+    let feedbackBatch: Record<string, { totalCount: number; sentimentScore: number }> = {};
+    try {
+      feedbackBatch = await storage.getSalesFeedbackStatsBatch(allIds);
+    } catch {}
 
     for (const c of capped) {
       const topicTags = (c.keywordTags.topic_tags || []).join(", ");
@@ -741,6 +751,11 @@ async function buildContentLibraryContext(): Promise<string | null> {
       if (audienceTags) ctx += `Audience Tags: ${audienceTags}\n`;
       if (intentTags) ctx += `Intent Tags: ${intentTags}\n`;
       if (userTags) ctx += `Custom Tags: ${userTags}\n`;
+      const fb = feedbackBatch[c.assetId];
+      if (fb && fb.totalCount > 0) {
+        const sentLabel = fb.sentimentScore > 0.2 ? "positive" : fb.sentimentScore < -0.2 ? "negative" : "mixed";
+        ctx += `Sales Feedback: ${fb.totalCount} SDR reviews, sentiment: ${sentLabel} (${fb.sentimentScore})\n`;
+      }
       ctx += `\n`;
     }
 
@@ -762,6 +777,51 @@ async function buildContentLibraryContext(): Promise<string | null> {
     return ctx;
   } catch (err) {
     console.error("Content library context error:", err);
+    return null;
+  }
+}
+
+async function buildSalesFeedbackContext(contentIds: string[]): Promise<string | null> {
+  try {
+    if (contentIds.length === 0) return null;
+    const batchStats = await storage.getSalesFeedbackStatsBatch(contentIds);
+    if (Object.keys(batchStats).length === 0) return null;
+
+    const parts: string[] = [];
+    for (const cid of contentIds) {
+      const stats = batchStats[cid];
+      if (!stats || stats.totalCount === 0) continue;
+
+      const fullStats = await storage.getSalesFeedbackStats(cid);
+      const topTags = Object.entries(fullStats.tagCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([tag, count]) => `${tag} (×${count})`)
+        .join(", ");
+
+      const entries = await storage.getSalesFeedbackByContentId(cid);
+      const recentNotes = entries
+        .filter(e => e.note)
+        .slice(0, 2)
+        .map(e => {
+          const note = (e.note as string).length > 200 ? (e.note as string).slice(0, 200) + "..." : e.note;
+          return `"${note}" — ${e.author}`;
+        });
+
+      let sentimentLabel = "neutral";
+      if (fullStats.sentimentScore > 0.2) sentimentLabel = "positive";
+      else if (fullStats.sentimentScore < -0.2) sentimentLabel = "negative";
+
+      let block = `Sales Feedback for ${cid}: ${fullStats.totalCount} SDR reviews | Sentiment: ${sentimentLabel} (${fullStats.sentimentScore})`;
+      if (topTags) block += ` | Top tags: ${topTags}`;
+      if (recentNotes.length > 0) block += `\n  Recent notes: ${recentNotes.join(" | ")}`;
+      parts.push(block);
+    }
+
+    if (parts.length === 0) return null;
+    return `\n=== SALES FEEDBACK DATA ===\n${parts.join("\n")}\n`;
+  } catch (err) {
+    console.error("Sales feedback context error:", err);
     return null;
   }
 }
@@ -1094,6 +1154,12 @@ export function registerChatRoutes(app: Express): void {
         ? await buildContentLibraryContext()
         : null;
 
+      const mentionedAssetIds = content.match(/[A-Z]{2}_[A-Z]+_[A-Z0-9_]+/g) || [];
+      const uniqueMentionedIds = [...new Set(mentionedAssetIds)];
+      const salesFeedbackCtx = (agentType === "cia" || agentType === "librarian") && uniqueMentionedIds.length > 0
+        ? await buildSalesFeedbackContext(uniqueMentionedIds)
+        : null;
+
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
         systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
@@ -1102,6 +1168,9 @@ export function registerChatRoutes(app: Express): void {
         }
         if (contentStorageCtx) {
           systemPrompt += contentStorageCtx;
+        }
+        if (salesFeedbackCtx) {
+          systemPrompt += salesFeedbackCtx;
         }
       } else if (agentType === "librarian") {
         const librarianContext = buildPlannerContext(summary);
@@ -1114,6 +1183,9 @@ export function registerChatRoutes(app: Express): void {
         }
         if (contentStorageCtx) {
           systemPrompt += contentStorageCtx;
+        }
+        if (salesFeedbackCtx) {
+          systemPrompt += salesFeedbackCtx;
         }
         if (comparisonContext) {
           await enrichComparisonContentTexts(comparisonContext);

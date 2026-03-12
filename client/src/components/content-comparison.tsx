@@ -43,6 +43,7 @@ import {
   Eye,
   RotateCcw,
   Download,
+  MessageSquare,
 } from "lucide-react";
 
 export interface ComparisonContextContent {
@@ -434,6 +435,7 @@ interface MultiComparisonResult {
   contentNames: string[];
   contentMetrics: { name: string; metrics: MetricsWithData }[];
   contentMetadata: { name: string; stage: string; product: string; type: string; country: string; industry: string }[];
+  salesSignal?: Record<string, { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] }> | null;
 }
 
 function formatNum(n: number): string {
@@ -1757,6 +1759,58 @@ function ComparisonResults({
         )}
       </Card>
 
+      {comparisonData.salesSignal && (comparisonData.salesSignal.a || comparisonData.salesSignal.b) && (
+        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="sales-signal-section">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <MessageSquare className="h-4 w-4 text-primary" />
+            </div>
+            <h3 className="text-sm font-semibold">Sales Signal</h3>
+            <SourceTag type="internal" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[
+              { key: "a" as const, label: shortA, color: BASELINE_COLOR, data: comparisonData.salesSignal.a },
+              { key: "b" as const, label: shortB, color: CHALLENGER_COLOR, data: comparisonData.salesSignal.b },
+            ].map(({ key, label, color, data }) => (
+              <div key={key} className="rounded-xl bg-muted/10 border border-border/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color }}>{label}</span>
+                  {data ? (
+                    <span className="text-[10px] text-muted-foreground">{data.totalCount} SDR review{data.totalCount !== 1 ? "s" : ""}</span>
+                  ) : null}
+                </div>
+                {data ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">Sentiment</span>
+                      <div className="flex items-center gap-1">
+                        <div className={`h-2 w-2 rounded-full ${data.sentimentScore > 0.2 ? "bg-emerald-400" : data.sentimentScore < -0.2 ? "bg-red-400" : "bg-amber-400"}`} />
+                        <span className="text-xs font-medium">
+                          {data.sentimentScore > 0.2 ? "Positive" : data.sentimentScore < -0.2 ? "Negative" : "Mixed"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">({data.sentimentScore > 0 ? "+" : ""}{data.sentimentScore.toFixed(2)})</span>
+                      </div>
+                    </div>
+                    {data.topTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {data.topTags.map((t, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
+                            {t.tag} <span className="text-muted-foreground">x{t.count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground italic">No sales feedback</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {perfDisplay === "table" && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="performance-comparison">
           <div className="flex items-center gap-2 mb-3">
@@ -1901,6 +1955,10 @@ interface FullComparisonResult {
   duplicateMessage?: string;
   metadataIssues?: { asset: string; field: string; tagged: string; issue: string }[];
   metadata: ComparisonMetadata;
+  salesSignal?: {
+    a: { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] } | null;
+    b: { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] } | null;
+  } | null;
 }
 
 function ReadinessGauge({ score, size = "lg" }: { score: number; size?: "sm" | "lg" }) {
@@ -2450,6 +2508,46 @@ function MultiComparisonResults({
           </div>
         )}
       </Card>
+
+      {data.salesSignal && Object.keys(data.salesSignal).length > 0 && (
+        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="multi-sales-signal">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <MessageSquare className="h-4 w-4 text-primary" />
+            </div>
+            <h3 className="text-sm font-semibold">Sales Signal</h3>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary uppercase">Internal Data</span>
+          </div>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(data.salesSignal).length, 3)}, 1fr)` }}>
+            {Object.entries(data.salesSignal).map(([name, fb], i) => (
+              <div key={name} className="rounded-xl bg-muted/10 border border-border/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary truncate max-w-[120px]">{name}</span>
+                  <span className="text-[10px] text-muted-foreground">{fb.totalCount} review{fb.totalCount !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Sentiment</span>
+                  <div className="flex items-center gap-1">
+                    <div className={`h-2 w-2 rounded-full ${fb.sentimentScore > 0.2 ? "bg-emerald-400" : fb.sentimentScore < -0.2 ? "bg-red-400" : "bg-amber-400"}`} />
+                    <span className="text-xs font-medium">
+                      {fb.sentimentScore > 0.2 ? "Positive" : fb.sentimentScore < -0.2 ? "Negative" : "Mixed"}
+                    </span>
+                  </div>
+                </div>
+                {fb.topTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {fb.topTags.map((t, j) => (
+                      <span key={j} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {t.tag} <span className="text-muted-foreground">x{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {data.contentMetrics.some(cm => cm.metrics.hasData) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur">
@@ -3083,6 +3181,7 @@ export default function ContentComparison() {
             country: d.country || "",
             industry: d.industry || "",
           })),
+          salesSignal: raw.salesSignal || null,
         };
         setMultiResult(mapped);
         setReanalysisOverlay(false);
