@@ -256,3 +256,60 @@ export const insertComparisonHistorySchema = createInsertSchema(comparisonHistor
 });
 export type InsertComparisonHistory = z.infer<typeof insertComparisonHistorySchema>;
 export type ComparisonHistory = typeof comparisonHistory.$inferSelect;
+
+export const SALES_FEEDBACK_TAGS = {
+  prospect_reaction: [
+    "Prospect engaged",
+    "Prospect shared internally",
+    "Opened conversation",
+    "No reaction",
+    "Negative reaction",
+  ],
+  content_quality: [
+    "Strong hook",
+    "Outdated",
+    "Too long",
+    "Too technical",
+    "Good objection handler",
+    "Missing competitor context",
+  ],
+} as const;
+
+export const POSITIVE_TAGS = new Set([
+  "Prospect engaged",
+  "Prospect shared internally",
+  "Opened conversation",
+  "Strong hook",
+  "Good objection handler",
+]);
+
+export const NEGATIVE_TAGS = new Set([
+  "No reaction",
+  "Negative reaction",
+  "Outdated",
+  "Too long",
+  "Too technical",
+  "Missing competitor context",
+]);
+
+export const ALL_FEEDBACK_TAGS = [
+  ...SALES_FEEDBACK_TAGS.prospect_reaction,
+  ...SALES_FEEDBACK_TAGS.content_quality,
+] as const;
+
+export const salesFeedback = pgTable("sales_feedback", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  contentId: text("content_id").notNull(),
+  author: text("author").notNull(),
+  tags: jsonb("tags").$type<string[]>().notNull(),
+  note: text("note"),
+  salesforceRef: text("salesforce_ref"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertSalesFeedbackSchema = createInsertSchema(salesFeedback).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSalesFeedback = z.infer<typeof insertSalesFeedbackSchema>;
+export type SalesFeedback = typeof salesFeedback.$inferSelect;

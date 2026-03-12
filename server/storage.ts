@@ -17,6 +17,11 @@ import {
   type ComparisonHistory,
   type InsertComparisonHistory,
   comparisonHistory,
+  type SalesFeedback,
+  type InsertSalesFeedback,
+  salesFeedback,
+  POSITIVE_TAGS,
+  NEGATIVE_TAGS,
   type StructuredKeywordTags,
   normalizeKeywordTags,
 } from "@shared/schema";
@@ -74,6 +79,9 @@ export interface IStorage {
   getComparisonHistoryById(id: number): Promise<ComparisonHistory | null>;
   updateComparisonHistory(id: number, data: Partial<{ pdfFilePath: string; campaignPlanId: number; status: string }>): Promise<ComparisonHistory | null>;
   getComparisonCountsForAssets(assetIds: string[]): Promise<Record<string, number>>;
+  createSalesFeedback(data: InsertSalesFeedback): Promise<SalesFeedback>;
+  getSalesFeedbackByContentId(contentId: string): Promise<SalesFeedback[]>;
+  getSalesFeedbackStats(contentId: string): Promise<{ totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -543,6 +551,45 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result;
+  }
+  async createSalesFeedback(data: InsertSalesFeedback): Promise<SalesFeedback> {
+    const [row] = await db.insert(salesFeedback).values(data).returning();
+    return row;
+  }
+
+  async getSalesFeedbackByContentId(contentId: string): Promise<SalesFeedback[]> {
+    return db
+      .select()
+      .from(salesFeedback)
+      .where(eq(salesFeedback.contentId, contentId))
+      .orderBy(desc(salesFeedback.createdAt));
+  }
+
+  async getSalesFeedbackStats(contentId: string): Promise<{ totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }> {
+    const rows = await db
+      .select()
+      .from(salesFeedback)
+      .where(eq(salesFeedback.contentId, contentId));
+
+    const tagCounts: Record<string, number> = {};
+    let positiveCount = 0;
+    let negativeCount = 0;
+
+    for (const row of rows) {
+      const tags = row.tags as string[];
+      for (const tag of tags) {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        if (POSITIVE_TAGS.has(tag)) positiveCount++;
+        if (NEGATIVE_TAGS.has(tag)) negativeCount++;
+      }
+    }
+
+    const totalTagged = positiveCount + negativeCount;
+    const sentimentScore = totalTagged > 0
+      ? Math.round(((positiveCount - negativeCount) / totalTagged) * 100) / 100
+      : 0;
+
+    return { totalCount: rows.length, tagCounts, sentimentScore };
   }
 }
 

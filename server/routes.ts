@@ -27,6 +27,60 @@ export async function registerRoutes(
 
   registerContentRoutes(app);
 
+  const feedbackTagsSchema = z.object({
+    contentId: z.string().min(1),
+    author: z.string().min(1),
+    tags: z.array(z.string()).min(1),
+    note: z.string().optional().nullable(),
+    salesforceRef: z.string().optional().nullable(),
+  });
+
+  app.post("/api/sales-feedback", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = feedbackTagsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid feedback data", errors: parsed.error.flatten().fieldErrors });
+      }
+      const { contentId, author, tags, note, salesforceRef } = parsed.data;
+      const { ALL_FEEDBACK_TAGS } = await import("@shared/schema");
+      const allValid = tags.every((t: string) => ALL_FEEDBACK_TAGS.includes(t as any));
+      if (!allValid) {
+        return res.status(400).json({ message: "One or more tags are not in the predefined list" });
+      }
+      const entry = await storage.createSalesFeedback({
+        contentId,
+        author,
+        tags,
+        note: note || null,
+        salesforceRef: salesforceRef || null,
+      });
+      res.status(201).json(entry);
+    } catch (err: any) {
+      console.error("Sales feedback create error:", err);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  app.get("/api/sales-feedback/:contentId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const entries = await storage.getSalesFeedbackByContentId(req.params.contentId);
+      res.json(entries);
+    } catch (err: any) {
+      console.error("Sales feedback fetch error:", err);
+      res.status(500).json({ message: "Failed to fetch feedback" });
+    }
+  });
+
+  app.get("/api/sales-feedback/:contentId/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getSalesFeedbackStats(req.params.contentId);
+      res.json(stats);
+    } catch (err: any) {
+      console.error("Sales feedback stats error:", err);
+      res.status(500).json({ message: "Failed to fetch feedback stats" });
+    }
+  });
+
   app.post("/api/auth/login", loginLimiter, async (req: Request, res: Response) => {
     try {
       const { displayName, password, role, firstName, lastName } = req.body as { displayName?: string; password?: string; role?: string; firstName?: string; lastName?: string };
