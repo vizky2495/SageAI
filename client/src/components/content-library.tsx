@@ -1692,158 +1692,178 @@ export default function ContentLibrary() {
     <ContentStatusContext.Provider value={contentStatusCtx}>
     <CompareContext.Provider value={compareCtx}>
       <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
-        <Card className="sticky top-14 z-10 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search by Content ID…"
-                className="h-9 rounded-xl pl-9 pr-9"
-                data-testid="input-content-search"
-              />
-              {search && (
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setSearch("");
-                    setDebouncedSearch("");
-                  }}
-                  data-testid="button-clear-content-search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <Button
-              variant={showFilters || activeFilterCount > 0 ? "default" : "outline"}
-              size="sm"
-              className={`h-9 gap-1.5 rounded-xl text-xs ${activeFilterCount > 0 ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
-              onClick={() => setShowFilters((p) => !p)}
-              data-testid="button-toggle-filters"
-            >
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge className="ml-0.5 h-4 min-w-4 rounded-full bg-white/20 px-1 text-[10px] text-white" data-testid="badge-active-filters">
-                  {activeFilterCount}
-                </Badge>
-              )}
-              <ChevronDown className={`h-3 w-3 transition-transform ${showFilters ? "rotate-180" : ""}`} />
-            </Button>
-            {activeFilterCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 text-xs text-muted-foreground hover:text-foreground"
-                onClick={clearFilters}
-                data-testid="button-clear-filters"
-              >
-                Clear all
-              </Button>
-            )}
-            {compareMode && (
-              <div className="flex items-center gap-2 ml-auto">
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-                  <GitCompare className="h-3.5 w-3.5" />
-                  <span data-testid="text-compare-mode">Select a second card to compare</span>
+        <div className="sticky top-14 z-10 space-y-0" data-testid="filter-toolbar">
+          <Card className="rounded-2xl border border-border/60 bg-card/90 shadow-md backdrop-blur-xl overflow-hidden">
+            <div className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative flex-1 min-w-[180px] max-w-md">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                  <Input
+                    value={search}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder="Search by Content ID, name, or keyword…"
+                    className="h-9 rounded-xl border-border/40 bg-muted/30 pl-9 pr-9 text-sm placeholder:text-muted-foreground/40 focus:bg-background focus:border-[#00D657]/40 focus:ring-1 focus:ring-[#00D657]/20 transition-all"
+                    data-testid="input-content-search"
+                  />
+                  {search && (
+                    <button
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors"
+                      onClick={() => {
+                        setSearch("");
+                        setDebouncedSearch("");
+                      }}
+                      data-testid="button-clear-content-search"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 rounded-lg text-xs"
-                  onClick={cancelCompare}
-                  data-testid="button-cancel-compare"
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-          {showFilters && (
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5" data-testid="filter-panel">
-              <Select value={filters.product} onValueChange={(v) => setFilters((f) => ({ ...f, product: v === "__all__" ? "" : v }))}>
-                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-product">
-                  <SelectValue placeholder="Product" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Products</SelectItem>
-                  {filterOptions?.products.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filters.campaign} onValueChange={(v) => setFilters((f) => ({ ...f, campaign: v === "__all__" ? "" : v }))}>
-                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-campaign">
-                  <SelectValue placeholder="Campaign" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Campaigns</SelectItem>
-                  {filterOptions?.campaigns.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filters.channel} onValueChange={(v) => setFilters((f) => ({ ...f, channel: v === "__all__" ? "" : v }))}>
-                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-channel">
-                  <SelectValue placeholder="Channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Channels</SelectItem>
-                  {filterOptions?.channels.map((ch) => (
-                    <SelectItem key={ch} value={ch}>{ch}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filters.industry} onValueChange={(v) => setFilters((f) => ({ ...f, industry: v === "__all__" ? "" : v }))}>
-                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-industry">
-                  <SelectValue placeholder="Industry" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Industries</SelectItem>
-                  {filterOptions?.industries.map((ind) => (
-                    <SelectItem key={ind} value={ind}>{ind}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filters.contentAvailability} onValueChange={(v) => setFilters((f) => ({ ...f, contentAvailability: v === "__all__" ? "" : v }))}>
-                <SelectTrigger className="h-9 rounded-xl text-xs" data-testid="select-filter-content">
-                  <SelectValue placeholder="Content status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All assets</SelectItem>
-                  <SelectItem value="with_content">With content</SelectItem>
-                  <SelectItem value="without_content">Without content</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </Card>
 
-        {coverageData && (Object.keys(coverageData).length > 0) && (
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground px-1" data-testid="text-coverage-summary">
-            <span className="font-medium text-foreground/70">Content uploaded:</span>
-            {(["TOFU", "MOFU", "BOFU"] as const).map((s) => {
-              const c = coverageData[s];
-              if (!c) return null;
-              return (
-                <span key={s} className="flex items-center gap-1.5">
-                  <span className="font-medium">{s}</span>
-                  <span>{c.withContent} of {c.total}</span>
-                  {c.total > 0 && (
-                    <span className="inline-block h-2 w-14 rounded-full bg-muted overflow-hidden">
-                      <span
-                        className="block h-full rounded-full bg-emerald-500"
-                        style={{ width: `${Math.round((c.withContent / c.total) * 100)}%` }}
-                      />
+                <div className="h-5 w-px bg-border/40 hidden sm:block" />
+
+                <Button
+                  variant={showFilters || activeFilterCount > 0 ? "default" : "outline"}
+                  size="sm"
+                  className={`h-9 gap-1.5 rounded-xl text-xs font-medium transition-all ${
+                    activeFilterCount > 0
+                      ? "bg-[#00D657] hover:bg-[#00C04E] text-black shadow-[0_0_12px_rgba(0,214,87,0.25)]"
+                      : "border-border/40 hover:border-border/60 hover:bg-muted/40"
+                  }`}
+                  onClick={() => setShowFilters((p) => !p)}
+                  data-testid="button-toggle-filters"
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="ml-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-black/20 px-1 text-[10px] font-bold leading-none" data-testid="badge-active-filters">
+                      {activeFilterCount}
                     </span>
                   )}
-                </span>
-              );
-            })}
-          </div>
-        )}
+                  <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${showFilters ? "rotate-180" : ""}`} />
+                </Button>
+                {activeFilterCount > 0 && (
+                  <button
+                    className="text-[11px] text-muted-foreground hover:text-[#00D657] transition-colors font-medium"
+                    onClick={clearFilters}
+                    data-testid="button-clear-filters"
+                    aria-label="Clear all filters"
+                  >
+                    Clear all
+                  </button>
+                )}
+
+                {coverageData && Object.keys(coverageData).length > 0 && (
+                  <>
+                    <div className="h-5 w-px bg-border/40 hidden sm:block" />
+                    <div className="flex items-center gap-2 sm:gap-3" data-testid="text-coverage-summary">
+                      {(["TOFU", "MOFU", "BOFU"] as const).map((s) => {
+                        const c = coverageData[s];
+                        if (!c) return null;
+                        const pct = c.total > 0 ? Math.round((c.withContent / c.total) * 100) : 0;
+                        const stageAccent = s === "TOFU" ? "#00D657" : s === "MOFU" ? "#67E8F9" : "#A78BFA";
+                        return (
+                          <div key={s} className="flex items-center gap-1 sm:gap-1.5 group" title={`${c.withContent} of ${c.total} assets have uploaded content`}>
+                            <span className="text-[10px] font-bold tracking-wide" style={{ color: stageAccent }}>{s}</span>
+                            <div className="w-8 sm:w-12 h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: stageAccent }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground tabular-nums">{c.withContent}/{c.total}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {compareMode && (
+                  <>
+                    <div className="h-5 w-px bg-border/40" />
+                    <div className="flex items-center gap-2 ml-auto">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#00D657]/10 border border-[#00D657]/20">
+                        <GitCompare className="h-3.5 w-3.5 text-[#00D657]" />
+                        <span className="text-xs text-[#00D657] font-medium" data-testid="text-compare-mode">Select a second card to compare</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 rounded-lg text-xs border-border/40"
+                        onClick={cancelCompare}
+                        data-testid="button-cancel-compare"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {showFilters && (
+              <div className="border-t border-border/30 bg-muted/10 px-4 py-3" data-testid="filter-panel">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                  <Select value={filters.product} onValueChange={(v) => setFilters((f) => ({ ...f, product: v === "__all__" ? "" : v }))}>
+                    <SelectTrigger className="h-8 rounded-lg border-border/40 bg-background/60 text-xs hover:bg-background transition-colors" data-testid="select-filter-product">
+                      <SelectValue placeholder="Product" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Products</SelectItem>
+                      {filterOptions?.products.map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filters.campaign} onValueChange={(v) => setFilters((f) => ({ ...f, campaign: v === "__all__" ? "" : v }))}>
+                    <SelectTrigger className="h-8 rounded-lg border-border/40 bg-background/60 text-xs hover:bg-background transition-colors" data-testid="select-filter-campaign">
+                      <SelectValue placeholder="Campaign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Campaigns</SelectItem>
+                      {filterOptions?.campaigns.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filters.channel} onValueChange={(v) => setFilters((f) => ({ ...f, channel: v === "__all__" ? "" : v }))}>
+                    <SelectTrigger className="h-8 rounded-lg border-border/40 bg-background/60 text-xs hover:bg-background transition-colors" data-testid="select-filter-channel">
+                      <SelectValue placeholder="Channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Channels</SelectItem>
+                      {filterOptions?.channels.map((ch) => (
+                        <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filters.industry} onValueChange={(v) => setFilters((f) => ({ ...f, industry: v === "__all__" ? "" : v }))}>
+                    <SelectTrigger className="h-8 rounded-lg border-border/40 bg-background/60 text-xs hover:bg-background transition-colors" data-testid="select-filter-industry">
+                      <SelectValue placeholder="Industry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Industries</SelectItem>
+                      {filterOptions?.industries.map((ind) => (
+                        <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filters.contentAvailability} onValueChange={(v) => setFilters((f) => ({ ...f, contentAvailability: v === "__all__" ? "" : v }))}>
+                    <SelectTrigger className="h-8 rounded-lg border-border/40 bg-background/60 text-xs hover:bg-background transition-colors" data-testid="select-filter-content">
+                      <SelectValue placeholder="Content status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All assets</SelectItem>
+                      <SelectItem value="with_content">With content</SelectItem>
+                      <SelectItem value="without_content">Without content</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
 
         {tagSummary && Object.keys(tagSummary.topic_tags).length + Object.keys(tagSummary.audience_tags).length + Object.keys(tagSummary.intent_tags).length + Object.keys(tagSummary.user_added_tags).length > 0 && (
           <Card className="rounded-2xl border bg-card/80 shadow-sm overflow-hidden" data-testid="tag-filter-bar">
