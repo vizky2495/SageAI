@@ -20,13 +20,28 @@ import {
   type SalesFeedback,
   type InsertSalesFeedback,
   salesFeedback,
+  type JourneyInteraction,
+  type InsertJourneyInteraction,
+  journeyInteractions,
+  type ContactJourney,
+  type InsertContactJourney,
+  contactJourneys,
+  type JourneyPattern,
+  type InsertJourneyPattern,
+  journeyPatterns,
+  type StageTransition,
+  type InsertStageTransition,
+  stageTransitions,
+  type AssetJourneyStat,
+  type InsertAssetJourneyStat,
+  assetJourneyStats,
   POSITIVE_TAGS,
   NEGATIVE_TAGS,
   type StructuredKeywordTags,
   normalizeKeywordTags,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, and, or, sql, count, inArray, isNull, ne } from "drizzle-orm";
+import { eq, desc, ilike, and, or, sql, count, inArray, isNull, ne, type SQL } from "drizzle-orm";
 
 export interface IStorage {
   clearAssets(): Promise<void>;
@@ -84,6 +99,26 @@ export interface IStorage {
   getSalesFeedbackStats(contentId: string): Promise<{ totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }>;
   getSalesFeedbackStatsBatch(contentIds: string[]): Promise<Record<string, { totalCount: number; sentimentScore: number }>>;
   getRecentSalesFeedback(limit?: number): Promise<SalesFeedback[]>;
+  bulkInsertJourneyInteractions(interactions: InsertJourneyInteraction[]): Promise<void>;
+  getJourneyInteractionsByBatch(batchId: string): Promise<JourneyInteraction[]>;
+  getJourneyUploadBatches(): Promise<Array<{ batchId: string; uploadDate: Date; interactionCount: number }>>;
+  countJourneyInteractions(): Promise<number>;
+  deleteJourneyInteractionsByBatch(batchId: string): Promise<number>;
+  getJourneyInteractionsByContacts(contactHashes: string[]): Promise<JourneyInteraction[]>;
+  getDistinctContactHashes(): Promise<string[]>;
+  clearContactJourneys(): Promise<void>;
+  bulkInsertContactJourneys(journeys: InsertContactJourney[]): Promise<void>;
+  getContactJourneys(opts?: { product?: string; country?: string; outcome?: string; limit?: number; offset?: number }): Promise<{ data: ContactJourney[]; total: number }>;
+  clearJourneyPatterns(): Promise<void>;
+  bulkInsertJourneyPatterns(patterns: InsertJourneyPattern[]): Promise<void>;
+  getJourneyPatterns(opts?: { limit?: number; offset?: number; sortBy?: string }): Promise<{ data: JourneyPattern[]; total: number }>;
+  clearStageTransitions(): Promise<void>;
+  bulkInsertStageTransitions(transitions: InsertStageTransition[]): Promise<void>;
+  getStageTransitions(): Promise<StageTransition[]>;
+  clearAssetJourneyStats(): Promise<void>;
+  bulkInsertAssetJourneyStats(stats: InsertAssetJourneyStat[]): Promise<void>;
+  getAssetJourneyStats(assetId?: string): Promise<AssetJourneyStat[]>;
+  getJourneySummaryStatus(): Promise<{ contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -631,6 +666,145 @@ export class DatabaseStorage implements IStorage {
       .from(salesFeedback)
       .orderBy(desc(salesFeedback.createdAt))
       .limit(limit);
+  }
+
+  async bulkInsertJourneyInteractions(interactions: InsertJourneyInteraction[]): Promise<void> {
+    if (interactions.length === 0) return;
+    const batchSize = 2000;
+    for (let i = 0; i < interactions.length; i += batchSize) {
+      await db.insert(journeyInteractions).values(interactions.slice(i, i + batchSize));
+    }
+  }
+
+  async getJourneyInteractionsByBatch(batchId: string): Promise<JourneyInteraction[]> {
+    return db.select().from(journeyInteractions).where(eq(journeyInteractions.uploadBatchId, batchId)).orderBy(desc(journeyInteractions.interactionTimestamp));
+  }
+
+  async getJourneyUploadBatches(): Promise<Array<{ batchId: string; uploadDate: Date; interactionCount: number }>> {
+    const rows = await db
+      .select({
+        batchId: journeyInteractions.uploadBatchId,
+        uploadDate: sql<Date>`MIN(${journeyInteractions.uploadDate})`,
+        interactionCount: count(),
+      })
+      .from(journeyInteractions)
+      .groupBy(journeyInteractions.uploadBatchId)
+      .orderBy(desc(sql`MIN(${journeyInteractions.uploadDate})`));
+    return rows.map(r => ({
+      batchId: r.batchId,
+      uploadDate: r.uploadDate,
+      interactionCount: r.interactionCount,
+    }));
+  }
+
+  async countJourneyInteractions(): Promise<number> {
+    const [result] = await db.select({ total: count() }).from(journeyInteractions);
+    return result.total;
+  }
+
+  async deleteJourneyInteractionsByBatch(batchId: string): Promise<number> {
+    const rows = await db.delete(journeyInteractions).where(eq(journeyInteractions.uploadBatchId, batchId)).returning({ id: journeyInteractions.interactionId });
+    return rows.length;
+  }
+
+  async getJourneyInteractionsByContacts(contactHashes: string[]): Promise<JourneyInteraction[]> {
+    if (contactHashes.length === 0) return [];
+    return db.select().from(journeyInteractions)
+      .where(inArray(journeyInteractions.contactHash, contactHashes))
+      .orderBy(journeyInteractions.contactHash, journeyInteractions.interactionTimestamp);
+  }
+
+  async getDistinctContactHashes(): Promise<string[]> {
+    const rows = await db.selectDistinct({ contactHash: journeyInteractions.contactHash }).from(journeyInteractions);
+    return rows.map(r => r.contactHash);
+  }
+
+  async clearContactJourneys(): Promise<void> {
+    await db.delete(contactJourneys);
+  }
+
+  async bulkInsertContactJourneys(journeys: InsertContactJourney[]): Promise<void> {
+    if (journeys.length === 0) return;
+    const batchSize = 500;
+    for (let i = 0; i < journeys.length; i += batchSize) {
+      await db.insert(contactJourneys).values(journeys.slice(i, i + batchSize));
+    }
+  }
+
+  async getContactJourneys(opts?: { product?: string; country?: string; outcome?: string; limit?: number; offset?: number }): Promise<{ data: ContactJourney[]; total: number }> {
+    const conditions: SQL[] = [];
+    if (opts?.product) conditions.push(eq(contactJourneys.product, opts.product));
+    if (opts?.country) conditions.push(eq(contactJourneys.country, opts.country));
+    if (opts?.outcome) conditions.push(eq(contactJourneys.outcome, opts.outcome));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const [{ total }] = await db.select({ total: count() }).from(contactJourneys).where(where);
+    const data = await db.select().from(contactJourneys).where(where)
+      .orderBy(desc(contactJourneys.totalInteractions))
+      .limit(opts?.limit ?? 50).offset(opts?.offset ?? 0);
+    return { data, total };
+  }
+
+  async clearJourneyPatterns(): Promise<void> {
+    await db.delete(journeyPatterns);
+  }
+
+  async bulkInsertJourneyPatterns(patterns: InsertJourneyPattern[]): Promise<void> {
+    if (patterns.length === 0) return;
+    const batchSize = 500;
+    for (let i = 0; i < patterns.length; i += batchSize) {
+      await db.insert(journeyPatterns).values(patterns.slice(i, i + batchSize));
+    }
+  }
+
+  async getJourneyPatterns(opts?: { limit?: number; offset?: number; sortBy?: string }): Promise<{ data: JourneyPattern[]; total: number }> {
+    const [{ total }] = await db.select({ total: count() }).from(journeyPatterns);
+    const orderCol = opts?.sortBy === "conversion_rate" ? desc(journeyPatterns.conversionRate) : desc(journeyPatterns.contactCount);
+    const data = await db.select().from(journeyPatterns)
+      .orderBy(orderCol)
+      .limit(opts?.limit ?? 50).offset(opts?.offset ?? 0);
+    return { data, total };
+  }
+
+  async clearStageTransitions(): Promise<void> {
+    await db.delete(stageTransitions);
+  }
+
+  async bulkInsertStageTransitions(transitions: InsertStageTransition[]): Promise<void> {
+    if (transitions.length === 0) return;
+    await db.insert(stageTransitions).values(transitions);
+  }
+
+  async getStageTransitions(): Promise<StageTransition[]> {
+    return db.select().from(stageTransitions).orderBy(desc(stageTransitions.contactCount));
+  }
+
+  async clearAssetJourneyStats(): Promise<void> {
+    await db.delete(assetJourneyStats);
+  }
+
+  async bulkInsertAssetJourneyStats(stats: InsertAssetJourneyStat[]): Promise<void> {
+    if (stats.length === 0) return;
+    const batchSize = 500;
+    for (let i = 0; i < stats.length; i += batchSize) {
+      await db.insert(assetJourneyStats).values(stats.slice(i, i + batchSize));
+    }
+  }
+
+  async getAssetJourneyStats(assetId?: string): Promise<AssetJourneyStat[]> {
+    if (assetId) {
+      return db.select().from(assetJourneyStats).where(eq(assetJourneyStats.assetId, assetId));
+    }
+    return db.select().from(assetJourneyStats).orderBy(desc(assetJourneyStats.totalJourneyAppearances)).limit(100);
+  }
+
+  async getJourneySummaryStatus(): Promise<{ contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number }> {
+    const [[cj], [jp], [st], [aj]] = await Promise.all([
+      db.select({ total: count() }).from(contactJourneys),
+      db.select({ total: count() }).from(journeyPatterns),
+      db.select({ total: count() }).from(stageTransitions),
+      db.select({ total: count() }).from(assetJourneyStats),
+    ]);
+    return { contactJourneyCount: cj.total, patternCount: jp.total, transitionCount: st.total, assetStatCount: aj.total };
   }
 }
 

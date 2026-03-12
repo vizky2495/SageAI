@@ -257,6 +257,107 @@ export const insertComparisonHistorySchema = createInsertSchema(comparisonHistor
 export type InsertComparisonHistory = z.infer<typeof insertComparisonHistorySchema>;
 export type ComparisonHistory = typeof comparisonHistory.$inferSelect;
 
+export const journeyInteractions = pgTable("journey_interactions", {
+  interactionId: varchar("interaction_id").primaryKey().default(sql`gen_random_uuid()`),
+  contactHash: text("contact_hash").notNull(),
+  assetId: text("asset_id"),
+  interactionType: text("interaction_type"),
+  interactionTimestamp: timestamp("interaction_timestamp"),
+  funnelStage: text("funnel_stage"),
+  product: text("product"),
+  country: text("country"),
+  channel: text("channel"),
+  source: text("source"),
+  campaignName: text("campaign_name"),
+  sfdcCampaignId: text("sfdc_campaign_id"),
+  leadStatus: text("lead_status"),
+  formName: text("form_name"),
+  formScore: real("form_score"),
+  pageUrl: text("page_url"),
+  referrer: text("referrer"),
+  uploadBatchId: text("upload_batch_id").notNull(),
+  uploadDate: timestamp("upload_date").notNull().defaultNow(),
+});
+
+export const insertJourneyInteractionSchema = createInsertSchema(journeyInteractions).omit({
+  interactionId: true,
+  uploadDate: true,
+});
+export type InsertJourneyInteraction = z.infer<typeof insertJourneyInteractionSchema>;
+export type JourneyInteraction = typeof journeyInteractions.$inferSelect;
+
+export const contactJourneys = pgTable("contact_journeys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactHash: text("contact_hash").notNull().unique(),
+  journeySequence: jsonb("journey_sequence").$type<string[]>().notNull(),
+  journeyStages: jsonb("journey_stages").$type<string[]>().notNull(),
+  journeyPattern: text("journey_pattern").notNull(),
+  firstTouchDate: timestamp("first_touch_date"),
+  lastTouchDate: timestamp("last_touch_date"),
+  journeyDurationDays: integer("journey_duration_days"),
+  totalInteractions: integer("total_interactions").notNull().default(0),
+  uniqueAssetsTouched: integer("unique_assets_touched").notNull().default(0),
+  channelsUsed: jsonb("channels_used").$type<string[]>(),
+  outcome: text("outcome").default("unknown"),
+  outcomeDate: timestamp("outcome_date"),
+  product: text("product"),
+  country: text("country"),
+  industry: text("industry"),
+  uploadBatchId: text("upload_batch_id"),
+});
+
+export const insertContactJourneySchema = createInsertSchema(contactJourneys).omit({ id: true });
+export type InsertContactJourney = z.infer<typeof insertContactJourneySchema>;
+export type ContactJourney = typeof contactJourneys.$inferSelect;
+
+export const journeyPatterns = pgTable("journey_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  patternString: text("pattern_string").notNull(),
+  patternStages: text("pattern_stages").notNull(),
+  contactCount: integer("contact_count").notNull().default(0),
+  sqoCount: integer("sqo_count").notNull().default(0),
+  conversionRate: real("conversion_rate").notNull().default(0),
+  avgDurationDays: real("avg_duration_days"),
+  topEntryAsset: text("top_entry_asset"),
+  topExitAsset: text("top_exit_asset"),
+  channels: jsonb("channels").$type<string[]>(),
+});
+
+export const insertJourneyPatternSchema = createInsertSchema(journeyPatterns).omit({ id: true });
+export type InsertJourneyPattern = z.infer<typeof insertJourneyPatternSchema>;
+export type JourneyPattern = typeof journeyPatterns.$inferSelect;
+
+export const stageTransitions = pgTable("stage_transitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromStage: text("from_stage").notNull(),
+  toStage: text("to_stage").notNull(),
+  fromAssetId: text("from_asset_id"),
+  toAssetId: text("to_asset_id"),
+  contactCount: integer("contact_count").notNull().default(0),
+  avgDaysBetween: real("avg_days_between"),
+  conversionRateAtNextStage: real("conversion_rate_at_next_stage"),
+});
+
+export const insertStageTransitionSchema = createInsertSchema(stageTransitions).omit({ id: true });
+export type InsertStageTransition = z.infer<typeof insertStageTransitionSchema>;
+export type StageTransition = typeof stageTransitions.$inferSelect;
+
+export const assetJourneyStats = pgTable("asset_journey_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetId: text("asset_id").notNull().unique(),
+  totalJourneyAppearances: integer("total_journey_appearances").notNull().default(0),
+  avgPositionInJourney: real("avg_position_in_journey"),
+  mostCommonNextAsset: text("most_common_next_asset"),
+  mostCommonPrevAsset: text("most_common_prev_asset"),
+  journeyConversionRate: real("journey_conversion_rate"),
+  avgJourneyLengthWhenIncluded: real("avg_journey_length_when_included"),
+  dropOffRate: real("drop_off_rate"),
+});
+
+export const insertAssetJourneyStatSchema = createInsertSchema(assetJourneyStats).omit({ id: true });
+export type InsertAssetJourneyStat = z.infer<typeof insertAssetJourneyStatSchema>;
+export type AssetJourneyStat = typeof assetJourneyStats.$inferSelect;
+
 export const SALES_FEEDBACK_TAGS = {
   prospect_reaction: [
     "Prospect engaged",

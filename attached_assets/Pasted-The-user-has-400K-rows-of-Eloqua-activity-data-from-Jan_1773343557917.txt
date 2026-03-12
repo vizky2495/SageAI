@@ -1,0 +1,211 @@
+The user has 400K+ rows of Eloqua activity data from January 2026 and increasing every day. The journey mapping feature needs to handle this volume efficiently without slowing down the app or hitting AI context limits. Build the data processing and query layer to handle 400K+ rows and scale to 1M+ rows over time.
+
+PART 1: DATA PROCESSING STRATEGY — PROCESS ONCE, QUERY FAST
+Do NOT process raw interaction data every time the user views the journey map. Instead, use a two-layer approach:
+Layer 1 — Raw interactions (stored once at upload):
+The journey_interactions table stores every row from the Eloqua file. 400K rows. This is the source of truth. Written once during upload, queried only for deep-dive analysis.
+Layer 2 — Pre-computed journey summaries (built after upload):
+After the raw data is uploaded and cleaned, run a batch processing job that:
+
+Groups all interactions by contact_hash
+Sorts each contact's interactions by timestamp
+Builds the journey sequence for each contact
+Identifies the journey pattern (e.g., "TOFU PDF → MOFU Webinar → BOFU Demo")
+Determines the outcome (SQO, lead, dropped off)
+Stores the pre-computed results in summary tables
+
+The UI reads from the summary tables, not from the raw 400K rows. This makes the dashboards and Sankey diagram fast.
+
+PART 2: PRE-COMPUTED SUMMARY TABLES
+contact_journeys (one row per contact):
+- contact_hash
+- journey_sequence (JSON array of asset_ids in order)
+- journey_stages (JSON array of funnel stages: ["TOFU", "MOFU", "BOFU"])
+- journey_pattern (string: "TOFU→MOFU→BOFU" or "TOFU→TOFU→BOFU" etc.)
+- first_touch_date
+- last_touch_date
+- journey_duration_days
+- total_interactions (count)
+- unique_assets_touched (count)
+- channels_used (JSON array: ["organic", "email", "paid"])
+- outcome (lead / mql / sqo / customer / unknown)
+- outcome_date
+- product (primary product based on most interactions)
+- country (primary country based on most interactions)
+- industry
+
+journey_patterns (one row per unique journey pattern):
+- pattern_id
+- pattern_string (e.g., "TOFU PDF → MOFU Webinar → BOFU Demo")
+- pattern_stages (e.g., "TOFU→MOFU→BOFU")
+- contact_count (how many contacts took this path)
+- sqo_count (how many converted to SQO)
+- conversion_rate (sqo_count / contact_count)
+- avg_duration_days
+- top_entry_asset (most common first touch)
+- top_exit_asset (most common last touch)
+- channels (most common channels for this pattern)
+
+stage_transitions (one row per stage-to-stage transition):
+- from_stage (e.g., "TOFU")
+- to_stage (e.g., "MOFU")
+- from_asset_id (optional — for asset-level Sankey)
+- to_asset_id (optional)
+- contact_count (how many contacts made this transition)
+- avg_days_between
+- conversion_rate_at_next_stage
+
+asset_journey_stats (one row per asset — journey context for library cards):
+- asset_id
+- total_journey_appearances (how many journeys include this asset)
+- avg_position_in_journey (e.g., 1.2 = usually first touch)
+- most_common_next_asset (what users engage with next)
+- most_common_prev_asset (what users engaged with before)
+- journey_conversion_rate (% of journeys containing this asset that end in SQO)
+- avg_journey_length_when_included
+- drop_off_rate (% of contacts whose journey ends at this asset)
+
+PART 3: UPLOAD AND PROCESSING FLOW
+Step 1 — Upload (fast, < 30 seconds for 400K rows):
+
+Parse the TSV file
+Validate required fields exist
+Show row count and date range preview
+User confirms upload
+
+Step 2 — Clean and store raw data (1-3 minutes for 400K rows):
+
+Hash email addresses (SHA-256)
+Deduplicate same contact + same content within 60 seconds
+Clean "Missing", "None", "undefined" values
+Parse timestamps
+Normalize interaction types
+Extract country from URLs
+Match asset_ids to content library
+Insert into journey_interactions table in batches (1000-5000 rows per batch to avoid memory issues)
+Show progress: "Processing: 150,000 of 400,000 rows..."
+
+Step 3 — Build journey summaries (1-2 minutes for 400K rows):
+
+Query journey_interactions grouped by contact_hash, ordered by timestamp
+Process in batches of 1000 contacts at a time
+For each contact: build journey sequence, determine pattern, calculate duration
+Insert into contact_journeys table
+Aggregate patterns into journey_patterns table
+Calculate stage_transitions
+Calculate asset_journey_stats
+Show progress: "Building journeys: 8,000 of 25,000 contacts..."
+
+Step 4 — Done:
+
+"Journey data processed: 400,000 interactions across [X] contacts. [Y] unique journey patterns identified. Journey mapping is now available."
+Redirect to journey mapping visualization
+
+Total processing time target: under 5 minutes for 400K rows. Show a progress screen with status updates throughout. The user does not need to wait on this page — processing can continue in the background and notify when complete.
+
+PART 4: HOW THE UI READS DATA (FAST QUERIES)
+Sankey diagram:
+
+Reads from stage_transitions table only (maybe 20-50 rows)
+Query: SELECT * FROM stage_transitions ORDER BY contact_count DESC
+Instant rendering — no processing needed
+
+Journey rankings:
+
+Reads from journey_patterns table (maybe 100-500 unique patterns)
+Query: SELECT * FROM journey_patterns ORDER BY conversion_rate DESC LIMIT 10
+Instant
+
+Drop-off analysis:
+
+Reads from stage_transitions and asset_journey_stats
+Pre-computed drop_off_rate per asset
+Instant
+
+Content library card enrichment:
+
+Reads from asset_journey_stats (one row per asset)
+Shows: "Appears in 47 journeys. Most common next: Cloud Webinar"
+Query by asset_id — instant
+
+Filtering (by product, country, channel, date range):
+
+When the user applies a filter, re-query the summary tables with a WHERE clause
+If filters are complex and summary tables don't support them, fall back to querying contact_journeys (one row per contact, much smaller than 400K raw rows)
+For very complex filters, may need to re-aggregate from raw interactions — but this should be rare
+
+AI chat questions about journeys:
+
+The Librarian reads from summary tables, not raw data
+"What's the most common journey for Sage 50 users?" → query journey_patterns WHERE product = 'Sage 50'
+"Where do most users drop off?" → query asset_journey_stats ORDER BY drop_off_rate DESC
+For deep-dive questions about specific contacts or specific interactions, the AI queries journey_interactions with specific filters — never loads all 400K rows into context
+
+
+PART 5: AI CONTEXT MANAGEMENT — NEVER SEND RAW DATA TO AI
+The AI context window cannot handle 400K rows. Always send summary data:
+For journey-related AI analysis:
+
+Send the top 20 journey_patterns (with counts and conversion rates)
+Send the top 10 asset_journey_stats (most common journey assets)
+Send the stage_transitions summary
+Total context: ~2,000-3,000 tokens — fits easily
+
+For specific questions:
+
+"Tell me about journeys involving the Human Firm Guide" → query asset_journey_stats for that asset + query journey_patterns that include that asset. Send those 5-20 results to the AI.
+"What channels drive the best journeys?" → aggregate from contact_journeys by channel. Send the 5-10 channel summary rows to the AI.
+
+Never:
+
+Load all 400K interactions into the AI prompt
+Load all contact_journeys into the AI prompt
+Send raw email addresses or hashes to the AI
+
+
+PART 6: INCREMENTAL UPDATES
+The user will upload new Eloqua data periodically (weekly or monthly). Handle this:
+Append mode (default):
+
+New upload adds rows to journey_interactions
+Deduplicate against existing data (same contact_hash + same asset_id + same timestamp = skip)
+Re-run the summary computation for affected contacts only (contacts who appear in the new data)
+Update journey_patterns, stage_transitions, and asset_journey_stats incrementally
+Show: "Added [X] new interactions for [Y] contacts. [Z] duplicates skipped. Journey summaries updated."
+
+Full refresh mode (optional):
+
+"Replace all journey data" — clears everything and reprocesses from scratch
+Use when the data source changes fundamentally or historical corrections are made
+Requires confirmation: "This will delete all existing journey data and reprocess from the uploaded file."
+
+
+PART 7: PERFORMANCE SAFEGUARDS
+
+Database indexing: Add indexes on:
+
+journey_interactions: (contact_hash), (asset_id), (interaction_timestamp), (contact_hash + interaction_timestamp)
+contact_journeys: (journey_pattern), (outcome), (product), (country)
+journey_patterns: (conversion_rate DESC), (contact_count DESC)
+asset_journey_stats: (asset_id)
+
+
+Batch processing: Never process all 400K rows in a single operation. Always batch: 1000-5000 rows per batch for inserts, 1000 contacts per batch for journey building.
+Pagination: If the journey rankings or pattern list is long (500+ patterns), paginate the UI: show 20 per page with load-more.
+Caching: Cache the Sankey diagram data and journey rankings in memory for 5 minutes. Most users viewing the dashboard within 5 minutes of each other will see cached results. Invalidate cache when new data is uploaded.
+Background processing: The summary computation (Step 3) should run in the background. The user can navigate away and come back. Show a notification when processing completes.
+
+
+WHAT 400K ROWS TRANSLATES TO
+Rough estimates based on the sample data:
+
+400K interactions across approximately 30,000-80,000 unique contacts (depending on how many interactions per person)
+Average 5-13 interactions per contact
+Probably 200-1,000 unique journey patterns
+Summary tables will have: ~50K rows in contact_journeys, ~500 rows in journey_patterns, ~50 rows in stage_transitions, ~800 rows in asset_journey_stats
+These summary tables are tiny and fast to query
+The heavy lifting happens once at upload time, not at query time
+
+
+
+400K rows is completely workable with this architecture. The key insight is: process the raw data into summaries once, then everything reads from the small summary tables. The Sankey diagram, journey rankings, and drop-off analysis will all load instantly because they're reading from tables with 50-500 rows, not 400K.

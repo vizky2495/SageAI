@@ -19,6 +19,8 @@ import {
 } from "./auth";
 import { registerContentRoutes, analyzeContentWithAI } from "./content-routes";
 import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
+import { parseDelimitedText } from "./csv-parser";
+import { buildJourneySummaries, getJourneyBuildProgress, resetJourneyBuildProgress } from "./journey-builder";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -26,6 +28,10 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   registerContentRoutes(app);
+
+  const JOURNEY_CACHE_TTL_MS = 5 * 60 * 1000;
+  let journeySummaryCache: any = null;
+  let journeySummaryCacheTime = 0;
 
   const feedbackTagsSchema = z.object({
     contentId: z.string().min(1),
@@ -1834,6 +1840,628 @@ Return ONLY valid JSON matching this schema:
     } catch (err: any) {
       console.error("Excel parse error:", err);
       res.status(500).json({ message: "Failed to parse Excel file: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.post("/api/journey/upload", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { base64, filename } = req.body as { base64: string; filename: string };
+      if (!base64) {
+        return res.status(400).json({ message: "No file data provided" });
+      }
+
+      const buffer = Buffer.from(base64, "base64");
+      const ext = (filename || "").toLowerCase().split(".").pop() || "";
+
+      let rows: Record<string, any>[] = [];
+      let headers: string[] = [];
+
+      if (ext === "xlsx" || ext === "xls") {
+        const workbook = XLSX.read(buffer, { type: "buffer" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          return res.status(400).json({ message: "No sheets found in the file" });
+        }
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" }) as Record<string, any>[];
+      } else {
+        const text = buffer.toString("utf-8");
+        const parsed = parseDelimitedText(text);
+        headers = parsed.headers;
+        rows = parsed.rows;
+      }
+
+      if (rows.length === 0) {
+        return res.status(400).json({ message: "No data rows found" });
+      }
+
+      if (headers.length === 0) {
+        headers = Object.keys(rows[0]);
+      }
+
+      const targetFields = [
+        { field: "email_address", description: "Email address of the contact" },
+        { field: "contact_id", description: "Unique contact/lead identifier" },
+        { field: "asset_id", description: "Content asset identifier (e.g. CL_ACS_US_...)" },
+        { field: "activity_type", description: "Type of interaction (e.g. Form Submit, Email Open, Page View)" },
+        { field: "activity_date", description: "Date/timestamp of the interaction" },
+        { field: "campaign_name", description: "Campaign name" },
+        { field: "sfdc_campaign_id", description: "Salesforce campaign ID" },
+        { field: "lead_status", description: "Lead status (e.g. MQL, SQL)" },
+        { field: "form_name", description: "Form name for form submissions" },
+        { field: "form_score", description: "Lead/form score value" },
+        { field: "page_url", description: "Page URL of the interaction" },
+        { field: "referrer", description: "Referrer URL" },
+        { field: "channel", description: "Marketing channel" },
+        { field: "source", description: "Traffic source" },
+        { field: "country", description: "Country of the contact" },
+        { field: "product", description: "Product associated with the interaction" },
+      ];
+
+      const suggestedMapping: Record<string, string> = {};
+      for (const tf of targetFields) {
+        const lowerField = tf.field.toLowerCase();
+        for (const h of headers) {
+          const lh = h.toLowerCase().replace(/[\s_-]+/g, "_");
+          if (lh === lowerField || lh.includes(lowerField) || lowerField.includes(lh)) {
+            suggestedMapping[tf.field] = h;
+            break;
+          }
+        }
+        if (!suggestedMapping[tf.field]) {
+          const aliases: Record<string, string[]> = {
+            email_address: ["email", "e_mail", "emailaddress", "email_addr", "contact_email"],
+            contact_id: ["contactid", "lead_id", "leadid", "contact", "eloqua_contact_id"],
+            asset_id: ["content_id", "contentid", "asset", "content", "campaign_id_content"],
+            activity_type: ["type", "action", "activity", "event_type", "interaction_type", "action_type"],
+            activity_date: ["date", "timestamp", "datetime", "activity_timestamp", "event_date", "activitydate"],
+            campaign_name: ["campaign", "campaignname"],
+            page_url: ["url", "pageurl", "page", "landing_page"],
+            channel: ["utm_channel", "marketing_channel"],
+            source: ["utm_source", "traffic_source"],
+            country: ["region", "geo", "location"],
+            product: ["product_franchise", "product_line"],
+          };
+          const fieldAliases = aliases[tf.field] || [];
+          for (const alias of fieldAliases) {
+            for (const h of headers) {
+              const lh = h.toLowerCase().replace(/[\s_-]+/g, "_");
+              if (lh === alias || lh.includes(alias)) {
+                suggestedMapping[tf.field] = h;
+                break;
+              }
+            }
+            if (suggestedMapping[tf.field]) break;
+          }
+        }
+      }
+
+      const redactedSampleRows = rows.slice(0, 5).map(row => {
+        const redacted: Record<string, any> = {};
+        for (const [key, value] of Object.entries(row)) {
+          const lk = key.toLowerCase();
+          if (typeof value === "string" && (lk.includes("email") || value.match(/^[^@\s]+@[^@\s]+\.[^@\s]+$/))) {
+            redacted[key] = value.replace(/^(.{2}).*(@.*)$/, "$1***$2");
+          } else {
+            redacted[key] = value;
+          }
+        }
+        return redacted;
+      });
+
+      res.json({
+        headers,
+        rowCount: rows.length,
+        sampleRows: redactedSampleRows,
+        filename,
+        suggestedMapping,
+        targetFields: targetFields.map(f => ({ field: f.field, description: f.description })),
+      });
+    } catch (err: any) {
+      console.error("Journey file parse error:", err);
+      res.status(500).json({ message: "Failed to parse file: " + (err.message || "Unknown error") });
+    }
+  });
+
+  async function processJourneyData(base64: string, filename: string, fieldMapping: Record<string, string>) {
+    const crypto = await import("crypto");
+    const buffer = Buffer.from(base64, "base64");
+    const ext = (filename || "").toLowerCase().split(".").pop() || "";
+
+    let rawRows: Record<string, any>[] = [];
+
+    if (ext === "xlsx" || ext === "xls") {
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      if (sheetName) {
+        rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" }) as Record<string, any>[];
+      }
+    } else {
+      const text = buffer.toString("utf-8");
+      const parsed = parseDelimitedText(text);
+      rawRows = parsed.rows;
+    }
+
+    if (rawRows.length === 0) {
+      throw new Error("No data rows found");
+    }
+
+    const dirtyValues = new Set(["missing", "none", "undefined", "null", "n/a", "na", "-", "", "unknown"]);
+    const cleanVal = (v: any): string | null => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim();
+      return dirtyValues.has(s.toLowerCase()) ? null : s;
+    };
+
+    const interactionTypeMap: Record<string, string> = {
+      "request a demo": "demo_request",
+      "demo request": "demo_request",
+      "form submit": "form_submit",
+      "form submission": "form_submit",
+      "email open": "email_open",
+      "email click": "email_click",
+      "email click-through": "email_click",
+      "page view": "page_view",
+      "pageview": "page_view",
+      "web visit": "page_view",
+      "content download": "content_download",
+      "download": "content_download",
+      "webinar attend": "webinar_attend",
+      "webinar registration": "webinar_register",
+      "event attend": "event_attend",
+      "trial signup": "trial_signup",
+      "free trial": "trial_signup",
+    };
+
+    const normalizeInteractionType = (raw: string | null): string | null => {
+      if (!raw) return null;
+      const lower = raw.toLowerCase().trim();
+      return interactionTypeMap[lower] || lower.replace(/[\s-]+/g, "_");
+    };
+
+    const countryPatterns: Record<string, string> = {
+      "en-ng": "Nigeria", "en-gb": "United Kingdom", "en-us": "United States",
+      "en-za": "South Africa", "en-ke": "Kenya", "en-au": "Australia",
+      "en-ca": "Canada", "en-ie": "Ireland", "en-ae": "UAE",
+      "fr-fr": "France", "de-de": "Germany", "es-es": "Spain",
+      "pt-br": "Brazil", "en-sg": "Singapore", "en-my": "Malaysia",
+      "en-in": "India", "en-ph": "Philippines", "en-hk": "Hong Kong",
+    };
+
+    const extractCountryFromUrl = (url: string | null): string | null => {
+      if (!url) return null;
+      for (const [pattern, country] of Object.entries(countryPatterns)) {
+        if (url.toLowerCase().includes(`/${pattern}/`) || url.toLowerCase().includes(`/${pattern}`)) {
+          return country;
+        }
+      }
+      return null;
+    };
+
+    const parseTimestamp = (val: any): Date | null => {
+      if (!val) return null;
+      if (val instanceof Date) return val;
+      const s = String(val).trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+      const excelNum = Number(s);
+      if (!isNaN(excelNum) && excelNum > 10000) {
+        const excelDate = new Date((excelNum - 25569) * 86400 * 1000);
+        if (!isNaN(excelDate.getTime())) return excelDate;
+      }
+      return null;
+    };
+
+    const getField = (row: Record<string, any>, targetField: string): any => {
+      const sourceCol = fieldMapping[targetField];
+      if (!sourceCol) return null;
+      return row[sourceCol] ?? null;
+    };
+
+    let allAssets: { contentId: string; stage: string; productFranchise: string | null; campaignName: string | null }[] = [];
+    try {
+      const dbAssets = await storage.getAllAssets();
+      allAssets = dbAssets.map(a => ({
+        contentId: a.contentId,
+        stage: a.stage,
+        productFranchise: a.productFranchise,
+        campaignName: a.campaignName,
+      }));
+    } catch (_) {}
+
+    const assetLookup = new Map<string, { stage: string; product: string | null; campaign: string | null }>();
+    for (const a of allAssets) {
+      assetLookup.set(a.contentId, { stage: a.stage, product: a.productFranchise, campaign: a.campaignName });
+    }
+
+    const uploadedAssetLookup = new Map<string, { country: string | null; product: string | null; funnelStage: string | null }>();
+    try {
+      const uploadedList = await storage.getUploadedAssets({});
+      for (const ua of uploadedList) {
+        uploadedAssetLookup.set(ua.contentId, {
+          country: ua.country || null,
+          product: ua.product || null,
+          funnelStage: ua.funnelStage || null,
+        });
+      }
+    } catch (_) {}
+
+    const contentStoredIds = new Set<string>();
+    try {
+      const contentStatusMap = await storage.getContentStatusMap();
+      for (const assetId of Object.keys(contentStatusMap)) {
+        contentStoredIds.add(assetId);
+      }
+    } catch (_) {}
+
+    const batchId = crypto.randomUUID();
+    const processed: any[] = [];
+    let duplicatesRemoved = 0;
+    let emailsHashed = 0;
+    let dirtyValuesCleaned = 0;
+    let matchedAssets = 0;
+    let unmatchedAssets = 0;
+
+    const dedupeMap = new Map<string, number[]>();
+
+    const preProcessed: { row: Record<string, any>; sortKey: string; sortTs: number }[] = [];
+    for (const row of rawRows) {
+      const email = cleanVal(getField(row, "email_address"));
+      const contactId = cleanVal(getField(row, "contact_id"));
+      const rawAssetId = cleanVal(getField(row, "asset_id"));
+      const rawDate = getField(row, "activity_date");
+      const ts = parseTimestamp(rawDate);
+      const contact = email ? email.toLowerCase() : (contactId || "");
+      const sortKey = `${contact}|${rawAssetId || ""}`;
+      preProcessed.push({ row, sortKey, sortTs: ts?.getTime() || 0 });
+    }
+    preProcessed.sort((a, b) => {
+      if (a.sortKey !== b.sortKey) return a.sortKey < b.sortKey ? -1 : 1;
+      return a.sortTs - b.sortTs;
+    });
+
+    for (const { row } of preProcessed) {
+      const email = cleanVal(getField(row, "email_address"));
+      const contactId = cleanVal(getField(row, "contact_id"));
+
+      let contactHash: string;
+      if (email) {
+        contactHash = crypto.createHash("sha256").update(email.toLowerCase()).digest("hex");
+        emailsHashed++;
+      } else if (contactId) {
+        contactHash = crypto.createHash("sha256").update(contactId).digest("hex");
+      } else {
+        continue;
+      }
+
+      const rawAssetId = cleanVal(getField(row, "asset_id"));
+      const rawType = cleanVal(getField(row, "activity_type"));
+      const rawDate = getField(row, "activity_date");
+      const rawCampaign = cleanVal(getField(row, "campaign_name"));
+      const rawSfdc = cleanVal(getField(row, "sfdc_campaign_id"));
+      const rawLeadStatus = cleanVal(getField(row, "lead_status"));
+      const rawFormName = cleanVal(getField(row, "form_name"));
+      const rawFormScore = getField(row, "form_score");
+      const rawPageUrl = cleanVal(getField(row, "page_url"));
+      const rawReferrer = cleanVal(getField(row, "referrer"));
+      const rawChannel = cleanVal(getField(row, "channel"));
+      const rawSource = cleanVal(getField(row, "source"));
+      const rawCountry = cleanVal(getField(row, "country"));
+      const rawProduct = cleanVal(getField(row, "product"));
+
+      for (const v of [rawAssetId, rawType, rawCampaign, rawSfdc, rawLeadStatus, rawFormName, rawPageUrl, rawReferrer, rawChannel, rawSource, rawCountry, rawProduct]) {
+        if (v === null) dirtyValuesCleaned++;
+      }
+
+      const interactionType = normalizeInteractionType(rawType);
+      const timestamp = parseTimestamp(rawDate);
+      const urlCountry = extractCountryFromUrl(rawPageUrl);
+      const country = rawCountry || urlCountry;
+
+      let funnelStage: string | null = null;
+      let product = rawProduct;
+      let enrichedCountry = country;
+
+      if (rawAssetId) {
+        const aggMatch = assetLookup.get(rawAssetId);
+        const uploadedMatch = uploadedAssetLookup.get(rawAssetId);
+        const contentMatch = contentStoredIds.has(rawAssetId);
+
+        if (aggMatch || uploadedMatch || contentMatch) {
+          matchedAssets++;
+          if (aggMatch) {
+            funnelStage = aggMatch.stage;
+            if (!product) product = aggMatch.product;
+          }
+          if (uploadedMatch) {
+            if (!funnelStage) funnelStage = uploadedMatch.funnelStage;
+            if (!product) product = uploadedMatch.product;
+            if (!enrichedCountry) enrichedCountry = uploadedMatch.country;
+          }
+        } else {
+          unmatchedAssets++;
+        }
+      }
+
+      const dedupeKey = `${contactHash}|${rawAssetId || ""}`;
+      if (timestamp) {
+        const ts = timestamp.getTime();
+        const prevTimestamps = dedupeMap.get(dedupeKey);
+        if (prevTimestamps) {
+          const isDup = prevTimestamps.some(prev => Math.abs(ts - prev) < 60000);
+          if (isDup) {
+            duplicatesRemoved++;
+            continue;
+          }
+          prevTimestamps.push(ts);
+        } else {
+          dedupeMap.set(dedupeKey, [ts]);
+        }
+      }
+
+      const formScore = rawFormScore ? parseFloat(String(rawFormScore)) : null;
+
+      processed.push({
+        contactHash,
+        assetId: rawAssetId,
+        interactionType,
+        interactionTimestamp: timestamp,
+        funnelStage,
+        product,
+        country: enrichedCountry,
+        channel: rawChannel,
+        source: rawSource,
+        campaignName: rawCampaign,
+        sfdcCampaignId: rawSfdc,
+        leadStatus: rawLeadStatus,
+        formName: rawFormName,
+        formScore: isNaN(formScore as number) ? null : formScore,
+        pageUrl: rawPageUrl,
+        referrer: rawReferrer,
+        uploadBatchId: batchId,
+      });
+    }
+
+    const uniqueContacts = new Set(processed.map(p => p.contactHash)).size;
+    let earliest = Infinity;
+    let latest = -Infinity;
+    for (const p of processed) {
+      if (p.interactionTimestamp) {
+        const t = p.interactionTimestamp.getTime();
+        if (t < earliest) earliest = t;
+        if (t > latest) latest = t;
+      }
+    }
+    const dateRange = earliest !== Infinity ? {
+      earliest: new Date(earliest).toISOString(),
+      latest: new Date(latest).toISOString(),
+    } : null;
+
+    const typeCounts: Record<string, number> = {};
+    for (const p of processed) {
+      const t = p.interactionType || "unknown";
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+
+    return {
+      batchId,
+      processed,
+      totalRawRows: rawRows.length,
+      uniqueContacts,
+      dateRange,
+      duplicatesRemoved,
+      emailsHashed,
+      dirtyValuesCleaned,
+      matchedAssets,
+      unmatchedAssets,
+      interactionTypes: typeCounts,
+    };
+  }
+
+  app.post("/api/journey/preview", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { base64, filename, fieldMapping } = req.body as {
+        base64: string;
+        filename: string;
+        fieldMapping: Record<string, string>;
+      };
+
+      if (!base64 || !fieldMapping) {
+        return res.status(400).json({ message: "Missing file data or field mapping" });
+      }
+
+      const result = await processJourneyData(base64, filename, fieldMapping);
+
+      res.json({
+        totalProcessed: result.processed.length,
+        totalRawRows: result.totalRawRows,
+        uniqueContacts: result.uniqueContacts,
+        dateRange: result.dateRange,
+        duplicatesRemoved: result.duplicatesRemoved,
+        emailsHashed: result.emailsHashed,
+        dirtyValuesCleaned: result.dirtyValuesCleaned,
+        matchedAssets: result.matchedAssets,
+        unmatchedAssets: result.unmatchedAssets,
+        interactionTypes: result.interactionTypes,
+      });
+    } catch (err: any) {
+      console.error("Journey preview error:", err);
+      res.status(500).json({ message: "Failed to preview journey data: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.post("/api/journey/process", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { base64, filename, fieldMapping } = req.body as {
+        base64: string;
+        filename: string;
+        fieldMapping: Record<string, string>;
+      };
+
+      if (!base64 || !fieldMapping) {
+        return res.status(400).json({ message: "Missing file data or field mapping" });
+      }
+
+      const result = await processJourneyData(base64, filename, fieldMapping);
+      await storage.bulkInsertJourneyInteractions(result.processed);
+
+      journeySummaryCache = null;
+      resetJourneyBuildProgress();
+
+      buildJourneySummaries(result.batchId).catch(err => {
+        console.error("Background journey summary build failed:", err);
+      });
+
+      res.json({
+        batchId: result.batchId,
+        totalProcessed: result.processed.length,
+        totalRawRows: result.totalRawRows,
+        uniqueContacts: result.uniqueContacts,
+        dateRange: result.dateRange,
+        duplicatesRemoved: result.duplicatesRemoved,
+        emailsHashed: result.emailsHashed,
+        dirtyValuesCleaned: result.dirtyValuesCleaned,
+        matchedAssets: result.matchedAssets,
+        unmatchedAssets: result.unmatchedAssets,
+        interactionTypes: result.interactionTypes,
+      });
+    } catch (err: any) {
+      console.error("Journey process error:", err);
+      res.status(500).json({ message: "Failed to process journey data: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.get("/api/journey/batches", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const batches = await storage.getJourneyUploadBatches();
+      const total = await storage.countJourneyInteractions();
+      res.json({ batches, totalInteractions: total });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch journey batches" });
+    }
+  });
+
+  app.delete("/api/journey/batch/:batchId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteJourneyInteractionsByBatch(req.params.batchId);
+      journeySummaryCache = null;
+
+      const remaining = await storage.countJourneyInteractions();
+      if (remaining === 0) {
+        await storage.clearContactJourneys();
+        await storage.clearJourneyPatterns();
+        await storage.clearStageTransitions();
+        await storage.clearAssetJourneyStats();
+      } else {
+        resetJourneyBuildProgress();
+        buildJourneySummaries().catch(err => {
+          console.error("Journey summary rebuild after delete failed:", err);
+        });
+      }
+
+      res.json({ deleted });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete batch" });
+    }
+  });
+
+  app.get("/api/journey/build-progress", requireAuth, async (_req: Request, res: Response) => {
+    res.json(getJourneyBuildProgress());
+  });
+
+  app.post("/api/journey/rebuild-summaries", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      resetJourneyBuildProgress();
+      journeySummaryCache = null;
+      buildJourneySummaries().catch(err => {
+        console.error("Journey summary rebuild failed:", err);
+      });
+      res.json({ message: "Journey summary rebuild started" });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to start rebuild: " + (err.message || "Unknown error") });
+    }
+  });
+
+  app.get("/api/journey/summaries", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      if (journeySummaryCache && Date.now() - journeySummaryCacheTime < JOURNEY_CACHE_TTL_MS) {
+        return res.json(journeySummaryCache);
+      }
+
+      const status = await storage.getJourneySummaryStatus();
+      const transitions = await storage.getStageTransitions();
+      const { data: topPatterns } = await storage.getJourneyPatterns({ limit: 20, sortBy: "contact_count" });
+      const assetStats = await storage.getAssetJourneyStats();
+      const totalInteractions = await storage.countJourneyInteractions();
+
+      const summaryData = {
+        status,
+        transitions,
+        topPatterns,
+        topAssetStats: assetStats.slice(0, 20),
+        totalInteractions,
+        buildProgress: getJourneyBuildProgress(),
+      };
+
+      journeySummaryCache = summaryData;
+      journeySummaryCacheTime = Date.now();
+
+      res.json(summaryData);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch journey summaries" });
+    }
+  });
+
+  app.get("/api/journey/patterns", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const sortBy = (req.query.sortBy as string) || "contact_count";
+      const result = await storage.getJourneyPatterns({ limit, offset, sortBy });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch journey patterns" });
+    }
+  });
+
+  app.get("/api/journey/transitions", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const transitions = await storage.getStageTransitions();
+      res.json(transitions);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch stage transitions" });
+    }
+  });
+
+  app.get("/api/journey/asset-stats/:assetId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getAssetJourneyStats(req.params.assetId);
+      res.json(stats[0] || null);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch asset journey stats" });
+    }
+  });
+
+  app.get("/api/journey/asset-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getAssetJourneyStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch asset journey stats" });
+    }
+  });
+
+  app.get("/api/journey/contact-journeys", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const product = req.query.product as string | undefined;
+      const country = req.query.country as string | undefined;
+      const outcome = req.query.outcome as string | undefined;
+      const result = await storage.getContactJourneys({ product, country, outcome, limit, offset });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch contact journeys" });
     }
   });
 

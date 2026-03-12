@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { ensureJourneyIndexes } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -114,6 +115,10 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  ensureJourneyIndexes().catch(err => {
+    console.warn("Failed to create journey indexes:", err.message);
+  });
+
   httpServer.listen(
     {
       port,

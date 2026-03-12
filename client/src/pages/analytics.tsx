@@ -1,7 +1,10 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import AiInsightsBar from "@/components/ai-insights-bar";
+import JourneyUpload from "@/components/journey-upload";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/queryClient";
 import { motion } from "framer-motion";
 import {
   Filter,
@@ -12,6 +15,8 @@ import {
   Database,
   ArrowRight,
   Plug,
+  Upload,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Bar,
@@ -23,6 +28,7 @@ import {
   YAxis,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -57,6 +63,35 @@ import {
 
 export default function AnalyticsPage() {
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
+  const [showJourneyUpload, setShowJourneyUpload] = useState(false);
+
+  const { data: journeyBatches, refetch: refetchJourneyBatches } = useQuery<{
+    batches: Array<{ batchId: string; uploadDate: string; interactionCount: number }>;
+    totalInteractions: number;
+  }>({
+    queryKey: ["/api/journey/batches"],
+    queryFn: async () => {
+      const res = await authFetch("/api/journey/batches");
+      if (!res.ok) return { batches: [], totalInteractions: 0 };
+      return res.json();
+    },
+  });
+
+  const { data: journeySummaries } = useQuery<{
+    status: { contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number };
+    transitions: Array<{ fromStage: string; toStage: string; contactCount: number; avgDaysBetween: number | null }>;
+    topPatterns: Array<{ patternString: string; patternStages: string; contactCount: number; conversionRate: number }>;
+    totalInteractions: number;
+    buildProgress: { status: string; message: string };
+  }>({
+    queryKey: ["/api/journey/summaries"],
+    queryFn: async () => {
+      const res = await authFetch("/api/journey/summaries");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!(journeyBatches && journeyBatches.totalInteractions > 0),
+  });
 
   const [stageFilter, setStageFilter] = useState<FunnelStage | "ALL">("ALL");
   const [dimension, setDimension] = useState<"utmChannel" | "productFranchise" | "contentType">("utmChannel");
@@ -772,77 +807,124 @@ export default function AnalyticsPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-lg font-semibold" data-testid="text-journey-title">Content Journey Mapping</h3>
-                <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]" data-testid="badge-journey-status">Coming Soon</Badge>
+                {journeyBatches && journeyBatches.totalInteractions > 0 ? (
+                  <Badge variant="outline" className="border-[#00D657]/30 text-[#00D657] text-[10px]" data-testid="badge-journey-status">
+                    {journeyBatches.totalInteractions.toLocaleString()} interactions
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]" data-testid="badge-journey-status">Upload Data</Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl" data-testid="text-journey-description">
-                Visualize how users move through your content from awareness to conversion. See which content sequences
-                drive the most SQOs with interactive Sankey flow diagrams, path analysis, and conversion tracking across
-                TOFU → MOFU → BOFU journeys.
+                Upload Eloqua activity data to map content journeys. See how contacts interact with your content
+                across TOFU → MOFU → BOFU stages with interaction tracking and asset matching.
               </p>
 
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="h-2 w-2 rounded-full bg-[#00D657]" />
-                    <span className="text-xs font-medium">Flow Visualization</span>
+                    <span className="text-xs font-medium">Upload & Parse</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Sankey diagrams showing the most common content paths, color-coded by conversion outcome.
+                    Drag and drop TSV, CSV, or XLSX exports from Eloqua with auto-detected delimiters and field mapping.
                   </p>
                 </div>
                 <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="h-2 w-2 rounded-full bg-amber-400" />
-                    <span className="text-xs font-medium">Journey Rankings</span>
+                    <span className="text-xs font-medium">Data Cleaning</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Top 10 content journeys ranked by SQO conversion rate with user volume and duration metrics.
+                    SHA-256 hashed emails, deduplication, dirty value removal, and interaction type normalization.
                   </p>
                 </div>
                 <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="h-2 w-2 rounded-full bg-blue-400" />
-                    <span className="text-xs font-medium">Drop-off Analysis</span>
+                    <span className="text-xs font-medium">Asset Matching</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Identify where users exit content sequences and which assets have the highest stage transitions.
+                    Automatically matches asset IDs against your content library for funnel stage and product data.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-xl border border-dashed border-border/40 bg-muted/5 p-4">
-                <div className="flex items-start gap-3">
-                  <Database className="h-4 w-4 text-muted-foreground/60 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1" data-testid="text-journey-requirement">
-                      Requires content sequence data
-                    </p>
-                    <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                      Connect your marketing automation platform (Marketo, HubSpot, Eloqua) to enable journey tracking.
-                      This requires user-level touchpoint data showing the sequence of content interactions per lead or account.
-                    </p>
-                    <div className="flex items-center gap-4 mt-3">
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
-                        <Plug className="h-3 w-3" />
-                        <span>Marketing automation</span>
-                      </div>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground/30" />
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
-                        <Database className="h-3 w-3" />
-                        <span>Touchpoint sequences</span>
-                      </div>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground/30" />
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#00D657]/60">
-                        <GitBranch className="h-3 w-3" />
-                        <span>Journey maps</span>
-                      </div>
-                    </div>
+              {journeySummaries && journeySummaries.status.contactJourneyCount > 0 && (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                    <p className="text-[10px] text-muted-foreground">Contacts</p>
+                    <p className="text-lg font-semibold" data-testid="text-summary-contacts">{journeySummaries.status.contactJourneyCount.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                    <p className="text-[10px] text-muted-foreground">Patterns</p>
+                    <p className="text-lg font-semibold" data-testid="text-summary-patterns">{journeySummaries.status.patternCount.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                    <p className="text-[10px] text-muted-foreground">Transitions</p>
+                    <p className="text-lg font-semibold" data-testid="text-summary-transitions">{journeySummaries.status.transitionCount.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                    <p className="text-[10px] text-muted-foreground">Asset Stats</p>
+                    <p className="text-lg font-semibold" data-testid="text-summary-assets">{journeySummaries.status.assetStatCount.toLocaleString()}</p>
                   </div>
                 </div>
+              )}
+
+              {journeySummaries && journeySummaries.topPatterns && journeySummaries.topPatterns.length > 0 && (
+                <div className="mt-3 rounded-xl border border-border/30 bg-muted/10 p-3">
+                  <h4 className="text-xs font-semibold mb-2">Top Journey Patterns</h4>
+                  <div className="space-y-1.5">
+                    {journeySummaries.topPatterns.slice(0, 5).map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-[11px]" data-testid={`pattern-${i}`}>
+                        <span className="font-mono truncate max-w-[60%]">{p.patternStages}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-muted-foreground">{p.contactCount.toLocaleString()} contacts</span>
+                          <span className="text-[#00D657]">{(p.conversionRate * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {journeyBatches && journeyBatches.batches.length > 0 && (
+                <div className="mt-3 rounded-xl border border-border/30 bg-muted/10 p-3">
+                  <h4 className="text-xs font-semibold mb-2">Upload History</h4>
+                  <div className="space-y-1.5">
+                    {journeyBatches.batches.slice(0, 3).map((batch) => (
+                      <div key={batch.batchId} className="flex items-center justify-between text-[11px]" data-testid={`batch-${batch.batchId}`}>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-3 w-3 text-[#00D657]" />
+                          <span className="font-mono text-muted-foreground">{batch.batchId.slice(0, 8)}...</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-muted-foreground">{batch.interactionCount.toLocaleString()} interactions</span>
+                          <span className="text-muted-foreground/60">{new Date(batch.uploadDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4">
+                <Button
+                  onClick={() => setShowJourneyUpload(true)}
+                  className="bg-[#00D657] hover:bg-[#00D657]/90 text-black"
+                  data-testid="button-upload-journey"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Eloqua Activity Data
+                </Button>
               </div>
             </div>
           </div>
         </Card>
+
+        {showJourneyUpload && (
+          <JourneyUpload onClose={() => { setShowJourneyUpload(false); refetchJourneyBatches(); }} />
+        )}
       </motion.div>
 
       <PageChat

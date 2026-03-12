@@ -38,7 +38,8 @@ Preferred communication style: Simple, everyday language.
 
 -   **Type**: PostgreSQL.
 -   **ORM**: Drizzle ORM with `node-postgres`.
--   **Schema**: Includes `assets_agg` (content performance), `users`, `conversations`, `messages`, `content_stored`, and `comparison_history` tables, with custom enums like `funnel_stage`, `comparison_type`, and `comparison_status`.
+-   **Schema**: Includes `assets_agg` (content performance), `users`, `conversations`, `messages`, `content_stored`, `comparison_history`, `journey_interactions`, `contact_journeys`, `journey_patterns`, `stage_transitions`, and `asset_journey_stats` tables, with custom enums like `funnel_stage`, `comparison_type`, and `comparison_status`.
+-   **Journey Data Pipeline**: Two-layer architecture for 400K+ row Eloqua activity data. Layer 1: Raw `journey_interactions` table (written once at upload with SHA-256 hashed emails, dedup, cleaning). Layer 2: Pre-computed summary tables (`contact_journeys`, `journey_patterns`, `stage_transitions`, `asset_journey_stats`) built via background `journey-builder.ts` after upload. UI reads from summary tables (50-500 rows) for instant dashboards. CSV/TSV parsing uses `csv-parse` library for proper quoted field handling. DB indexes on all key query columns. 5-minute in-memory cache on summary endpoints.
 -   **Migrations**: Drizzle Kit.
 
 ## Build System
