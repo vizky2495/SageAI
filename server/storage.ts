@@ -82,6 +82,7 @@ export interface IStorage {
   createSalesFeedback(data: InsertSalesFeedback): Promise<SalesFeedback>;
   getSalesFeedbackByContentId(contentId: string): Promise<SalesFeedback[]>;
   getSalesFeedbackStats(contentId: string): Promise<{ totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }>;
+  getSalesFeedbackStatsBatch(contentIds: string[]): Promise<Record<string, { totalCount: number; sentimentScore: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -590,6 +591,37 @@ export class DatabaseStorage implements IStorage {
       : 0;
 
     return { totalCount: rows.length, tagCounts, sentimentScore };
+  }
+
+  async getSalesFeedbackStatsBatch(contentIds: string[]): Promise<Record<string, { totalCount: number; sentimentScore: number }>> {
+    if (contentIds.length === 0) return {};
+    const rows = await db
+      .select()
+      .from(salesFeedback)
+      .where(inArray(salesFeedback.contentId, contentIds));
+
+    const grouped: Record<string, typeof rows> = {};
+    for (const row of rows) {
+      if (!grouped[row.contentId]) grouped[row.contentId] = [];
+      grouped[row.contentId].push(row);
+    }
+
+    const result: Record<string, { totalCount: number; sentimentScore: number }> = {};
+    for (const [cid, entries] of Object.entries(grouped)) {
+      let pos = 0, neg = 0;
+      for (const entry of entries) {
+        for (const tag of (entry.tags as string[])) {
+          if (POSITIVE_TAGS.has(tag)) pos++;
+          if (NEGATIVE_TAGS.has(tag)) neg++;
+        }
+      }
+      const total = pos + neg;
+      result[cid] = {
+        totalCount: entries.length,
+        sentimentScore: total > 0 ? Math.round(((pos - neg) / total) * 100) / 100 : 0,
+      };
+    }
+    return result;
   }
 }
 

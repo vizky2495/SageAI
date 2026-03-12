@@ -334,6 +334,9 @@ export default function SalesFeedbackSection({
     queryClient.invalidateQueries({
       queryKey: ["sales-feedback", contentId],
     });
+    queryClient.invalidateQueries({
+      queryKey: ["sales-feedback-batch-stats"],
+    });
   };
 
   return (

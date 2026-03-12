@@ -71,6 +71,20 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sales-feedback/batch-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { contentIds } = req.body as { contentIds?: string[] };
+      if (!Array.isArray(contentIds) || contentIds.length === 0) {
+        return res.json({});
+      }
+      const stats = await storage.getSalesFeedbackStatsBatch(contentIds.slice(0, 500));
+      res.json(stats);
+    } catch (err: any) {
+      console.error("Sales feedback batch stats error:", err);
+      res.status(500).json({ message: "Failed to fetch batch feedback stats" });
+    }
+  });
+
   app.get("/api/sales-feedback/:contentId/stats", requireAuth, async (req: Request, res: Response) => {
     try {
       const stats = await storage.getSalesFeedbackStats(req.params.contentId);

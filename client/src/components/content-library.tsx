@@ -70,6 +70,10 @@ const ContentStatusContext = createContext<{ statusMap: ContentStatusMap; refres
   refreshStatus: () => {},
 });
 
+type FeedbackStatsSummary = { totalCount: number; sentimentScore: number };
+type FeedbackStatsMap = Record<string, FeedbackStatsSummary>;
+const FeedbackStatsContext = createContext<FeedbackStatsMap>({});
+
 const PAGE_SIZE = 25;
 
 function formatUploadDate(isoDate: string, style: "short" | "long" = "short"): string {
@@ -1099,6 +1103,8 @@ function ContentCard({
   const { compareMode, selectedCard, onCompareSelect } = useContext(CompareContext);
   const { statusMap } = useContext(ContentStatusContext);
   const contentStatus = statusMap[asset.contentId];
+  const feedbackStatsMap = useContext(FeedbackStatsContext);
+  const fbStats = feedbackStatsMap[asset.contentId];
 
   const isSelectedForCompare = selectedCard?.asset.contentId === asset.contentId;
 
@@ -1288,6 +1294,33 @@ function ContentCard({
                 : contentStatus.dateStored
                   ? `Uploaded: ${formatUploadDate(contentStatus.dateStored)}${contentStatus.uploadedByName ? ` by ${contentStatus.uploadedByName}` : ""}`
                   : null}
+            </div>
+          )}
+
+          {fbStats && fbStats.totalCount > 0 && (
+            <div className="px-3 pb-1 flex items-center gap-1.5" data-testid="card-feedback-indicator">
+              <MessageCircle className="h-3 w-3 text-muted-foreground/50" />
+              <span className="text-[10px] text-muted-foreground/70">
+                {fbStats.totalCount} {fbStats.totalCount === 1 ? "note" : "notes"}
+              </span>
+              {fbStats.totalCount >= 3 && (
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    fbStats.sentimentScore > 0.2
+                      ? "bg-emerald-500"
+                      : fbStats.sentimentScore < -0.2
+                        ? "bg-red-500"
+                        : "bg-amber-500"
+                  }`}
+                  title={
+                    fbStats.sentimentScore > 0.2
+                      ? "Mostly positive feedback"
+                      : fbStats.sentimentScore < -0.2
+                        ? "Mostly negative feedback"
+                        : "Mixed feedback"
+                  }
+                />
+              )}
             </div>
           )}
 
@@ -1616,6 +1649,27 @@ export default function ContentLibrary() {
     refreshStatus: refreshContentStatus,
   };
 
+  const allContentIds = useMemo(() => {
+    if (!contentStatusMap) return [];
+    return Object.keys(contentStatusMap);
+  }, [contentStatusMap]);
+
+  const { data: feedbackStatsMap } = useQuery<FeedbackStatsMap>({
+    queryKey: ["sales-feedback-batch-stats", allContentIds],
+    queryFn: async () => {
+      if (allContentIds.length === 0) return {};
+      const res = await authFetch("/api/sales-feedback/batch-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentIds: allContentIds }),
+      });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: allContentIds.length > 0,
+    staleTime: 30_000,
+  });
+
   const { data: filterOptions } = useQuery({
     queryKey: ["/api/assets/filter-options"],
     queryFn: async () => {
@@ -1697,6 +1751,7 @@ export default function ContentLibrary() {
 
   return (
     <ContentStatusContext.Provider value={contentStatusCtx}>
+    <FeedbackStatsContext.Provider value={feedbackStatsMap || {}}>
     <CompareContext.Provider value={compareCtx}>
       <div className="flex min-w-0 flex-col gap-4" data-testid="content-library">
         <div className="sticky top-14 z-10 space-y-0" data-testid="filter-toolbar">
@@ -2117,6 +2172,7 @@ export default function ContentLibrary() {
         />
       )}
     </CompareContext.Provider>
+    </FeedbackStatsContext.Provider>
     </ContentStatusContext.Provider>
     
   );
