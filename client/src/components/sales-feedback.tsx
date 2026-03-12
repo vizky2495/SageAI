@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -449,38 +449,93 @@ export default function SalesFeedbackSection({
 
 export function QuickFeedbackPopup({
   contentId,
+  contentTitle,
+  stage,
   onClose,
 }: {
   contentId: string;
+  contentTitle?: string;
+  stage?: string;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sales-feedback-stats", contentId] });
     queryClient.invalidateQueries({ queryKey: ["sales-feedback-batch-stats"] });
     queryClient.invalidateQueries({ queryKey: ["sales-feedback-recent"] });
-    setTimeout(onClose, 2600);
+    setSubmitted(true);
+    setTimeout(onClose, 1500);
+  };
+
+  const stageBadgeStyles: Record<string, string> = {
+    TOFU: "bg-chart-1/12 text-chart-1 border-chart-1/20",
+    MOFU: "bg-chart-2/12 text-chart-2 border-chart-2/20",
+    BOFU: "bg-chart-3/12 text-chart-3 border-chart-3/20",
+    UNKNOWN: "bg-chart-4/12 text-chart-4 border-chart-4/20",
   };
 
   return (
     <div
-      className="absolute z-50 right-0 top-full mt-1 w-[260px] rounded-xl border border-border/80 bg-card shadow-xl backdrop-blur-md"
-      onClick={(e) => e.stopPropagation()}
-      data-testid="quick-feedback-popup"
+      className="fixed inset-0 z-[100] flex items-center justify-center"
+      onClick={onClose}
+      data-testid="quick-feedback-backdrop"
     >
-      <div className="flex items-center justify-between px-3 pt-2 pb-1">
-        <span className="text-xs font-semibold text-foreground/80">Quick Feedback</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded p-0.5 hover:bg-secondary/60 cursor-pointer"
-          data-testid="button-close-quick-feedback"
-        >
-          <X className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-      </div>
-      <div className="px-2 pb-2">
-        <FeedbackForm contentId={contentId} onSuccess={invalidate} compact />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative z-10 w-[340px] max-w-[90vw] rounded-xl border border-border/80 bg-card shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="quick-feedback-popup"
+      >
+        {submitted ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2" data-testid="feedback-success">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+            <span className="text-sm font-medium text-foreground">Feedback submitted!</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-sm font-semibold text-foreground/90 truncate">Quick Feedback</span>
+                {stage && (
+                  <Badge
+                    className={`border text-[9px] px-1.5 py-0 shrink-0 ${stageBadgeStyles[stage] || stageBadgeStyles.UNKNOWN}`}
+                    data-testid="modal-stage-badge"
+                  >
+                    {stage}
+                  </Badge>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded p-0.5 hover:bg-secondary/60 cursor-pointer"
+                data-testid="button-close-quick-feedback"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            {contentTitle && (
+              <div className="px-4 pb-2">
+                <div className="text-xs text-muted-foreground truncate" title={contentTitle} data-testid="modal-content-title">
+                  {contentTitle}
+                </div>
+              </div>
+            )}
+            <div className="px-3 pb-3">
+              <FeedbackForm contentId={contentId} onSuccess={invalidate} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

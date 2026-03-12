@@ -35,6 +35,11 @@ import {
   FileText,
   Image as ImageIcon,
   MessageSquarePlus,
+  LayoutGrid,
+  List,
+  Globe,
+  Video,
+  Presentation,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -106,6 +111,26 @@ const stageTones: Record<string, { bg: string; text: string; border: string; acc
 function deriveReadableName(contentId: string, asset: { name?: string | null; campaignName?: string | null; url?: string | null }): { primary: string; showId: boolean } {
   if (asset.name && asset.name !== contentId) return { primary: asset.name, showId: true };
   if (asset.campaignName && asset.campaignName !== contentId) return { primary: asset.campaignName, showId: true };
+  if (asset.url) {
+    try {
+      const u = new URL(asset.url);
+      const path = u.pathname.replace(/\/$/, "");
+      const lastSegment = path.split("/").filter(Boolean).pop();
+      if (lastSegment) {
+        const decoded = decodeURIComponent(lastSegment)
+          .replace(/[-_]/g, " ")
+          .replace(/\.[^.]+$/, "")
+          .replace(/([a-z])([A-Z])/g, "$1 $2")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (decoded.length > 3) return { primary: decoded, showId: true };
+      }
+      if (u.hostname) {
+        const host = u.hostname.replace(/^www\./, "");
+        return { primary: host + (path && path !== "/" ? path : ""), showId: true };
+      }
+    } catch {}
+  }
   const parts = contentId.split("_");
   if (parts.length >= 7) {
     const tail = parts.slice(6).join(" ");
@@ -1081,6 +1106,14 @@ function ContentStatusIndicator({ status, assetId, assetName }: { status: string
   );
 }
 
+function getContentTypeIcon(contentId: string, url?: string | null) {
+  const lower = (contentId + " " + (url || "")).toLowerCase();
+  if (lower.includes("video") || lower.includes("webinar") || lower.includes(".mp4")) return Video;
+  if (lower.includes("presentation") || lower.includes("slide") || lower.includes("deck") || lower.includes(".pptx")) return Presentation;
+  if (lower.includes("web") || lower.includes("http") || lower.includes("page") || lower.includes("blog")) return Globe;
+  return FileText;
+}
+
 function ContentCard({
   asset,
   stage,
@@ -1088,6 +1121,7 @@ function ContentCard({
   inlineChatActive,
   onOpenInlineChat,
   onCloseInlineChat,
+  viewMode = "card",
 }: {
   asset: AssetAgg;
   stage: string;
@@ -1095,6 +1129,7 @@ function ContentCard({
   inlineChatActive: boolean;
   onOpenInlineChat: (assetId: string) => void;
   onCloseInlineChat: () => void;
+  viewMode?: "card" | "data";
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -1136,21 +1171,238 @@ function ContentCard({
   };
 
   const metrics: { label: string; value: string }[] = [];
-  if (stage === "TOFU") {
-    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
-    metrics.push({ label: "Avg time", value: asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m" });
-    if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
-  } else if (stage === "MOFU") {
-    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
-    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
-    if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
-  } else if (stage === "BOFU") {
-    metrics.push({ label: "SQOs", value: formatCompact(asset.sqoCount) });
-    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
-    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+  if (viewMode === "card") {
+    if (stage === "TOFU") {
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+      metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
+    } else if (stage === "MOFU") {
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+    } else if (stage === "BOFU") {
+      metrics.push({ label: "SQOs", value: formatCompact(asset.sqoCount) });
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    } else {
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    }
   } else {
-    metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
-    metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    if (stage === "TOFU") {
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+      metrics.push({ label: "Avg time", value: asset.timeAvg > 0 ? `${Math.round(asset.timeAvg / 60)}m` : "0m" });
+      if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
+    } else if (stage === "MOFU") {
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+      if (asset.downloadsSum > 0) metrics.push({ label: "Downloads", value: formatCompact(asset.downloadsSum) });
+    } else if (stage === "BOFU") {
+      metrics.push({ label: "SQOs", value: formatCompact(asset.sqoCount) });
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+    } else {
+      metrics.push({ label: "Views", value: formatCompact(asset.pageviewsSum) });
+      metrics.push({ label: "Leads", value: formatCompact(asset.uniqueLeads) });
+    }
+  }
+
+  const ContentTypeIcon = getContentTypeIcon(asset.contentId, asset.url);
+
+  if (viewMode === "card") {
+    return (
+      <>
+        <div
+          className="w-[220px] h-[280px] shrink-0 relative flex flex-col"
+          style={{ paddingTop: 4, paddingBottom: 4 }}
+          onMouseEnter={() => {
+            setHovered(true);
+            if (!compareMode) {
+              hoverTimerRef.current = setTimeout(() => setShowTooltip(true), 1500);
+            }
+          }}
+          onMouseLeave={() => {
+            setHovered(false);
+            setShowTooltip(false);
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          }}
+        >
+          {isSelectedForCompare && (
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 rounded-full bg-emerald-500 px-3 py-0.5 text-[10px] font-bold text-white shadow-lg" data-testid="badge-card-selected">
+              Card 1 selected
+            </div>
+          )}
+          {compareMode && !isSelectedForCompare && (
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 rounded-full bg-blue-500/80 px-3 py-0.5 text-[10px] font-bold text-white shadow-lg" data-testid="badge-select-card-2">
+              Click to compare
+            </div>
+          )}
+          <Card
+            className={`flex h-full flex-col overflow-hidden rounded-xl border backdrop-blur ${compareMode && !isSelectedForCompare ? "cursor-pointer" : ""}`}
+            style={{
+              transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+              transform: hovered ? "translateY(-3px)" : "translateY(0)",
+              boxShadow: isSelectedForCompare
+                ? "0 0 0 2px rgba(16, 185, 129, 0.6), 0 0 20px rgba(16, 185, 129, 0.2)"
+                : hovered
+                ? "0 8px 20px -5px rgba(0,0,0,0.15), 0 3px 8px -4px rgba(0,0,0,0.1)"
+                : "0 1px 3px 0 rgba(0,0,0,0.06)",
+              borderColor: isSelectedForCompare
+                ? "rgb(16, 185, 129)"
+                : hovered ? "hsl(var(--primary) / 0.35)" : undefined,
+              background: hovered ? "hsl(var(--card))" : "hsl(var(--card) / 0.7)",
+              animation: isSelectedForCompare ? "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite" : undefined,
+            }}
+            onClick={handleCardClick}
+            data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            <div
+              className="flex items-center justify-center h-[72px] rounded-t-xl relative"
+              style={{ background: `linear-gradient(135deg, ${tone.accent}22, ${tone.accent}44)` }}
+              data-testid="card-thumbnail"
+            >
+              <ContentTypeIcon className="h-8 w-8" style={{ color: tone.accent, opacity: 0.7 }} />
+              <Badge
+                className={`absolute top-2 right-2 border text-[9px] px-1.5 py-0 ${tone.bg} ${tone.text} ${tone.border}`}
+                data-testid="card-stage-badge"
+              >
+                {stage}
+              </Badge>
+            </div>
+
+            <div className="px-3 pt-2 pb-0 flex-1 flex flex-col min-h-0">
+              <button
+                className="block w-full text-left text-[13px] font-semibold leading-tight text-foreground cursor-pointer line-clamp-2"
+                style={{
+                  transition: "color 0.15s ease",
+                  color: hovered ? "hsl(var(--primary))" : undefined,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+                title={`${pdfDisplayName ? contentStatus.originalFilename : asset.contentId} — click to view details${asset.url ? " & preview" : ""}`}
+                onClick={(e) => {
+                  if (compareMode) { e.preventDefault(); return; }
+                  setShowDetail(true);
+                }}
+                data-testid="card-title"
+              >
+                {cardTitle}
+              </button>
+              <div
+                className="mt-0.5 truncate text-[10px] text-muted-foreground/50 font-mono"
+                title={asset.contentId}
+                data-testid="card-secondary"
+              >
+                {asset.contentId}
+              </div>
+
+              {tags.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-0.5 overflow-hidden max-h-[18px]" data-testid="card-tags">
+                  {tags.map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className="max-w-[90px] truncate rounded px-1 py-0 text-[9px] text-muted-foreground/80 bg-muted/40"
+                      title={t}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                  {allTags.length > 3 && (
+                    <span
+                      className="rounded px-1 py-0 text-[9px] text-muted-foreground/60 bg-muted/40"
+                      title={allTags.slice(3).join(", ")}
+                    >
+                      +{allTags.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-auto" />
+
+              <div className="my-1.5 h-px bg-border/50" />
+
+              <div className="pb-1.5" data-testid="card-metrics">
+                <div className="grid grid-cols-2 gap-1 text-[11px]">
+                  {metrics.map((m) => (
+                    <div key={m.label} className="text-center">
+                      <div className="text-muted-foreground/70 text-[9px] leading-none">{m.label}</div>
+                      <div className="font-bold text-[13px] leading-tight">{m.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pb-1 flex items-center gap-1.5" data-testid="card-feedback-row">
+                {fbStats && fbStats.totalCount > 0 && (
+                  <>
+                    <MessageCircle className="h-3 w-3 text-muted-foreground/50" />
+                    <span className="text-[10px] text-muted-foreground/70">
+                      {fbStats.totalCount} {fbStats.totalCount === 1 ? "note" : "notes"}
+                    </span>
+                  </>
+                )}
+                {hovered && !compareMode && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowQuickFeedback(!showQuickFeedback);
+                    }}
+                    className="ml-auto rounded-full p-0.5 hover:bg-secondary/80 transition-colors cursor-pointer"
+                    title="Quick feedback"
+                    data-testid="button-quick-feedback"
+                  >
+                    <MessageSquarePlus className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-foreground/80" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
+          <HoverInsightTooltip
+            asset={asset}
+            visible={showTooltip && !compareMode}
+            onAsk={() => {
+              setShowTooltip(false);
+              onOpenInlineChat(asset.contentId);
+            }}
+            onCompare={() => {
+              setShowTooltip(false);
+              onCompareSelect(asset, stage);
+            }}
+            onPlan={() => {
+              setShowTooltip(false);
+              navigate("/campaign-planner");
+            }}
+          />
+          {inlineChatActive && (
+            <InlineChatBubble
+              asset={asset}
+              stage={stage}
+              onClose={onCloseInlineChat}
+              onEscalate={(msgs) => {
+                onCloseInlineChat();
+                window.dispatchEvent(new CustomEvent("open-full-chat", {
+                  detail: { asset, stage, messages: msgs },
+                }));
+              }}
+            />
+          )}
+        </div>
+
+        {showQuickFeedback && (
+          <QuickFeedbackPopup
+            contentId={asset.contentId}
+            contentTitle={cardTitle}
+            stage={stage}
+            onClose={() => setShowQuickFeedback(false)}
+          />
+        )}
+
+        {showDetail && (
+        <ContentPreviewPanel asset={asset} stage={stage} onClose={() => setShowDetail(false)} />
+      )}
+    </>
+  );
   }
 
   return (
@@ -1341,12 +1593,6 @@ function ContentCard({
                 <MessageSquarePlus className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-foreground/80" />
               </button>
             )}
-            {showQuickFeedback && (
-              <QuickFeedbackPopup
-                contentId={asset.contentId}
-                onClose={() => setShowQuickFeedback(false)}
-              />
-            )}
           </div>
 
           {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && contentStatus.contentSummary && contentStatus.contentSummary !== "No text content available for analysis" && (
@@ -1447,6 +1693,15 @@ function ContentCard({
         )}
       </div>
 
+      {showQuickFeedback && (
+        <QuickFeedbackPopup
+          contentId={asset.contentId}
+          contentTitle={cardTitle}
+          stage={stage}
+          onClose={() => setShowQuickFeedback(false)}
+        />
+      )}
+
       {showDetail && (
         <ContentPreviewPanel asset={asset} stage={stage} onClose={() => setShowDetail(false)} />
       )}
@@ -1470,6 +1725,7 @@ function StageCarousel({
   activeInlineChatId,
   onOpenInlineChat,
   onCloseInlineChat,
+  viewMode = "card",
 }: {
   stage: "TOFU" | "MOFU" | "BOFU" | "UNKNOWN";
   search: string;
@@ -1478,6 +1734,7 @@ function StageCarousel({
   activeInlineChatId: string | null;
   onOpenInlineChat: (assetId: string) => void;
   onCloseInlineChat: () => void;
+  viewMode?: "card" | "data";
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -1589,7 +1846,7 @@ function StageCarousel({
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-[210px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
+              className={`${viewMode === "card" ? "h-[280px]" : "h-[210px]"} w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30`}
               data-testid={`skeleton-${stage.toLowerCase()}-${i}`}
             />
           ))}
@@ -1612,6 +1869,7 @@ function StageCarousel({
             inlineChatActive={activeInlineChatId === asset.contentId}
             onOpenInlineChat={onOpenInlineChat}
             onCloseInlineChat={onCloseInlineChat}
+            viewMode={viewMode}
           />
         ))}
 
@@ -1619,7 +1877,7 @@ function StageCarousel({
           Array.from({ length: 2 }).map((_, i) => (
             <div
               key={`loading-${i}`}
-              className="h-[210px] w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30"
+              className={`${viewMode === "card" ? "h-[280px]" : "h-[210px]"} w-[220px] shrink-0 animate-pulse rounded-xl border bg-muted/30`}
             />
           ))}
 
@@ -1641,6 +1899,10 @@ export default function ContentLibrary() {
   const [tagTypeFilter, setTagTypeFilter] = useState<"all" | "topic" | "audience" | "intent">("all");
   const [tagExplorerOpen, setTagExplorerOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"card" | "data">(() => {
+    const saved = localStorage.getItem("content-library-view-mode");
+    return saved === "data" ? "data" : "card";
+  });
   const [tagShowAll, setTagShowAll] = useState(false);
   const qc = useQueryClient();
 
@@ -1728,6 +1990,14 @@ export default function ContentLibrary() {
     setFilters({ product: "", channel: "", campaign: "", industry: "", contentAvailability: "" });
     setSelectedTags([]);
     setTagTypeFilter("all");
+  }, []);
+
+  const toggleViewMode = useCallback(() => {
+    setViewMode((prev) => {
+      const next = prev === "card" ? "data" : "card";
+      localStorage.setItem("content-library-view-mode", next);
+      return next;
+    });
   }, []);
 
   const [compareMode, setCompareMode] = useState(false);
@@ -1839,6 +2109,37 @@ export default function ContentLibrary() {
                     Clear all
                   </button>
                 )}
+
+                <div className="h-5 w-px bg-border/40 hidden sm:block" />
+
+                <div className="flex items-center gap-0.5 rounded-lg border border-border/40 p-0.5" data-testid="view-mode-toggle">
+                  <button
+                    onClick={() => { if (viewMode !== "card") toggleViewMode(); }}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
+                      viewMode === "card"
+                        ? "bg-[#00D657] text-black shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                    title="Card View"
+                    data-testid="button-view-card"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Card</span>
+                  </button>
+                  <button
+                    onClick={() => { if (viewMode !== "data") toggleViewMode(); }}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
+                      viewMode === "data"
+                        ? "bg-[#00D657] text-black shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                    title="Data View"
+                    data-testid="button-view-data"
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Data</span>
+                  </button>
+                </div>
 
                 {coverageData && Object.keys(coverageData).length > 0 && (
                   <>
@@ -2173,10 +2474,10 @@ export default function ContentLibrary() {
           </Card>
         )}
 
-        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
-        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} />
+        <StageCarousel stage="TOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+        <StageCarousel stage="MOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+        <StageCarousel stage="BOFU" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
+        <StageCarousel stage="UNKNOWN" search={debouncedSearch} filters={filters} tagFilter={selectedTags.length > 0 ? selectedTags : undefined} activeInlineChatId={activeInlineChatId} onOpenInlineChat={setActiveInlineChatId} onCloseInlineChat={() => setActiveInlineChatId(null)} viewMode={viewMode} />
       </div>
 
       {comparisonPair && (
