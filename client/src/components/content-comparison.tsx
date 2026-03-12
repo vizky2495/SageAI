@@ -1523,20 +1523,28 @@ function ComparisonResults({
                 ) : !hasContent ? (
                   <p className="text-xs text-amber-400/80 italic">Content not readable — text could not be extracted. Re-upload as text-based PDF or DOCX.</p>
                 ) : null}
-                {hasStructuredTags ? (
-                  <div>
-                    <StructuredTagPills structuredTags={structTags} />
-                    {flattenKeywordTags(structuredShared).length > 0 && <div className="mt-1.5"><StructuredTagPills structuredTags={structuredShared} label="Shared" /></div>}
-                  </div>
-                ) : flatTags.length > 0 ? (
-                  <div>
-                    <KeywordTagPills tags={flatTags} type={tagType} />
-                    {sharedTagsList.length > 0 && <div className="mt-1.5"><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-                  </div>
-                ) : null}
-                {!hasContent && flatTags.length === 0 && !hasStructuredTags && (
-                  <p className="text-[10px] text-muted-foreground italic">Tags: Not available — content not readable</p>
-                )}
+                {(() => {
+                  const tagCounts = hasStructuredTags
+                    ? [
+                        { label: "Topic", count: structTags.topic_tags.length, style: TAG_TYPE_STYLES.topic },
+                        { label: "Audience", count: structTags.audience_tags.length, style: TAG_TYPE_STYLES.audience },
+                        { label: "Intent", count: structTags.intent_tags.length, style: TAG_TYPE_STYLES.intent },
+                      ].filter(g => g.count > 0)
+                    : flatTags.length > 0
+                      ? [{ label: "Tags", count: flatTags.length, style: tagType === "a" ? "bg-teal-500/20 text-teal-300 border-teal-500/30" : "bg-emerald-600/20 text-emerald-300 border-emerald-600/30" }]
+                      : [];
+                  return tagCounts.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {tagCounts.map(({ label, count, style }) => (
+                        <span key={label} className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${style}`}>
+                          {label} ({count})
+                        </span>
+                      ))}
+                    </div>
+                  ) : !hasContent ? (
+                    <p className="text-[10px] text-muted-foreground italic">Tags: Not available — content not readable</p>
+                  ) : null;
+                })()}
                 <div className="pt-2 border-t border-border/20">
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                     {metaItems.map(({ k, v }) => (
@@ -1650,30 +1658,13 @@ function ComparisonResults({
         </Card>
       )}
 
-      {!isDup && shared && (shared.overlap?.length || shared.divergence?.length || sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0) && (
+      {!isDup && shared && (shared.overlap?.length || shared.divergence?.length) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="shared-different">
           <div className="flex items-center gap-2 mb-3">
             <ArrowLeftRight className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Shared vs Different</h3>
             <SourceTag type="content" />
           </div>
-          {(sharedTagsList.length > 0 || tagsA.length > 0 || tagsB.length > 0 || hasStructuredTags) && (
-            <div className="mb-3 rounded-lg bg-muted/10 border border-border/30 p-3">
-              {hasStructuredTags ? (
-                <div className="space-y-2">
-                  {flattenKeywordTags(structuredShared).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Shared tags:</span><StructuredTagPills structuredTags={structuredShared} /></div>}
-                  {flattenKeywordTags(structuredTagsA).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only <span style={{ color: BASELINE_COLOR }}>{shortA}</span>:</span><StructuredTagPills structuredTags={structuredTagsA} /></div>}
-                  {flattenKeywordTags(structuredTagsB).length > 0 && <div><span className="text-[10px] text-muted-foreground font-medium block mb-1">Only <span style={{ color: CHALLENGER_COLOR }}>{shortB}</span>:</span><StructuredTagPills structuredTags={structuredTagsB} /></div>}
-                </div>
-              ) : (
-                <>
-                  {sharedTagsList.length > 0 && <div className="mb-1.5"><span className="text-[10px] text-muted-foreground mr-2">Shared:</span><KeywordTagPills tags={sharedTagsList} type="shared" /></div>}
-                  {tagsA.length > 0 && <div className="mb-1"><span className="text-[10px] text-muted-foreground mr-2">Only <span style={{ color: BASELINE_COLOR }}>{shortA}</span>:</span><KeywordTagPills tags={tagsA} type="a" /></div>}
-                  {tagsB.length > 0 && <div><span className="text-[10px] text-muted-foreground mr-2">Only <span style={{ color: CHALLENGER_COLOR }}>{shortB}</span>:</span><KeywordTagPills tags={tagsB} type="b" /></div>}
-                </>
-              )}
-            </div>
-          )}
           <div className="grid sm:grid-cols-2 gap-3">
             {shared.overlap && shared.overlap.length > 0 && (
               <div>
