@@ -35,6 +35,7 @@ import {
   Pencil,
 } from "lucide-react";
 import type { AssetAgg } from "@shared/schema";
+import SalesFeedbackSection from "./sales-feedback";
 
 function ContentFilePreview({ assetId, contentFormat, hasFile }: { assetId: string; contentFormat: string | null; hasFile: boolean }) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -432,6 +433,10 @@ export default function ContentPreviewPanel({
               <AssetDetails asset={asset} stage={stage} />
 
               <EngagementMetrics asset={asset} />
+
+              <Separator />
+
+              <SalesFeedbackSection contentId={asset.contentId} />
 
               <Separator />
 
