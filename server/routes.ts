@@ -61,6 +61,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sales-feedback/recent", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 5, 20));
+      const entries = await storage.getRecentSalesFeedback(limit);
+      res.json(entries);
+    } catch (err: any) {
+      console.error("Recent sales feedback error:", err);
+      res.status(500).json({ message: "Failed to fetch recent feedback" });
+    }
+  });
+
   app.get("/api/sales-feedback/:contentId", requireAuth, async (req: Request, res: Response) => {
     try {
       const entries = await storage.getSalesFeedbackByContentId(req.params.contentId);

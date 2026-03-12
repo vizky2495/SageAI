@@ -34,11 +34,13 @@ import {
   Tag,
   FileText,
   Image as ImageIcon,
+  MessageSquarePlus,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";
 import type { AssetAgg } from "@shared/schema";
+import { QuickFeedbackPopup } from "@/components/sales-feedback";
 import ContentPreviewPanel from "@/components/content-preview-panel";
 
 interface StructuredKeywordTags {
@@ -1097,6 +1099,7 @@ function ContentCard({
   const [showDetail, setShowDetail] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showQuickFeedback, setShowQuickFeedback] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, navigate] = useLocation();
   const tone = stageTones[stage] || stageTones.TOFU;
@@ -1297,32 +1300,54 @@ function ContentCard({
             </div>
           )}
 
-          {fbStats && fbStats.totalCount > 0 && (
-            <div className="px-3 pb-1 flex items-center gap-1.5" data-testid="card-feedback-indicator">
-              <MessageCircle className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[10px] text-muted-foreground/70">
-                {fbStats.totalCount} {fbStats.totalCount === 1 ? "note" : "notes"}
-              </span>
-              {fbStats.totalCount >= 3 && (
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    fbStats.sentimentScore > 0.2
-                      ? "bg-emerald-500"
-                      : fbStats.sentimentScore < -0.2
-                        ? "bg-red-500"
-                        : "bg-amber-500"
-                  }`}
-                  title={
-                    fbStats.sentimentScore > 0.2
-                      ? "Mostly positive feedback"
-                      : fbStats.sentimentScore < -0.2
-                        ? "Mostly negative feedback"
-                        : "Mixed feedback"
-                  }
-                />
-              )}
-            </div>
-          )}
+          <div className="px-3 pb-1 flex items-center gap-1.5 relative" data-testid="card-feedback-row">
+            {fbStats && fbStats.totalCount > 0 && (
+              <>
+                <MessageCircle className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-[10px] text-muted-foreground/70">
+                  {fbStats.totalCount} {fbStats.totalCount === 1 ? "note" : "notes"}
+                </span>
+                {fbStats.totalCount >= 3 && (
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      fbStats.sentimentScore > 0.2
+                        ? "bg-emerald-500"
+                        : fbStats.sentimentScore < -0.2
+                          ? "bg-red-500"
+                          : "bg-amber-500"
+                    }`}
+                    title={
+                      fbStats.sentimentScore > 0.2
+                        ? "Mostly positive feedback"
+                        : fbStats.sentimentScore < -0.2
+                          ? "Mostly negative feedback"
+                          : "Mixed feedback"
+                    }
+                  />
+                )}
+              </>
+            )}
+            {hovered && !compareMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowQuickFeedback(!showQuickFeedback);
+                }}
+                className="ml-auto rounded-full p-0.5 hover:bg-secondary/80 transition-colors cursor-pointer"
+                title="Quick feedback"
+                data-testid="button-quick-feedback"
+              >
+                <MessageSquarePlus className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-foreground/80" />
+              </button>
+            )}
+            {showQuickFeedback && (
+              <QuickFeedbackPopup
+                contentId={asset.contentId}
+                onClose={() => setShowQuickFeedback(false)}
+              />
+            )}
+          </div>
 
           {contentStatus && (contentStatus.fetchStatus === "success" || contentStatus.fetchStatus === "partial") && contentStatus.contentSummary && contentStatus.contentSummary !== "No text content available for analysis" && (
             <div className="px-3 pb-2 space-y-1" data-testid="card-content-preview">

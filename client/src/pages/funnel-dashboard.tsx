@@ -14,7 +14,12 @@ import {
   LayoutDashboard,
   CalendarDays,
   ArrowLeftRight,
+  MessageSquarePlus,
+  ExternalLink,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/queryClient";
+import { POSITIVE_TAGS, NEGATIVE_TAGS } from "@shared/schema";
 import {
   Bar,
   BarChart,
@@ -47,6 +52,101 @@ import {
   type FunnelStage,
   type DateRangePreset,
 } from "@/hooks/use-funnel-data";
+
+interface RecentFeedbackEntry {
+  id: number;
+  contentId: string;
+  author: string;
+  tags: string[];
+  note: string | null;
+  salesforceRef: string | null;
+  createdAt: string;
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function RecentFeedbackSection() {
+  const { data: entries, isLoading } = useQuery<RecentFeedbackEntry[]>({
+    queryKey: ["sales-feedback-recent"],
+    queryFn: async () => {
+      const res = await authFetch("/api/sales-feedback/recent?limit=5");
+      if (!res.ok) throw new Error("Failed to fetch recent feedback");
+      return res.json();
+    },
+  });
+
+  if (isLoading || !entries || entries.length === 0) return null;
+
+  return (
+    <Card className="rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur" data-testid="section-recent-feedback">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="grid h-8 w-8 place-items-center rounded-lg border bg-card shadow-sm">
+          <MessageSquarePlus className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold">Recent Sales Feedback</div>
+          <div className="text-[11px] text-muted-foreground">Latest notes from the team</div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <div
+            key={entry.id}
+            className="rounded-lg border border-border/40 bg-secondary/10 p-2.5 space-y-1"
+            data-testid={`recent-feedback-${entry.id}`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground/90 truncate max-w-[140px]" title={entry.contentId}>
+                {entry.contentId}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">{entry.author}</span>
+                <span className="text-[10px] text-muted-foreground">{formatRelativeDate(entry.createdAt)}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {entry.tags.map((tag) => {
+                const isPos = POSITIVE_TAGS.has(tag);
+                const isNeg = NEGATIVE_TAGS.has(tag);
+                const cls = isPos
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  : isNeg
+                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                    : "bg-secondary text-foreground/70 border-border";
+                return (
+                  <span key={tag} className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] ${cls}`}>
+                    {tag}
+                  </span>
+                );
+              })}
+            </div>
+            {entry.note && (
+              <p className="text-[11px] text-foreground/70 leading-relaxed line-clamp-2">{entry.note}</p>
+            )}
+            {entry.salesforceRef && (
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <ExternalLink className="h-2.5 w-2.5" />
+                <span>Opp: {entry.salesforceRef}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export default function FunnelDashboard() {
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
@@ -438,6 +538,8 @@ export default function FunnelDashboard() {
               </Card>
             </div>
           )}
+
+          <RecentFeedbackSection />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Link href="/analytics" data-testid="link-analytics-page-from-performance">

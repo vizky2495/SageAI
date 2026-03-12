@@ -19,6 +19,8 @@ import {
   ChevronRight,
   Users,
   ExternalLink,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 
 interface FeedbackEntry {
@@ -112,14 +114,28 @@ function SelectableTag({
 function FeedbackForm({
   contentId,
   onSuccess,
+  compact = false,
 }: {
   contentId: string;
   onSuccess: () => void;
+  compact?: boolean;
 }) {
   const { user } = useAuth();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [salesforceRef, setSalesforceRef] = useState("");
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const getAuthorName = () => {
+    if (user) {
+      const name = `${user.firstName} ${user.lastName}`.trim() || user.displayName;
+      if (name) {
+        try { localStorage.setItem("cia-feedback-author", name); } catch {}
+        return name;
+      }
+    }
+    try { return localStorage.getItem("cia-feedback-author") || "Unknown"; } catch { return "Unknown"; }
+  };
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -128,9 +144,7 @@ function FeedbackForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contentId,
-          author: user
-            ? `${user.firstName} ${user.lastName}`.trim() || user.displayName
-            : "Unknown",
+          author: getAuthorName(),
           tags: selectedTags,
           note: note.trim() || null,
           salesforceRef: salesforceRef.trim() || null,
@@ -143,6 +157,8 @@ function FeedbackForm({
       setSelectedTags([]);
       setNote("");
       setSalesforceRef("");
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2500);
       onSuccess();
     },
   });
@@ -153,8 +169,17 @@ function FeedbackForm({
     );
   };
 
+  if (showSuccess) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4" data-testid="feedback-success">
+        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <span className="text-sm text-emerald-300 font-medium">Feedback submitted</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3 rounded-xl border border-border/60 bg-secondary/20 p-3" data-testid="sales-feedback-form">
+    <div className={`space-y-3 rounded-xl border border-border/60 bg-secondary/20 ${compact ? "p-2.5" : "p-3"}`} data-testid="sales-feedback-form">
       <div className="space-y-2">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Prospect Reaction
@@ -171,37 +196,41 @@ function FeedbackForm({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Content Quality
+      {!compact && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Content Quality
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SALES_FEEDBACK_TAGS.content_quality.map((tag) => (
+              <SelectableTag
+                key={tag}
+                tag={tag}
+                selected={selectedTags.includes(tag)}
+                onToggle={() => toggleTag(tag)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {SALES_FEEDBACK_TAGS.content_quality.map((tag) => (
-            <SelectableTag
-              key={tag}
-              tag={tag}
-              selected={selectedTags.includes(tag)}
-              onToggle={() => toggleTag(tag)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
 
       <Textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="What did the prospect say or how did they react?"
-        className="min-h-[60px] text-sm resize-none bg-background/50"
+        className={`text-sm resize-none bg-background/50 ${compact ? "min-h-[40px]" : "min-h-[60px]"}`}
         data-testid="input-feedback-note"
       />
 
-      <Input
-        value={salesforceRef}
-        onChange={(e) => setSalesforceRef(e.target.value)}
-        placeholder="Opportunity or lead name (optional)"
-        className="text-sm bg-background/50"
-        data-testid="input-salesforce-ref"
-      />
+      {!compact && (
+        <Input
+          value={salesforceRef}
+          onChange={(e) => setSalesforceRef(e.target.value)}
+          placeholder="Opportunity or lead name (optional)"
+          className="text-sm bg-background/50"
+          data-testid="input-salesforce-ref"
+        />
+      )}
 
       <Button
         size="sm"
@@ -211,11 +240,16 @@ function FeedbackForm({
         data-testid="button-submit-feedback"
       >
         {submitMutation.isPending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Submitting...
+          </>
         ) : (
-          <Send className="h-3.5 w-3.5" />
+          <>
+            <Send className="h-3.5 w-3.5" />
+            Submit Feedback
+          </>
         )}
-        Submit Feedback
       </Button>
 
       {submitMutation.error && (
@@ -337,6 +371,9 @@ export default function SalesFeedbackSection({
     queryClient.invalidateQueries({
       queryKey: ["sales-feedback-batch-stats"],
     });
+    queryClient.invalidateQueries({
+      queryKey: ["sales-feedback-recent"],
+    });
   };
 
   return (
@@ -407,5 +444,44 @@ export default function SalesFeedbackSection({
         </div>
       )}
     </section>
+  );
+}
+
+export function QuickFeedbackPopup({
+  contentId,
+  onClose,
+}: {
+  contentId: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["sales-feedback-stats", contentId] });
+    queryClient.invalidateQueries({ queryKey: ["sales-feedback-batch-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-feedback-recent"] });
+    setTimeout(onClose, 2600);
+  };
+
+  return (
+    <div
+      className="absolute z-50 right-0 top-full mt-1 w-[260px] rounded-xl border border-border/80 bg-card shadow-xl backdrop-blur-md"
+      onClick={(e) => e.stopPropagation()}
+      data-testid="quick-feedback-popup"
+    >
+      <div className="flex items-center justify-between px-3 pt-2 pb-1">
+        <span className="text-xs font-semibold text-foreground/80">Quick Feedback</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-0.5 hover:bg-secondary/60 cursor-pointer"
+          data-testid="button-close-quick-feedback"
+        >
+          <X className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </div>
+      <div className="px-2 pb-2">
+        <FeedbackForm contentId={contentId} onSuccess={invalidate} compact />
+      </div>
+    </div>
   );
 }

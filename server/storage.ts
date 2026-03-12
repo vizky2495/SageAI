@@ -83,6 +83,7 @@ export interface IStorage {
   getSalesFeedbackByContentId(contentId: string): Promise<SalesFeedback[]>;
   getSalesFeedbackStats(contentId: string): Promise<{ totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }>;
   getSalesFeedbackStatsBatch(contentIds: string[]): Promise<Record<string, { totalCount: number; sentimentScore: number }>>;
+  getRecentSalesFeedback(limit?: number): Promise<SalesFeedback[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -622,6 +623,14 @@ export class DatabaseStorage implements IStorage {
       };
     }
     return result;
+  }
+
+  async getRecentSalesFeedback(limit = 5): Promise<SalesFeedback[]> {
+    return await db
+      .select()
+      .from(salesFeedback)
+      .orderBy(desc(salesFeedback.createdAt))
+      .limit(limit);
   }
 }
 
