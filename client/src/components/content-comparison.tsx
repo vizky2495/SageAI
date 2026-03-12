@@ -435,7 +435,7 @@ interface MultiComparisonResult {
   contentNames: string[];
   contentMetrics: { name: string; metrics: MetricsWithData }[];
   contentMetadata: { name: string; stage: string; product: string; type: string; country: string; industry: string }[];
-  salesSignal?: Record<string, { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] }> | null;
+  salesSignal?: Record<string, SalesSignalData> | null;
 }
 
 function formatNum(n: number): string {
@@ -1445,6 +1445,262 @@ function StructuredTagPills({ structuredTags, label }: { structuredTags: Structu
   );
 }
 
+function SalesFeedbackSection({
+  signalA,
+  signalB,
+  shortA,
+  shortB,
+}: {
+  signalA: SalesSignalData | null;
+  signalB: SalesSignalData | null;
+  shortA: string;
+  shortB: string;
+}) {
+  const hasFeedback = !!(signalA || signalB);
+
+  const sentimentLabel = (score: number) =>
+    score > 0.2 ? "Positive" : score < -0.2 ? "Negative" : "Mixed";
+  const sentimentColor = (score: number) =>
+    score > 0.2 ? "bg-emerald-400" : score < -0.2 ? "bg-red-400" : "bg-amber-400";
+  const sentimentText = (score: number) =>
+    score > 0.2 ? "text-emerald-400" : score < -0.2 ? "text-red-400" : "text-amber-400";
+
+  const tagColor = (tag: string) => {
+    if (POSITIVE_TAG_SET.has(tag)) return "bg-emerald-500/15 border-emerald-500/25 text-emerald-400";
+    if (NEGATIVE_TAG_SET.has(tag)) return "bg-red-500/15 border-red-500/25 text-red-400";
+    return "bg-primary/10 border-primary/20 text-primary";
+  };
+
+  const allTagsSet = new Set<string>();
+  if (signalA?.tagCounts) Object.keys(signalA.tagCounts).forEach(t => allTagsSet.add(t));
+  if (signalB?.tagCounts) Object.keys(signalB.tagCounts).forEach(t => allTagsSet.add(t));
+  const allTags = Array.from(allTagsSet).sort((a, b) => {
+    const totalA = (signalA?.tagCounts?.[a] || 0) + (signalB?.tagCounts?.[a] || 0);
+    const totalB = (signalA?.tagCounts?.[b] || 0) + (signalB?.tagCounts?.[b] || 0);
+    return totalB - totalA;
+  });
+
+  const strongerAsset = (() => {
+    if (!signalA && !signalB) return null;
+    if (signalA && !signalB) return { name: shortA, color: BASELINE_COLOR, score: signalA.sentimentScore, count: signalA.totalCount };
+    if (!signalA && signalB) return { name: shortB, color: CHALLENGER_COLOR, score: signalB.sentimentScore, count: signalB.totalCount };
+    if (signalA && signalB) {
+      if (signalA.sentimentScore > signalB.sentimentScore + 0.1) return { name: shortA, color: BASELINE_COLOR, score: signalA.sentimentScore, count: signalA.totalCount };
+      if (signalB.sentimentScore > signalA.sentimentScore + 0.1) return { name: shortB, color: CHALLENGER_COLOR, score: signalB.sentimentScore, count: signalB.totalCount };
+      if (signalA.totalCount > signalB.totalCount) return { name: shortA, color: BASELINE_COLOR, score: signalA.sentimentScore, count: signalA.totalCount };
+      if (signalB.totalCount > signalA.totalCount) return { name: shortB, color: CHALLENGER_COLOR, score: signalB.sentimentScore, count: signalB.totalCount };
+    }
+    return null;
+  })();
+
+  const notesA = signalA?.entries?.filter(e => e.note) || [];
+  const notesB = signalB?.entries?.filter(e => e.note) || [];
+
+  const formatDate = (d: string) => {
+    try {
+      const date = new Date(d);
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch { return ""; }
+  };
+
+  return (
+    <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="sales-feedback-section">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+          <MessageSquare className="h-4 w-4 text-primary" />
+        </div>
+        <h3 className="text-sm font-semibold">Sales Feedback</h3>
+        <SourceTag type="internal" />
+      </div>
+
+      {!hasFeedback ? (
+        <div className="rounded-xl bg-muted/10 border border-border/20 p-6 text-center" data-testid="sales-feedback-empty">
+          <MessageSquare className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto">
+            No sales feedback yet for these assets. SDR feedback helps improve comparison accuracy.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {strongerAsset && (
+            <div className="rounded-xl bg-primary/5 border border-primary/20 p-3.5" data-testid="sales-signal-summary">
+              <div className="flex items-start gap-2">
+                <TrendingUp className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-foreground/90">
+                    <span style={{ color: strongerAsset.color }}>{strongerAsset.name}</span>
+                    {" "}has stronger SDR endorsement
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {signalA && signalB ? (
+                      <>
+                        Based on {signalA.totalCount + signalB.totalCount} total reviews:
+                        {" "}<span style={{ color: BASELINE_COLOR }}>{shortA}</span> sentiment is {sentimentLabel(signalA.sentimentScore).toLowerCase()} ({signalA.sentimentScore > 0 ? "+" : ""}{signalA.sentimentScore.toFixed(2)}) from {signalA.totalCount} review{signalA.totalCount !== 1 ? "s" : ""},
+                        {" "}<span style={{ color: CHALLENGER_COLOR }}>{shortB}</span> is {sentimentLabel(signalB.sentimentScore).toLowerCase()} ({signalB.sentimentScore > 0 ? "+" : ""}{signalB.sentimentScore.toFixed(2)}) from {signalB.totalCount} review{signalB.totalCount !== 1 ? "s" : ""}.
+                        {(() => {
+                          const aPos = signalA.topTags.filter(t => POSITIVE_TAG_SET.has(t.tag));
+                          const bPos = signalB.topTags.filter(t => POSITIVE_TAG_SET.has(t.tag));
+                          const strongPos = strongerAsset.name === shortA ? aPos : bPos;
+                          if (strongPos.length > 0) return ` SDRs highlight: ${strongPos.map(t => t.tag.toLowerCase()).join(", ")}.`;
+                          return "";
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        {strongerAsset.count} SDR review{strongerAsset.count !== 1 ? "s" : ""} with {sentimentLabel(strongerAsset.score).toLowerCase()} sentiment.
+                        {" "}The other asset has no sales feedback for comparison.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[
+              { label: shortA, color: BASELINE_COLOR, data: signalA },
+              { label: shortB, color: CHALLENGER_COLOR, data: signalB },
+            ].map(({ label, color, data }) => (
+              <div key={label} className="rounded-xl bg-muted/10 border border-border/30 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color }}>{label}</span>
+                  {data ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className={`h-2 w-2 rounded-full ${sentimentColor(data.sentimentScore)}`} />
+                      <span className={`text-[10px] font-medium ${sentimentText(data.sentimentScore)}`}>
+                        {sentimentLabel(data.sentimentScore)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        ({data.totalCount} review{data.totalCount !== 1 ? "s" : ""})
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                {data ? (
+                  <div className="space-y-2.5">
+                    {data.topTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {data.topTags.map((t, i) => (
+                          <span key={i} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${tagColor(t.tag)}`}>
+                            {t.tag} <span className="opacity-60">x{t.count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground italic">No sales feedback</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {allTags.length > 0 && signalA && signalB && (
+            <div className="rounded-xl bg-muted/10 border border-border/30 p-3.5" data-testid="tag-comparison-table">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Tag Comparison</span>
+              <div className="space-y-1">
+                {allTags.map(tag => {
+                  const aCount = signalA.tagCounts?.[tag] || 0;
+                  const bCount = signalB.tagCounts?.[tag] || 0;
+                  const maxCount = Math.max(aCount, bCount, 1);
+                  return (
+                    <div key={tag} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {aCount > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div
+                              className="h-1.5 rounded-full"
+                              style={{
+                                width: `${Math.max((aCount / maxCount) * 60, 8)}px`,
+                                backgroundColor: BASELINE_COLOR,
+                                opacity: 0.7,
+                              }}
+                            />
+                            <span className="text-[10px] tabular-nums text-foreground/70 w-4 text-right">{aCount}</span>
+                          </div>
+                        )}
+                        {aCount === 0 && <span className="text-[10px] text-muted-foreground/30 w-4 text-right">-</span>}
+                      </div>
+                      <span className={`text-[10px] font-medium text-center px-2 min-w-[120px] ${
+                        POSITIVE_TAG_SET.has(tag) ? "text-emerald-400" : NEGATIVE_TAG_SET.has(tag) ? "text-red-400" : "text-foreground/70"
+                      }`}>
+                        {tag}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {bCount > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] tabular-nums text-foreground/70 w-4">{bCount}</span>
+                            <div
+                              className="h-1.5 rounded-full"
+                              style={{
+                                width: `${Math.max((bCount / maxCount) * 60, 8)}px`,
+                                backgroundColor: CHALLENGER_COLOR,
+                                opacity: 0.7,
+                              }}
+                            />
+                          </div>
+                        )}
+                        {bCount === 0 && <span className="text-[10px] text-muted-foreground/30 w-4">-</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-border/20">
+                <span className="text-[9px] font-semibold uppercase" style={{ color: BASELINE_COLOR }}>{shortA}</span>
+                <span className="text-[9px] font-semibold uppercase" style={{ color: CHALLENGER_COLOR }}>{shortB}</span>
+              </div>
+            </div>
+          )}
+
+          {(notesA.length > 0 || notesB.length > 0) && (
+            <div className="rounded-xl bg-muted/10 border border-border/30 p-3.5" data-testid="rep-notes-section">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Rep Notes</span>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <span className="text-[9px] font-semibold uppercase" style={{ color: BASELINE_COLOR }}>{shortA}</span>
+                  {notesA.length > 0 ? notesA.slice(0, 3).map((entry, i) => (
+                    <div key={i} className="rounded-lg bg-background/50 border border-border/20 p-2.5">
+                      <p className="text-[11px] text-foreground/80 leading-relaxed italic">"{entry.note}"</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[9px] text-muted-foreground font-medium">{entry.author}</span>
+                        <span className="text-[9px] text-muted-foreground/50">{formatDate(entry.createdAt)}</span>
+                        {entry.salesforceRef && (
+                          <span className="text-[9px] text-primary/60">SF: {entry.salesforceRef}</span>
+                        )}
+                      </div>
+                    </div>
+                  )) : (
+                    <span className="text-[10px] text-muted-foreground/50 italic">No notes</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <span className="text-[9px] font-semibold uppercase" style={{ color: CHALLENGER_COLOR }}>{shortB}</span>
+                  {notesB.length > 0 ? notesB.slice(0, 3).map((entry, i) => (
+                    <div key={i} className="rounded-lg bg-background/50 border border-border/20 p-2.5">
+                      <p className="text-[11px] text-foreground/80 leading-relaxed italic">"{entry.note}"</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[9px] text-muted-foreground font-medium">{entry.author}</span>
+                        <span className="text-[9px] text-muted-foreground/50">{formatDate(entry.createdAt)}</span>
+                        {entry.salesforceRef && (
+                          <span className="text-[9px] text-primary/60">SF: {entry.salesforceRef}</span>
+                        )}
+                      </div>
+                    </div>
+                  )) : (
+                    <span className="text-[10px] text-muted-foreground/50 italic">No notes</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function ComparisonResults({
   comparisonData,
   isLoadingVerdict,
@@ -1759,57 +2015,12 @@ function ComparisonResults({
         )}
       </Card>
 
-      {comparisonData.salesSignal && (comparisonData.salesSignal.a || comparisonData.salesSignal.b) && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="sales-signal-section">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="h-4 w-4 text-primary" />
-            </div>
-            <h3 className="text-sm font-semibold">Sales Signal</h3>
-            <SourceTag type="internal" />
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {[
-              { key: "a" as const, label: shortA, color: BASELINE_COLOR, data: comparisonData.salesSignal.a },
-              { key: "b" as const, label: shortB, color: CHALLENGER_COLOR, data: comparisonData.salesSignal.b },
-            ].map(({ key, label, color, data }) => (
-              <div key={key} className="rounded-xl bg-muted/10 border border-border/30 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color }}>{label}</span>
-                  {data ? (
-                    <span className="text-[10px] text-muted-foreground">{data.totalCount} SDR review{data.totalCount !== 1 ? "s" : ""}</span>
-                  ) : null}
-                </div>
-                {data ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground">Sentiment</span>
-                      <div className="flex items-center gap-1">
-                        <div className={`h-2 w-2 rounded-full ${data.sentimentScore > 0.2 ? "bg-emerald-400" : data.sentimentScore < -0.2 ? "bg-red-400" : "bg-amber-400"}`} />
-                        <span className="text-xs font-medium">
-                          {data.sentimentScore > 0.2 ? "Positive" : data.sentimentScore < -0.2 ? "Negative" : "Mixed"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">({data.sentimentScore > 0 ? "+" : ""}{data.sentimentScore.toFixed(2)})</span>
-                      </div>
-                    </div>
-                    {data.topTags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {data.topTags.map((t, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
-                            {t.tag} <span className="text-muted-foreground">x{t.count}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-[10px] text-muted-foreground italic">No sales feedback</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <SalesFeedbackSection
+        signalA={comparisonData.salesSignal?.a || null}
+        signalB={comparisonData.salesSignal?.b || null}
+        shortA={shortA}
+        shortB={shortB}
+      />
 
       {perfDisplay === "table" && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="performance-comparison">
@@ -1927,6 +2138,39 @@ function ComparisonResults({
   );
 }
 
+interface SalesSignalEntry {
+  author: string;
+  tags: string[];
+  note: string | null;
+  salesforceRef: string | null;
+  createdAt: string;
+}
+
+interface SalesSignalData {
+  totalCount: number;
+  sentimentScore: number;
+  tagCounts: Record<string, number>;
+  topTags: { tag: string; count: number }[];
+  entries: SalesSignalEntry[];
+}
+
+const POSITIVE_TAG_SET = new Set([
+  "Prospect engaged",
+  "Prospect shared internally",
+  "Opened conversation",
+  "Strong hook",
+  "Good objection handler",
+]);
+
+const NEGATIVE_TAG_SET = new Set([
+  "No reaction",
+  "Negative reaction",
+  "Outdated",
+  "Too long",
+  "Too technical",
+  "Missing competitor context",
+]);
+
 interface FullComparisonResult {
   nameA: string;
   nameB: string;
@@ -1956,8 +2200,8 @@ interface FullComparisonResult {
   metadataIssues?: { asset: string; field: string; tagged: string; issue: string }[];
   metadata: ComparisonMetadata;
   salesSignal?: {
-    a: { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] } | null;
-    b: { totalCount: number; sentimentScore: number; topTags: { tag: string; count: number }[] } | null;
+    a: SalesSignalData | null;
+    b: SalesSignalData | null;
   } | null;
 }
 
@@ -2509,45 +2753,87 @@ function MultiComparisonResults({
         )}
       </Card>
 
-      {data.salesSignal && Object.keys(data.salesSignal).length > 0 && (
-        <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="multi-sales-signal">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="h-4 w-4 text-primary" />
+      <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur" data-testid="multi-sales-feedback">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+            <MessageSquare className="h-4 w-4 text-primary" />
+          </div>
+          <h3 className="text-sm font-semibold">Sales Feedback</h3>
+          <SourceTag type="internal" />
+        </div>
+
+        {(!data.salesSignal || Object.keys(data.salesSignal).length === 0) ? (
+          <div className="rounded-xl bg-muted/10 border border-border/20 p-6 text-center" data-testid="multi-sales-feedback-empty">
+            <MessageSquare className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-md mx-auto">
+              No sales feedback yet for these assets. SDR feedback helps improve comparison accuracy.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(() => {
+              const entries = Object.entries(data.salesSignal);
+              const best = entries.reduce((prev, curr) => curr[1].sentimentScore > prev[1].sentimentScore ? curr : prev);
+              return best[1].sentimentScore !== 0 ? (
+                <div className="rounded-xl bg-primary/5 border border-primary/20 p-3.5">
+                  <div className="flex items-start gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-xs text-foreground/90">
+                      <span className="font-semibold text-primary">{best[0]}</span> has the strongest SDR endorsement
+                      ({best[1].totalCount} review{best[1].totalCount !== 1 ? "s" : ""}, {best[1].sentimentScore > 0.2 ? "positive" : best[1].sentimentScore < -0.2 ? "negative" : "mixed"} sentiment).
+                      {best[1].topTags.filter(t => POSITIVE_TAG_SET.has(t.tag)).length > 0 &&
+                        ` SDRs highlight: ${best[1].topTags.filter(t => POSITIVE_TAG_SET.has(t.tag)).map(t => t.tag.toLowerCase()).join(", ")}.`}
+                    </p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(data.salesSignal).length, 3)}, 1fr)` }}>
+              {Object.entries(data.salesSignal).map(([name, fb]) => {
+                const multiTagColor = (tag: string) => {
+                  if (POSITIVE_TAG_SET.has(tag)) return "bg-emerald-500/15 border-emerald-500/25 text-emerald-400";
+                  if (NEGATIVE_TAG_SET.has(tag)) return "bg-red-500/15 border-red-500/25 text-red-400";
+                  return "bg-primary/10 border-primary/20 text-primary";
+                };
+                const notesForAsset = fb.entries?.filter(e => e.note) || [];
+                return (
+                  <div key={name} className="rounded-xl bg-muted/10 border border-border/30 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary truncate max-w-[140px]">{name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`h-2 w-2 rounded-full ${fb.sentimentScore > 0.2 ? "bg-emerald-400" : fb.sentimentScore < -0.2 ? "bg-red-400" : "bg-amber-400"}`} />
+                        <span className="text-[10px] text-muted-foreground">
+                          {fb.sentimentScore > 0.2 ? "Positive" : fb.sentimentScore < -0.2 ? "Negative" : "Mixed"} ({fb.totalCount})
+                        </span>
+                      </div>
+                    </div>
+                    {fb.topTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {fb.topTags.map((t, j) => (
+                          <span key={j} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${multiTagColor(t.tag)}`}>
+                            {t.tag} <span className="opacity-60">x{t.count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {notesForAsset.length > 0 && (
+                      <div className="pt-1.5 border-t border-border/20 space-y-1">
+                        {notesForAsset.slice(0, 2).map((entry, j) => (
+                          <div key={j}>
+                            <p className="text-[10px] text-foreground/70 italic leading-relaxed">"{entry.note}"</p>
+                            <span className="text-[9px] text-muted-foreground">{entry.author}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <h3 className="text-sm font-semibold">Sales Signal</h3>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary uppercase">Internal Data</span>
           </div>
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Object.keys(data.salesSignal).length, 3)}, 1fr)` }}>
-            {Object.entries(data.salesSignal).map(([name, fb], i) => (
-              <div key={name} className="rounded-xl bg-muted/10 border border-border/30 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary truncate max-w-[120px]">{name}</span>
-                  <span className="text-[10px] text-muted-foreground">{fb.totalCount} review{fb.totalCount !== 1 ? "s" : ""}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground">Sentiment</span>
-                  <div className="flex items-center gap-1">
-                    <div className={`h-2 w-2 rounded-full ${fb.sentimentScore > 0.2 ? "bg-emerald-400" : fb.sentimentScore < -0.2 ? "bg-red-400" : "bg-amber-400"}`} />
-                    <span className="text-xs font-medium">
-                      {fb.sentimentScore > 0.2 ? "Positive" : fb.sentimentScore < -0.2 ? "Negative" : "Mixed"}
-                    </span>
-                  </div>
-                </div>
-                {fb.topTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {fb.topTags.map((t, j) => (
-                      <span key={j} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
-                        {t.tag} <span className="text-muted-foreground">x{t.count}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {data.contentMetrics.some(cm => cm.metrics.hasData) && (
         <Card className="rounded-2xl border bg-card/80 p-5 backdrop-blur">

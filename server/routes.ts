@@ -827,15 +827,21 @@ No explanation, no markdown, no extra text. Only JSON.`,
 
       let feedbackA: { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number } | null = null;
       let feedbackB: { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number } | null = null;
+      let feedbackEntriesA: any[] = [];
+      let feedbackEntriesB: any[] = [];
       try {
         const cidA = contentA.contentId || nameA;
         const cidB = contentB.contentId || nameB;
-        const [fa, fb] = await Promise.all([
+        const [fa, fb, entriesA, entriesB] = await Promise.all([
           storage.getSalesFeedbackStats(cidA),
           storage.getSalesFeedbackStats(cidB),
+          storage.getSalesFeedbackByContentId(cidA),
+          storage.getSalesFeedbackByContentId(cidB),
         ]);
         if (fa.totalCount > 0) feedbackA = fa;
         if (fb.totalCount > 0) feedbackB = fb;
+        feedbackEntriesA = entriesA;
+        feedbackEntriesB = entriesB;
       } catch {}
 
       const buildFeedbackBlock = (fb: typeof feedbackA, name: string) => {
@@ -1183,12 +1189,28 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
           a: feedbackA ? {
             totalCount: feedbackA.totalCount,
             sentimentScore: feedbackA.sentimentScore,
-            topTags: Object.entries(feedbackA.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+            tagCounts: feedbackA.tagCounts,
+            topTags: Object.entries(feedbackA.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([tag, count]) => ({ tag, count })),
+            entries: feedbackEntriesA.slice(0, 10).map(e => ({
+              author: e.author,
+              tags: e.tags,
+              note: e.note || null,
+              salesforceRef: e.salesforceRef || null,
+              createdAt: e.createdAt,
+            })),
           } : null,
           b: feedbackB ? {
             totalCount: feedbackB.totalCount,
             sentimentScore: feedbackB.sentimentScore,
-            topTags: Object.entries(feedbackB.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+            tagCounts: feedbackB.tagCounts,
+            topTags: Object.entries(feedbackB.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([tag, count]) => ({ tag, count })),
+            entries: feedbackEntriesB.slice(0, 10).map(e => ({
+              author: e.author,
+              tags: e.tags,
+              note: e.note || null,
+              salesforceRef: e.salesforceRef || null,
+              createdAt: e.createdAt,
+            })),
           } : null,
         } : null,
       });
@@ -1290,14 +1312,19 @@ ${bTextForAnalysis ? `FULL CONTENT TEXT:\n${bTextForAnalysis.slice(0, 12000)}` :
       const contentCount = enrichedContents.length;
 
       const multiFeedbackMap: Record<string, { totalCount: number; tagCounts: Record<string, number>; sentimentScore: number }> = {};
+      const multiFeedbackEntries: Record<string, any[]> = {};
       try {
         const allCids = enrichedContents.map(c => c.contentId).filter(Boolean);
         const batchStats = await storage.getSalesFeedbackStatsBatch(allCids);
-        for (const cid of allCids) {
-          if (batchStats[cid] && batchStats[cid].totalCount > 0) {
-            multiFeedbackMap[cid] = await storage.getSalesFeedbackStats(cid);
-          }
-        }
+        const cidsWithFeedback = allCids.filter(cid => batchStats[cid] && batchStats[cid].totalCount > 0);
+        const [statsResults, entriesResults] = await Promise.all([
+          Promise.all(cidsWithFeedback.map(cid => storage.getSalesFeedbackStats(cid))),
+          Promise.all(cidsWithFeedback.map(cid => storage.getSalesFeedbackByContentId(cid))),
+        ]);
+        cidsWithFeedback.forEach((cid, i) => {
+          multiFeedbackMap[cid] = statsResults[i];
+          multiFeedbackEntries[cid] = entriesResults[i];
+        });
       } catch {}
 
       const buildMultiFeedbackBlock = (contentId: string) => {
@@ -1459,10 +1486,19 @@ Return ONLY valid JSON matching this schema:
       for (const c of enrichedContents) {
         const fb = multiFeedbackMap[c.contentId];
         if (fb && fb.totalCount > 0) {
+          const entries = multiFeedbackEntries[c.contentId] || [];
           multiSalesSignal[c.name] = {
             totalCount: fb.totalCount,
             sentimentScore: fb.sentimentScore,
-            topTags: Object.entries(fb.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([tag, count]) => ({ tag, count })),
+            tagCounts: fb.tagCounts,
+            topTags: Object.entries(fb.tagCounts).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([tag, count]) => ({ tag, count })),
+            entries: entries.slice(0, 10).map((e: any) => ({
+              author: e.author,
+              tags: e.tags,
+              note: e.note || null,
+              salesforceRef: e.salesforceRef || null,
+              createdAt: e.createdAt,
+            })),
           };
         }
       }
