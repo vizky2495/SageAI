@@ -3088,6 +3088,81 @@ export default function ContentComparison() {
   const [modifySlotIndex, setModifySlotIndex] = useState<number | null>(null);
   const [modifySource, setModifySource] = useState<SlotSource | null>(null);
   const reanalysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
+
+  function handleCardDrop(index: number, e: React.DragEvent) {
+    e.preventDefault();
+    setDragOverSlot(null);
+
+    const slotData = e.dataTransfer.getData("application/comparison-slot");
+    if (slotData) {
+      try {
+        const { slotIndex: fromIndex } = JSON.parse(slotData);
+        if (fromIndex !== index && fromIndex >= 0 && fromIndex < slots.length) {
+          setSlots(prev => {
+            const next = [...prev];
+            const temp = next[fromIndex];
+            next[fromIndex] = next[index];
+            next[index] = temp;
+            return next;
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to parse comparison-slot drag data:", err);
+      }
+      return;
+    }
+
+    const cardData = e.dataTransfer.getData("application/content-card");
+    if (!cardData) return;
+    try {
+      const { asset, stage } = JSON.parse(cardData);
+      if (!asset?.contentId) {
+        console.warn("Dropped content card missing contentId");
+        return;
+      }
+      const resolvedStage = stage || asset.stage || "UNKNOWN";
+      const resolvedType = asset.typecampaignmember || null;
+      const pickerAsset: AssetPickerItem = {
+        id: asset.id || asset.contentId,
+        contentId: asset.contentId,
+        name: asset.name || asset.contentId,
+        stage: resolvedStage,
+        product: asset.productFranchise || null,
+        channel: asset.utmChannel || null,
+        cta: asset.cta || null,
+        type: resolvedType,
+        url: asset.url || null,
+        country: "Global",
+        industry: "",
+        pageviews: asset.pageviewsSum || 0,
+        downloads: asset.downloadsSum || 0,
+        leads: asset.uniqueLeads || 0,
+        sqos: asset.sqoCount || 0,
+        avgTime: asset.timeAvg || 0,
+      };
+      const manualResult: PdfResult = {
+        filename: asset.name || asset.contentId,
+        pageCount: 0,
+        wordCount: 0,
+        text: "",
+        classification: {
+          contentType: resolvedType || "Document",
+          stage: resolvedStage,
+          product: asset.productFranchise || "General",
+          industry: "General",
+          topic: asset.name || asset.contentId,
+          confidence: 1.0,
+        },
+        isFallback: true,
+        contentId: asset.contentId,
+        metrics: { pageviews: asset.pageviewsSum || 0, downloads: asset.downloadsSum || 0, leads: asset.uniqueLeads || 0, sqos: asset.sqoCount || 0, avgTime: asset.timeAvg || 0 },
+      };
+      handleSlotFilled(index, manualResult, pickerAsset, "library");
+    } catch (err) {
+      console.warn("Failed to parse content-card drag data:", err);
+    }
+  }
 
   const filledSlots = slots.filter(s => s.filled);
   const canCompare = filledSlots.length >= 2;
@@ -3540,6 +3615,12 @@ export default function ContentComparison() {
         animate={{ opacity: 1, y: 0 }}
         className={`rounded-2xl border border-primary/30 bg-card/70 backdrop-blur ${collapsed ? "px-4 py-2.5" : "p-5"}`}
         data-testid="panel-content-intake"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("application/content-card") && collapsed && step === "intake") {
+            e.preventDefault();
+            setCollapsed(false);
+          }
+        }}
       >
         {collapsed ? (
           <div
@@ -3609,7 +3690,22 @@ export default function ContentComparison() {
                 </div>
 
                 {slot.filled ? (
-                  <FilledSlotCard slot={slot} index={index} totalSlots={slots.length} onClear={() => clearSlot(index)} />
+                  <div
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("application/comparison-slot", JSON.stringify({ slotIndex: index }));
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverSlot(index); }}
+                    onDragLeave={() => setDragOverSlot(null)}
+                    onDrop={(e) => handleCardDrop(index, e)}
+                    className="transition-all rounded-xl"
+                    style={{
+                      boxShadow: dragOverSlot === index ? "0 0 0 2px rgba(0,214,87,0.6), 0 0 16px rgba(0,214,87,0.2)" : undefined,
+                    }}
+                  >
+                    <FilledSlotCard slot={slot} index={index} totalSlots={slots.length} onClear={() => clearSlot(index)} />
+                  </div>
                 ) : activeSlotIndex === index ? (
                   <div className="rounded-xl border border-primary/20 bg-muted/5 p-3 space-y-3">
                     {!activeSource && <SlotSourcePicker slotIndex={index} onSelectSource={(src) => setActiveSource(src)} />}
@@ -3667,17 +3763,33 @@ export default function ContentComparison() {
                 ) : (
                   <button
                     onClick={() => { setActiveSlotIndex(index); setActiveSource(null); }}
-                    className="w-full rounded-xl border-2 border-dashed border-border/30 bg-muted/5 p-4 text-center hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer"
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOverSlot(index); }}
+                    onDragLeave={() => setDragOverSlot(null)}
+                    onDrop={(e) => handleCardDrop(index, e)}
+                    className={`w-full rounded-xl border-2 border-dashed p-4 text-center transition-all cursor-pointer ${
+                      dragOverSlot === index
+                        ? "border-[#00D657] bg-[#00D657]/10"
+                        : "border-border/30 bg-muted/5 hover:border-primary/30 hover:bg-primary/5"
+                    }`}
+                    style={{
+                      boxShadow: dragOverSlot === index ? "0 0 0 2px rgba(0,214,87,0.5), 0 0 20px rgba(0,214,87,0.15)" : undefined,
+                    }}
                     data-testid={`btn-expand-slot-${index}`}
                   >
                     <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                       <Plus className="h-4 w-4" />
-                      <span>Add content — Upload PDF, select from library, or enter manually</span>
+                      <span>{dragOverSlot === index ? "Drop here" : "Add content \u2014 Upload PDF, select from library, or enter manually"}</span>
                     </div>
                   </button>
                 )}
               </div>
             ))}
+
+            {filledSlots.length === 0 && (
+              <p className="text-center text-xs text-muted-foreground/60 py-1" data-testid="text-drag-hint">
+                Drag content cards here or click to search
+              </p>
+            )}
 
             {canAddSlot && (
               <button

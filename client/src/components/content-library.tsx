@@ -1212,6 +1212,24 @@ function ContentCard({
         <div
           className="w-[220px] h-[280px] shrink-0 relative flex flex-col"
           style={{ paddingTop: 4, paddingBottom: 4 }}
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("application/content-card", JSON.stringify({ asset, stage }));
+            e.dataTransfer.effectAllowed = "copyMove";
+            const ghost = document.createElement("div");
+            ghost.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 14px;background:#1a1a2e;border:1px solid rgba(0,214,87,0.4);border-radius:12px;color:#fff;font-size:12px;font-weight:600;max-width:220px;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
+            const icon = document.createElement("span");
+            icon.textContent = "📄";
+            icon.style.fontSize = "16px";
+            ghost.appendChild(icon);
+            const title = document.createElement("span");
+            title.textContent = cardTitle.length > 30 ? cardTitle.slice(0, 30) + "…" : cardTitle;
+            title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+            ghost.appendChild(title);
+            document.body.appendChild(ghost);
+            e.dataTransfer.setDragImage(ghost, 0, 0);
+            requestAnimationFrame(() => document.body.removeChild(ghost));
+          }}
           onMouseEnter={() => {
             setHovered(true);
             if (!compareMode) {
@@ -1410,6 +1428,24 @@ function ContentCard({
       <div
         className="w-[220px] h-[210px] shrink-0 relative flex flex-col"
         style={{ paddingTop: 4, paddingBottom: 4 }}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("application/content-card", JSON.stringify({ asset, stage }));
+          e.dataTransfer.effectAllowed = "copyMove";
+          const ghost = document.createElement("div");
+          ghost.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 14px;background:#1a1a2e;border:1px solid rgba(0,214,87,0.4);border-radius:12px;color:#fff;font-size:12px;font-weight:600;max-width:220px;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
+          const icon = document.createElement("span");
+          icon.textContent = "\u{1F4C4}";
+          icon.style.fontSize = "16px";
+          ghost.appendChild(icon);
+          const title = document.createElement("span");
+          title.textContent = cardTitle.length > 30 ? cardTitle.slice(0, 30) + "\u2026" : cardTitle;
+          title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+          ghost.appendChild(title);
+          document.body.appendChild(ghost);
+          e.dataTransfer.setDragImage(ghost, 0, 0);
+          requestAnimationFrame(() => document.body.removeChild(ghost));
+        }}
         onMouseEnter={() => {
           setHovered(true);
           if (!compareMode) {
