@@ -407,7 +407,7 @@ interface MultiContentItem {
   keyTopics: KeyTopicItem[] | null;
   whatWorks: WhatMakesItWorkItem[] | null;
   improvements: WhatCouldBeImprovedItem[] | null;
-  keywordTags: string[];
+  keywordTags: string[] | { topic_tags?: string[]; audience_tags?: string[]; intent_tags?: string[]; user_added_tags?: string[] };
   detectedMetadata?: { country?: string; product?: string; industry?: string } | null;
 }
 
@@ -426,6 +426,7 @@ interface MultiComparisonResult {
   };
   rankings: {
     overall: MultiRanking[];
+    methodology?: string;
     bestForLeads?: string;
     bestForEngagement?: string;
     bestForConversion?: string;
@@ -2589,6 +2590,8 @@ function MultiComparisonResults({
           })}
         </div>
 
+        <p className="text-[9px] text-muted-foreground italic">Score based on: content depth and specificity (30%), audience targeting precision (25%), quantified metrics and proof points (25%), structural clarity and readability (20%)</p>
+
         {(data.rankings.bestForLeads || data.rankings.bestForEngagement || data.rankings.bestForConversion) && (
           <div className="flex flex-wrap gap-2">
             {data.rankings.bestForLeads && (
@@ -2634,11 +2637,13 @@ function MultiComparisonResults({
                   {(["countryFit", "industryFit", "funnelStageFit", "productFit"] as const).map(dim => {
                     const r = item.resonance?.[dim];
                     if (!r) return null;
+                    const rating = typeof r === "string" ? r : r?.rating;
+                    if (!rating) return null;
                     const dimLabel = dim.replace("Fit", "").replace("funnelStage", "Stage");
                     return (
                       <div key={dim} className="flex items-center gap-1 text-[10px]">
                         <span className="text-muted-foreground capitalize">{dimLabel}:</span>
-                        <ResonanceBadge rating={r.rating} />
+                        <ResonanceBadge rating={rating} />
                       </div>
                     );
                   })}
@@ -2650,27 +2655,33 @@ function MultiComparisonResults({
               <div>
                 <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Key Topics</span>
                 <div className="space-y-1">
-                  {item.keyTopics.slice(0, 3).map((t: any, j: number) => (
-                    <div key={j} className="text-[10px] text-muted-foreground">
-                      {typeof t === "string" ? (
-                        <span className="font-medium text-foreground/80">{t}</span>
-                      ) : (
-                        <><span className="font-medium text-foreground/80">{t.topic}</span>{t.detail ? ` — ${t.detail}` : ""}</>
-                      )}
-                    </div>
-                  ))}
+                  {item.keyTopics.slice(0, 3).map((t: any, j: number) => {
+                    const topicName = typeof t === "string" ? t : (t?.topic || t?.name || "");
+                    const topicDetail = typeof t === "string" ? "" : (t?.detail || t?.description || "");
+                    if (!topicName) return null;
+                    return (
+                      <div key={j} className="text-[10px] text-muted-foreground">
+                        <span className="font-medium text-foreground/80">{topicName}</span>
+                        {topicDetail ? ` — ${topicDetail}` : ""}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {item.keywordTags && item.keywordTags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {item.keywordTags.slice(0, 6).map((tag, j) => (
-                  <span key={j} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border bg-teal-500/15 text-teal-300 border-teal-500/25">{tag}</span>
-                ))}
-                {item.keywordTags.length > 6 && <span className="text-[9px] text-muted-foreground">+{item.keywordTags.length - 6}</span>}
-              </div>
-            )}
+            {(() => {
+              const tags = item.keywordTags;
+              const flat: string[] = !tags ? [] : Array.isArray(tags) ? tags.filter((t: any) => typeof t === "string") : [...(tags.topic_tags || []), ...(tags.audience_tags || []), ...(tags.intent_tags || []), ...(tags.user_added_tags || [])];
+              return flat.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {flat.slice(0, 6).map((tag, j) => (
+                    <span key={j} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border bg-teal-500/15 text-teal-300 border-teal-500/25">{tag}</span>
+                  ))}
+                  {flat.length > 6 && <span className="text-[9px] text-muted-foreground">+{flat.length - 6}</span>}
+                </div>
+              ) : null;
+            })()}
 
             {data.contentMetrics[i]?.metrics.hasData && (
               <div className="grid grid-cols-3 gap-1">
@@ -3516,6 +3527,7 @@ export default function ContentComparison() {
           crossAnalysis: raw.crossAnalysis || { sharedThemes: [], differentiators: [], contentGaps: [] },
           rankings: {
             overall: raw.rankings?.overall || [],
+            methodology: raw.rankings?.methodology,
             bestForLeads: raw.rankings?.byMetric?.bestForLeads || raw.rankings?.bestForLeads,
             bestForEngagement: raw.rankings?.byMetric?.bestForEngagement || raw.rankings?.bestForEngagement,
             bestForConversion: raw.rankings?.byMetric?.bestForConversion || raw.rankings?.bestForConversion,
@@ -3563,7 +3575,8 @@ export default function ContentComparison() {
           const content = mapped.contents?.[i];
           if (content) {
             ctx.contentSummary = content.summary || "";
-            ctx.keywordTags = content.keywordTags || [];
+            const kt = content.keywordTags;
+            ctx.keywordTags = !kt ? [] : Array.isArray(kt) ? kt : [...(kt.topic_tags || []), ...(kt.audience_tags || []), ...(kt.intent_tags || []), ...(kt.user_added_tags || [])];
           }
           return ctx;
         });

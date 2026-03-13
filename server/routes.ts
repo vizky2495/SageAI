@@ -1371,7 +1371,7 @@ ${c.textForAnalysis ? `FULL CONTENT TEXT:\n${c.textForAnalysis.slice(0, 8000)}` 
         if (!c.readable) {
           return `{ "name": "${c.name}", "summary": null, "resonance": null, "keyTopics": null, "whatWorks": null, "improvements": null, "keywordTags": [] }`;
         }
-        return `{ "name": "${c.name}", "summary": "3-4 sentence overview", "resonance": { "countryFit": "Strong|Moderate|Weak", "industryFit": "Strong|Moderate|Weak", "funnelStageFit": "Strong|Moderate|Weak", "productFit": "Strong|Moderate|Weak" }, "keyTopics": ["topic1", "topic2"], "whatWorks": ["strength1", "strength2"], "improvements": ["gap1", "gap2"], "keywordTags": ["tag1", "tag2", "...8-15 tags"] }`;
+        return `{ "name": "${c.name}", "summary": "3-4 sentence overview", "resonance": { "countryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" }, "industryFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" }, "funnelStageFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" }, "productFit": { "rating": "Strong|Moderate|Weak", "explanation": "1 sentence" } }, "keyTopics": [{ "topic": "topic name", "detail": "1-2 sentence explanation" }], "whatWorks": ["strength1", "strength2"], "improvements": ["gap1", "gap2"], "keywordTags": { "topic_tags": ["tag1", "tag2"], "audience_tags": ["tag1"], "intent_tags": ["tag1"] } }`;
       }).join(",\n    ");
 
       let multiAnalysis: any = null;
@@ -1397,7 +1397,7 @@ CONCISENESS RULES:
 - Key topics: 3-5 items max per content.
 - Resonance ratings: use Strong/Moderate/Weak only.
 - Cross analysis items: 3-5 bullet points each.
-- Rankings: score 0-100 with 1-sentence reason.
+- Rankings: score 0-100 using these weights: content depth and specificity (30%), audience targeting precision (25%), quantified metrics and proof points (25%), structural clarity and readability (20%). Include 1-sentence reason explaining the primary factor. If content text was not available for a piece, score it 0 and set reason to "Content not readable — cannot score".
 - Verdict: 1-2 paragraphs max.
 - Suggestions: max 5 items, 1-2 sentences each.
 
@@ -1422,7 +1422,8 @@ Return ONLY valid JSON matching this schema:
     "contentGaps": ["topics or angles missing across the set"]
   },
   "rankings": {
-    "overall": [{ "name": "content name", "score": 85, "reason": "1-sentence reason" }],
+    "overall": [{ "name": "content name", "score": 85, "reason": "1-sentence reason for score" }],
+    "methodology": "content depth/specificity (30%), audience targeting (25%), metrics/proof points (25%), structural clarity (20%)",
     "byMetric": {
       "bestForLeads": "content name or null",
       "bestForEngagement": "content name or null",

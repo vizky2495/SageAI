@@ -1,0 +1,132 @@
+Standardize the Content Comparison Report format across all comparisons — both 2-piece and multi-piece (3-5 pieces). Fix the rendering bugs in multi-piece comparisons and adopt the best design patterns consistently. The report should be concise, scannable, and every section must render actual data — never "undefined" placeholders.
+
+FIX: "UNDEFINED: UNDEFINED" BUG IN KEY TOPICS
+The multi-piece comparison report shows "undefined: undefined" repeated 5 times for every content piece's Key Topics section. The keyword tags generate correctly but the topic breakdown does not render. Fix:
+
+Debug the JSON parsing for the key topics section. The AI response likely returns topic objects with name and description fields, but the rendering code is trying to read properties that are null or named differently than expected.
+Log the raw AI response for the key topics to see the actual field names being returned.
+Ensure the rendering code matches the exact field names in the AI response.
+Test with all three content pieces from the multi-comparison to confirm topics render with real text, not "undefined."
+If a topic genuinely has no description, show just the topic name without ": undefined" — never display the word "undefined" to the user.
+
+
+FIX: EMPTY CONTENT RESONANCE IN MULTI-PIECE COMPARISONS
+The multi-piece comparison shows the "Content Resonance" header for each content piece but no ratings underneath. The 2-piece comparison renders resonance correctly. Fix:
+
+Apply the same resonance generation logic (country fit, industry fit, funnel stage fit, product fit with Strong/Moderate/Weak ratings) to multi-piece comparisons.
+The AI prompt for multi-piece comparisons must include the instruction to generate resonance ratings for EACH content piece, not just an overall comparison.
+Render the resonance as a compact table: one row per dimension, one column per content piece, rating + one-line explanation per cell.
+
+
+FIX: SCORING METHODOLOGY MUST BE TRANSPARENT
+The multi-piece comparison shows scores (88/100, 83/100, 70/100) without explaining how they were calculated. This makes them appear arbitrary. Fix:
+
+Below the rankings table, add a one-line methodology note: "Score based on: content depth and specificity (30%), audience targeting precision (25%), quantified metrics and proof points (25%), structural clarity and readability (20%)"
+The AI must use this consistent methodology when generating scores — not invent a different weighting each time.
+Add to the AI prompt for multi-piece comparisons: "Score each content piece out of 100 using these weights: content depth and specificity (30%), audience targeting precision (25%), quantified metrics and proof points (25%), structural clarity and readability (20%). Explain the primary reason for each score in one sentence."
+If the scoring feels unreliable for a particular comparison (e.g., one piece has content and another doesn't), show the score with a caveat: "Score based on available content analysis only" or do not score unreadable content at all — show "N/A — content not readable" instead of a number.
+
+
+FIX: MULTI-PIECE COMPARISON FIRST PAGE IS TOO DENSE
+The first page of the multi-piece comparison crams rankings, verdict, recommendations, shared themes, differentiators, and content gaps all into one page. This is overwhelming. Restructure:
+
+Page 1 (after cover) should only contain:
+
+Rankings table with scores and one-line reason per piece
+"Best for" callout pills: Best for Leads, Best for Engagement, Best for Conversion
+AI Verdict paragraph (one paragraph maximum on this page)
+
+
+Move everything else to subsequent pages:
+
+Recommendations → separate section on a later page
+Shared Themes + Differentiators → separate section
+Content Gaps → separate section
+
+
+
+
+STANDARDIZE: ASSET IDENTITY TABLE FOR ALL REPORTS
+Use this compact metadata table format in every comparison report (both 2-piece and multi-piece):
+FieldContent 1Content 2Content 3 (if multi)Full Name.........FormateBookGuideCase StudyFunnel StageTOFUTOFUBOFUProductSage IntacctGeneralSage IntacctCountryUnited States [Detected from content]Not specifiedNot specifiedIndustryEducation [Detected from content]AccountingNonprofitWord Count1,8385,6872,400
+
+Where the AI detected a value that was missing in metadata, show: "[Detected from content]" after the value.
+Where data genuinely doesn't exist, show "Not specified" — never "N/A"
+Below the table, flag metadata issues: "Metadata issues detected: [X] fields may be incorrect" with specific callouts explaining the mismatch.
+
+
+STANDARDIZE: TAG FORMAT WITH TYPES
+Display tags grouped by type for every content piece in every report:
+Tags:
+Topic: K-12 Private School Cloud Accounting | Grant and Donor Fund 
+       Accounting | FACTS Tuition Integration | FASB-Compliant Reporting
+Audience: K-12 Private School CFOs | Nonprofit Accounting Leaders | 
+          Independent School Administrators
+
+Topic tags and Audience tags on separate lines with the type label
+Use " | " as delimiter between tags in the PDF for readability
+Never generate tags for content the AI did not read
+
+
+STANDARDIZE: RESONANCE TABLE FORMAT
+Use this compact table for all reports:
+For 2-piece comparisons:
+Dimension[Baseline name][Challenger name]Country/RegionStrong — US regulatory references throughoutWeak — no Canada content despite tagIndustryStrong — K-12 private schools specificallyStrong — accounting firm owners directlyFunnel StageModerate — reads as MOFU despite TOFU tagStrong — genuine TOFU thought leadershipProductStrong — Sage Intacct throughoutWeak — Sage mentioned as publisher only
+For multi-piece comparisons (3-5 pieces):
+Same table format but with more columns:
+Dimension[Content 1 name][Content 2 name][Content 3 name]CountryStrong — ...Moderate — ...Weak — ...IndustryStrong — ...Moderate — ...Strong — ...StageModerate — ...Strong — ...Strong — ...ProductStrong — ...Weak — ...Strong — ...
+If the table gets too wide for the page (4-5 content pieces), split into two rows or use a condensed format showing only the rating (Strong/Moderate/Weak) in the table cells with explanations as footnotes below.
+
+STANDARDIZE: REPORT STRUCTURE
+For 2-piece comparisons — target 5-6 pages:
+Page 1: Cover — title with short readable names, date, author, Sage branding
+Page 2: Asset Identity table + Content Overview (concise summary per piece, 3-4 sentences each) + Tags grouped by type + Metadata issue flags
+Page 3: Key Topics (1-2 sentence explanation per topic per piece, not full paragraphs) + Comparison Insight (one paragraph connecting the two)
+Page 4: Audience Resonance table + Shared vs Different (bullet points, not paragraphs)
+Page 5: Could Be Improved (2-3 bullet points per piece, only for content actually read) + Verdict (one paragraph) + Suggestions (maximum 4, 1-2 sentences each)
+Performance data as inline text where relevant, not a separate page unless both pieces have meaningful data.
+For multi-piece comparisons (3-5 pieces) — target 5-7 pages:
+Page 1: Cover — title listing all content short names, date, author, Sage branding
+Page 2: Rankings + Verdict — ranking table with scores (methodology noted), "Best for" callout pills (Best for Leads, Best for Engagement, Best for Conversion), AI Verdict (one paragraph). This is the executive summary page — a busy stakeholder should be able to read only this page and get the key takeaway.
+Page 3: Asset Identity table (all pieces as columns) + Content Overview (compact — 2-3 sentences per piece) + Tags per piece
+Page 4: Audience Resonance table (all pieces as columns) + Key Topics per piece (rendered correctly — no "undefined")
+Page 5: Shared Themes + Differentiators + Content Gaps (all as bullet points)
+Page 6: Could Be Improved (per piece, bullet points) + Suggestions (maximum 5, concise)
+Performance data as inline text where relevant.
+
+FEATURES UNIQUE TO MULTI-PIECE COMPARISONS (keep these):
+These elements only appear in multi-piece comparisons (3+ pieces), not in 2-piece comparisons:
+
+Scoring and ranking table — numbered ranking with scores out of 100, one-line reason, methodology footnote
+"Best for" callout pills — Best for Leads, Best for Engagement, Best for Conversion. Only show when there's enough engagement data to support the claim. If no engagement data, skip these callouts.
+Content Gaps section — issues that are common across the entire set (e.g., "all three lack CTAs"). This is more valuable in multi-piece comparisons because it reveals patterns across a content set.
+Shared Themes section — what the content set has in common. Useful for understanding whether a set of content tells a coherent story or has redundancy.
+
+
+PAGE COUNT RULES:
+
+2-piece comparison: maximum 6 pages including cover
+3-piece comparison: maximum 7 pages including cover
+4-5 piece comparison: maximum 8 pages including cover
+Adding more content pieces should NOT linearly increase page count. Use tables and compact layouts to keep it tight.
+Never generate a page with just a header and no content — skip the section or merge it with another section.
+Sections with less than 3 lines of content should be merged with an adjacent section, not given their own page.
+Dynamic page count: if there's genuinely less to say (e.g., one piece wasn't readable), reduce the page count accordingly. A 2-piece comparison where one piece wasn't readable should be 3-4 pages, not 6 empty ones.
+
+
+CRITICAL RULES THAT APPLY TO ALL REPORTS:
+
+Never show "undefined" anywhere in the report — debug and fix any rendering that produces this
+Never generate tags, topics, resonance ratings, or analysis for content the AI did not read — show "Not available — content not readable" instead
+Never show "N/A" when data exists in the system — pull from engagement data or show "[Detected from content]"
+Never fabricate projections, forecasts, or performance estimates
+Never generate a page with just a header and no content
+Every data point must have a source tag: [Internal Data], [Content Analysis], or [AI Recommendation]
+Scores must have transparent methodology — never show a number without explaining how it was calculated
+Verdicts must be substantive analysis, not data summaries — interpret, don't just repeat numbers
+Suggestions must be actionable and specific — never generic advice
+The word "undefined" appearing anywhere in a report is a bug that must be fixed immediately
+
+
+
+This gives Replit one clear, comprehensive instruction covering both comparison formats, all the fixes, and all the standards — no ambiguity about which report is which.

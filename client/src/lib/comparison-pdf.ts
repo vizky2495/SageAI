@@ -393,7 +393,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
   drawTableRow(["Product", dv(meta.productA), dv(meta.productB)], idWidths, false, false);
   drawTableRow(["Country/Region", dv(meta.countryA), dv(meta.countryB)], idWidths, false, true);
   drawTableRow(["Industry", dv(meta.industryA), dv(meta.industryB)], idWidths, false, false);
-  drawTableRow(["Word Count", meta.wordCountA?.toLocaleString() || "N/A", meta.wordCountB?.toLocaleString() || "N/A"], idWidths, false, true);
+  drawTableRow(["Word Count", meta.wordCountA?.toLocaleString() || "Not specified", meta.wordCountB?.toLocaleString() || "Not specified"], idWidths, false, true);
   drawTableRow(["Content Type", dv(meta.typeA), dv(meta.typeB)], idWidths, false, false);
 
   // === CONTENT OVERVIEW ===
@@ -521,9 +521,9 @@ export function generateComparisonPdf(data: FullComparisonResult) {
         const dB = data.resonanceAssessment.b[dimKey];
         drawTableRow([
           dims[i].label,
-          dA?.rating || "N/A",
+          dA?.rating || "Not rated",
           dA?.explanation || "",
-          dB?.rating || "N/A",
+          dB?.rating || "Not rated",
           dB?.explanation || "",
         ], resWidths, false, i % 2 === 0);
       }
@@ -535,7 +535,7 @@ export function generateComparisonPdf(data: FullComparisonResult) {
       drawTableRow(["Dimension", "Rating", "Explanation"], resWidths, true, false);
       for (let i = 0; i < dims.length; i++) {
         const d = assessment[dims[i].key];
-        drawTableRow([dims[i].label, d?.rating || "N/A", d?.explanation || ""], resWidths, false, i % 2 === 0);
+        drawTableRow([dims[i].label, d?.rating || "Not rated", d?.explanation || ""], resWidths, false, i % 2 === 0);
       }
     }
   }
@@ -737,9 +737,9 @@ export function generateComparisonPdf(data: FullComparisonResult) {
 }
 
 interface MultiComparisonData {
-  contents: { name: string; summary: string; resonance: any | null; keyTopics: { topic: string; detail: string }[] | null; whatWorks: any[] | null; improvements: any[] | null; keywordTags: string[] }[];
+  contents: { name: string; summary: string; resonance: any | null; keyTopics: any[] | null; whatWorks: any[] | null; improvements: any[] | null; keywordTags: any }[];
   crossAnalysis: { sharedThemes: string[]; differentiators: string[]; contentGaps: string[] };
-  rankings: { overall: { name: string; score: number; reason: string }[]; bestForLeads?: string; bestForEngagement?: string; bestForConversion?: string };
+  rankings: { overall: { name: string; score: number; reason: string }[]; methodology?: string; bestForLeads?: string; bestForEngagement?: string; bestForConversion?: string };
   verdict: string;
   suggestions: { text: string; source: string }[];
   contentNames: string[];
@@ -747,10 +747,84 @@ interface MultiComparisonData {
   contentMetadata: { name: string; stage: string; product: string; type: string; country: string; industry: string }[];
 }
 
+function multiShortName(name: string): string {
+  let s = name;
+  s = s.replace(/^CL_[A-Z0-9]+_[A-Z]{2,4}_[A-Z]{2,4}_[A-Z]+_[A-Z]+_/i, "");
+  s = s.replace(/\s*\([^)]*\)\s*$/g, "");
+  s = s.replace(/\s*[,|]\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\b/gi, "");
+  s = s.replace(/\s*(GO|TOP|BOT|MID|GNRC|CER|COM|NFS)\s*[,|]/gi, "");
+  s = s.replace(/\s*[,|]\s*(English\s+)?(Canada|Australia|US|UK|France|Germany|Spain|Ireland|South Africa)\s*/gi, "");
+  s = s.replace(/\s*(TOFU|MOFU|BOFU)\s*/gi, "");
+  s = s.replace(/\b(PDF|DOCX|PPTX|DOC)\b/gi, "");
+  s = s.replace(/\bWhitepaper[-\s]*/gi, "");
+  s = s.replace(/\bBrochure[-\s]*/gi, () => "Brochure ");
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+  s = s.replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+  s = s.replace(/_/g, " ");
+  s = s.replace(/\s*[-|,]\s*$/, "");
+  s = s.trim().replace(/\s+/g, " ");
+  if (!s) return name.length > 25 ? name.slice(0, 25) + "..." : name;
+  const words = s.split(" ").filter(Boolean);
+  return words.length > 5 ? words.slice(0, 5).join(" ") : words.join(" ");
+}
+
+function extractTopicText(t: any): { topic: string; detail: string } {
+  if (typeof t === "string") return { topic: t, detail: "" };
+  return { topic: t?.topic || t?.name || "", detail: t?.detail || t?.description || "" };
+}
+
+function extractResonanceRating(val: any): { rating: string; explanation: string } {
+  if (!val) return { rating: "Not rated", explanation: "" };
+  if (typeof val === "string") return { rating: val, explanation: "" };
+  return { rating: val?.rating || "Not rated", explanation: val?.explanation || val?.detail || "" };
+}
+
+function flattenTagsFromAny(tags: any): string[] {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags.filter((t: any) => typeof t === "string");
+  const flat: string[] = [];
+  if (tags.topic_tags) flat.push(...tags.topic_tags);
+  if (tags.audience_tags) flat.push(...tags.audience_tags);
+  if (tags.intent_tags) flat.push(...tags.intent_tags);
+  if (tags.user_added_tags) flat.push(...tags.user_added_tags);
+  return flat;
+}
+
+function getStructuredTagsFromAny(tags: any): { topic: string[]; audience: string[]; intent: string[] } {
+  if (!tags) return { topic: [], audience: [], intent: [] };
+  if (Array.isArray(tags)) return { topic: tags.filter((t: any) => typeof t === "string"), audience: [], intent: [] };
+  return {
+    topic: tags.topic_tags || [],
+    audience: tags.audience_tags || [],
+    intent: tags.intent_tags || [],
+  };
+}
+
 export function generateMultiComparisonPdf(data: MultiComparisonData) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = 0;
   let pageNum = 0;
+  const contentCount = data.contents.length;
+  const shortNames = data.contentNames.map((n, i) => {
+    const s = multiShortName(n);
+    return s || `Content ${i + 1}`;
+  });
+  const deduped = [...shortNames];
+  for (let i = 0; i < deduped.length; i++) {
+    for (let j = i + 1; j < deduped.length; j++) {
+      if (deduped[i] === deduped[j]) {
+        const metaI = data.contentMetadata[i];
+        const metaJ = data.contentMetadata[j];
+        if (metaI?.stage && metaJ?.stage && metaI.stage !== metaJ.stage) {
+          deduped[i] = `${deduped[i]} (${metaI.stage})`;
+          deduped[j] = `${deduped[j]} (${metaJ.stage})`;
+        } else {
+          deduped[i] = `${deduped[i]} (${i + 1})`;
+          deduped[j] = `${deduped[j]} (${j + 1})`;
+        }
+      }
+    }
+  }
 
   function setColor(hex: string) { doc.setTextColor(...hexToRgb(hex)); }
   function setFill(hex: string) { doc.setFillColor(...hexToRgb(hex)); }
@@ -796,21 +870,22 @@ export function generateMultiComparisonPdf(data: MultiComparisonData) {
     doc.setLineWidth(0.5);
     doc.line(MARGIN, y, MARGIN + 50, y);
     doc.setLineWidth(0.2);
-    y += 5;
+    y += 6;
   }
 
-  function wrappedText(text: string, color: string, size: number, maxW: number, addGap = true) {
+  function wrappedText(text: string, color: string, size: number, maxW: number, bold = false, xOffset = 0): number {
+    if (!text) return 0;
     setColor(color);
     doc.setFontSize(size);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("helvetica", bold ? "bold" : "normal");
     const lines = doc.splitTextToSize(text, maxW);
     const lineH = size * 0.45;
     for (const line of lines) {
       checkPage(lineH + 2);
-      doc.text(line, MARGIN, y);
+      doc.text(line, MARGIN + xOffset, y);
       y += lineH;
     }
-    if (addGap) y += 2;
+    return lines.length;
   }
 
   function bulletPoint(text: string, color: string = SAGE.bodyText) {
@@ -835,103 +910,391 @@ export function generateMultiComparisonPdf(data: MultiComparisonData) {
     doc.setFont("helvetica", "italic");
     doc.text(label, MARGIN, y);
     doc.setFont("helvetica", "normal");
-    y += 3;
+    y += 4;
   }
 
-  function drawTableRow(cells: string[], widths: number[], isHeader: boolean, isAlt: boolean) {
-    const rowH = 7;
-    checkPage(rowH + 2);
+  function drawMultiTableRow(cells: string[], widths: number[], isHeader: boolean, isAlt: boolean) {
+    const cellPad = 2;
+    doc.setFontSize(6.5);
+    const lineH = 2.6;
+    const wrappedCells = cells.map((cell, i) => doc.splitTextToSize(cell || "", widths[i] - cellPad * 2));
+    const maxLines = Math.max(...wrappedCells.map(c => c.length));
+    const rowHeight = Math.max(6, maxLines * lineH + cellPad * 2);
+    checkPage(rowHeight + 2);
+    setFill(isHeader ? SAGE.headerRow : isAlt ? SAGE.tealRow : SAGE.darkRow);
     let x = MARGIN;
-    if (isHeader) {
-      setFill(SAGE.headerRow);
-      doc.rect(x, y - 4.5, widths.reduce((a, b) => a + b, 0), rowH, "F");
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "bold");
-      setColor(SAGE.headerText);
-    } else {
-      if (isAlt) {
-        setFill(SAGE.darkRow);
-        doc.rect(x, y - 4.5, widths.reduce((a, b) => a + b, 0), rowH, "F");
-      }
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "normal");
-      setColor(SAGE.bodyText);
-    }
-    cells.forEach((cell, i) => {
-      const align = i === 0 ? "left" : "right";
-      const tx = i === 0 ? x + 1 : x + widths[i] - 1;
-      doc.text(cell.substring(0, 30), tx, y, { align });
+    doc.rect(x, y - 1, widths.reduce((a, b) => a + b, 0), rowHeight, "F");
+    wrappedCells.forEach((lines, i) => {
+      setColor(isHeader ? SAGE.headerText : SAGE.bodyText);
+      doc.setFont("helvetica", isHeader ? "bold" : "normal");
+      lines.forEach((line: string, li: number) => {
+        doc.text(line, x + cellPad, y + cellPad + li * lineH);
+      });
       x += widths[i];
     });
-    y += rowH - 2;
+    y += rowHeight;
   }
 
-  newPage();
+  function drawTagPills(tags: string[], bgColor: string, label?: string, maxTags = 8) {
+    if (!tags || tags.length === 0) return;
+    let x = MARGIN;
+    if (label) {
+      setColor(SAGE.muted);
+      doc.setFontSize(5);
+      doc.setFont("helvetica", "normal");
+      doc.text(label, x, y);
+      x += doc.getTextWidth(label) + 2;
+    }
+    const tagH = 3.5;
+    const tagPad = 1.5;
+    doc.setFontSize(5);
+    doc.setFont("helvetica", "bold");
+    for (const tag of tags.slice(0, maxTags)) {
+      const w = doc.getTextWidth(tag) + tagPad * 2;
+      if (x + w > PAGE_W - MARGIN) {
+        x = MARGIN + (label ? 12 : 0);
+        y += tagH + 1;
+        checkPage(tagH + 2);
+      }
+      setFill(bgColor);
+      doc.roundedRect(x, y - 2.5, w, tagH, 0.8, 0.8, "F");
+      setColor(SAGE.white);
+      doc.text(tag, x + tagPad, y - 0.5);
+      x += w + 1.5;
+    }
+    if (tags.length > maxTags) {
+      setColor(SAGE.muted);
+      doc.setFontSize(5);
+      doc.setFont("helvetica", "italic");
+      doc.text(`+${tags.length - maxTags} more`, x, y - 0.5);
+    }
+    y += tagH + 2;
+  }
 
+  // === PAGE 1: COVER ===
+  addBlackPage();
+  pageNum++;
   setFill(SAGE.green);
-  doc.rect(0, 0, PAGE_W, 50, "F");
-  setColor(SAGE.black);
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text("Multi-Content Comparison", MARGIN, 22);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "normal");
-  doc.text(`${data.contents.length} content pieces analyzed`, MARGIN, 30);
-  doc.setFontSize(9);
-  doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), MARGIN, 38);
-  y = 58;
+  doc.rect(MARGIN, 42, CONTENT_W, 0.8, "F");
 
+  y = 56;
+  setColor(SAGE.white);
+  doc.setFontSize(32);
+  doc.setFont("helvetica", "bold");
+  doc.text("Content Comparison", MARGIN, y);
+  y += 13;
+  doc.setFontSize(32);
+  doc.text("Report", MARGIN, y);
+  y += 16;
+
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "normal");
+  setColor(SAGE.white);
+  doc.text("Content Intelligence Analyst", MARGIN, y);
+  y += 10;
+
+  setColor(SAGE.muted);
+  doc.setFontSize(11);
+  doc.text(`${contentCount} content pieces compared`, MARGIN, y);
+  y += 12;
+
+  setColor(SAGE.green);
+  doc.setFontSize(10);
+  doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), MARGIN, y);
+  y += 5;
+  doc.text("Prepared by Content Intelligence Analyst", MARGIN, y);
+  y += 12;
+
+  setColor(SAGE.bodyText);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  for (let i = 0; i < contentCount; i++) {
+    checkPage(5);
+    doc.setFont("helvetica", "bold");
+    setColor(SAGE.green);
+    doc.text(`${i + 1}.`, MARGIN, y);
+    doc.setFont("helvetica", "normal");
+    setColor(SAGE.bodyText);
+    const displayName = deduped[i].length > 70 ? deduped[i].slice(0, 67) + "..." : deduped[i];
+    doc.text(displayName, MARGIN + 6, y);
+    y += 5;
+  }
+
+  doc.setFontSize(12);
+  setColor(SAGE.green);
+  doc.text("Sage", MARGIN, FOOTER_Y);
+  doc.setFontSize(5.5);
+  setColor(SAGE.dimGreen);
+  doc.text(`\u00A9 ${new Date().getFullYear()} The Sage Group plc, or its licensors. All rights reserved.`, PAGE_W / 2, FOOTER_Y + 3, { align: "center" });
+
+  // === PAGE 2: RANKINGS + VERDICT ===
+  newPage();
   sectionTitle("Rankings");
-  const rankWidths = [70, 20, CONTENT_W - 90];
-  drawTableRow(["Content", "Score", "Reason"], rankWidths, true, false);
-  data.rankings.overall.forEach((r, i) => {
-    drawTableRow([r.name.substring(0, 35), `${r.score}/100`, r.reason.substring(0, 50)], rankWidths, false, i % 2 === 0);
-  });
+
+  const labelW = 35;
+  const colW = Math.floor((CONTENT_W - labelW - 30) / contentCount);
+  const reasonW = 30;
+  const rankWidths = [labelW, ...data.rankings.overall.map(() => colW), reasonW];
+
+  drawMultiTableRow(["Content", ...data.rankings.overall.map((_, i) => `#${i + 1}`), ""], [labelW, ...data.rankings.overall.map(() => colW), reasonW], true, false);
+  drawMultiTableRow(["Name", ...data.rankings.overall.map(r => deduped[data.contentNames.indexOf(r.name)] || r.name.substring(0, 20)), ""], rankWidths, false, true);
+  drawMultiTableRow(["Score", ...data.rankings.overall.map(r => `${r.score}/100`), ""], rankWidths, false, false);
+  drawMultiTableRow(["Reason", ...data.rankings.overall.map(r => r.reason.substring(0, 40)), ""], rankWidths, false, true);
+
+  y += 2;
+
+  const methodology = data.rankings.methodology || "content depth/specificity (30%), audience targeting (25%), metrics/proof points (25%), structural clarity (20%)";
+  setColor(SAGE.muted);
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "italic");
+  const methLines = doc.splitTextToSize(`Scoring methodology: ${methodology}`, CONTENT_W);
+  methLines.forEach((line: string) => { doc.text(line, MARGIN, y); y += 2.5; });
   y += 3;
 
   if (data.rankings.bestForLeads || data.rankings.bestForEngagement || data.rankings.bestForConversion) {
-    checkPage(15);
-    doc.setFontSize(8);
+    checkPage(12);
+    const badges: string[] = [];
+    if (data.rankings.bestForLeads) badges.push(`Best for Leads: ${data.rankings.bestForLeads}`);
+    if (data.rankings.bestForEngagement) badges.push(`Best for Engagement: ${data.rankings.bestForEngagement}`);
+    if (data.rankings.bestForConversion) badges.push(`Best for Conversion: ${data.rankings.bestForConversion}`);
+
+    let bx = MARGIN;
+    doc.setFontSize(6.5);
     doc.setFont("helvetica", "bold");
-    setColor(SAGE.green);
-    if (data.rankings.bestForLeads) { doc.text(`Best for Leads: ${data.rankings.bestForLeads}`, MARGIN, y); y += 4; }
-    if (data.rankings.bestForEngagement) { doc.text(`Best for Engagement: ${data.rankings.bestForEngagement}`, MARGIN, y); y += 4; }
-    if (data.rankings.bestForConversion) { doc.text(`Best for Conversion: ${data.rankings.bestForConversion}`, MARGIN, y); y += 4; }
-    y += 2;
+    for (const badge of badges) {
+      const bw = doc.getTextWidth(badge) + 6;
+      if (bx + bw > PAGE_W - MARGIN) { bx = MARGIN; y += 6; }
+      setFill(SAGE.calloutBg);
+      doc.roundedRect(bx, y - 3, bw, 5.5, 1, 1, "F");
+      doc.setDrawColor(...hexToRgb(SAGE.green));
+      doc.roundedRect(bx, y - 3, bw, 5.5, 1, 1, "S");
+      setColor(SAGE.green);
+      doc.text(badge, bx + 3, y);
+      bx += bw + 3;
+    }
+    y += 8;
   }
 
-  sectionTitle("AI Verdict");
-  wrappedText(data.verdict, SAGE.bodyText, 8, CONTENT_W);
+  sectionTitle("Verdict");
+  checkPage(20);
+  setFill(SAGE.calloutBg);
+  const verdictLines = doc.splitTextToSize(data.verdict, CONTENT_W - 14);
+  const verdictH = verdictLines.length * 4.2 + 10;
+  doc.roundedRect(MARGIN, y, CONTENT_W, verdictH, 2, 2, "F");
+  setFill(SAGE.green);
+  doc.rect(MARGIN, y, 1.5, verdictH, "F");
+  setColor(SAGE.white);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  verdictLines.forEach((line: string, li: number) => { doc.text(line, MARGIN + 6, y + 6 + li * 4.2); });
+  y += verdictH + 4;
+
+  // === PAGE 3: ASSET IDENTITY + CONTENT OVERVIEW + TAGS ===
+  newPage();
+  sectionTitle("Asset Identity");
+  sourceTag("Source: Internal Data");
+
+  const idLabelW = 32;
+  const idColW = Math.floor((CONTENT_W - idLabelW) / contentCount);
+  const idWidths = [idLabelW, ...data.contentMetadata.map(() => idColW)];
+
+  drawMultiTableRow(["", ...deduped.map((n, i) => `${i + 1}. ${n.substring(0, 18)}`)], idWidths, true, false);
+  drawMultiTableRow(["Full Name", ...data.contentNames.map(n => n.substring(0, 30))], idWidths, false, true);
+  drawMultiTableRow(["Stage", ...data.contentMetadata.map(m => m.stage || "Not specified")], idWidths, false, false);
+  drawMultiTableRow(["Product", ...data.contentMetadata.map(m => m.product || "Not specified")], idWidths, false, true);
+  drawMultiTableRow(["Country", ...data.contentMetadata.map(m => m.country || "Not specified")], idWidths, false, false);
+  drawMultiTableRow(["Industry", ...data.contentMetadata.map(m => m.industry || "Not specified")], idWidths, false, true);
+  drawMultiTableRow(["Type", ...data.contentMetadata.map(m => m.type || "Not specified")], idWidths, false, false);
+
+  y += 4;
+
+  sectionTitle("Content Overview");
+  sourceTag("Source: Content Analysis");
+
+  data.contents.forEach((content, idx) => {
+    if (!content.summary) return;
+    checkPage(18);
+    wrappedText(`${idx + 1}. ${deduped[idx]}`, SAGE.green, 9, CONTENT_W, true);
+    y += 1;
+    wrappedText(content.summary, SAGE.bodyText, 7, CONTENT_W - 4, false, 2);
+    y += 1;
+
+    const structured = getStructuredTagsFromAny(content.keywordTags);
+    const hasCategorized = structured.audience.length > 0 || structured.intent.length > 0;
+    if (hasCategorized) {
+      if (structured.topic.length > 0) drawTagPills(structured.topic, SAGE.tagTopic, "Topic:", 5);
+      if (structured.audience.length > 0) drawTagPills(structured.audience, SAGE.tagAudience, "Audience:", 4);
+      if (structured.intent.length > 0) drawTagPills(structured.intent, SAGE.tagIntent, "Intent:", 4);
+    } else {
+      const flat = flattenTagsFromAny(content.keywordTags);
+      if (flat.length > 0) drawTagPills(flat, SAGE.tagTopic, "Tags:", 6);
+    }
+    y += 2;
+  });
+
+  // === PAGE 4: AUDIENCE RESONANCE + KEY TOPICS ===
+  const hasAnyResonance = data.contents.some(c => c.resonance);
+  if (hasAnyResonance) {
+    newPage();
+    sectionTitle("Audience Resonance");
+    sourceTag("Source: Content Analysis");
+
+    const resDims = [
+      { key: "countryFit", label: "Country/Region" },
+      { key: "industryFit", label: "Industry" },
+      { key: "funnelStageFit", label: "Funnel Stage" },
+      { key: "productFit", label: "Product" },
+    ];
+
+    const resLabelW = 28;
+    const resColW = Math.floor((CONTENT_W - resLabelW) / contentCount);
+    const resWidths = [resLabelW, ...data.contents.map(() => resColW)];
+
+    drawMultiTableRow(["Dimension", ...deduped.map(n => n.substring(0, 16))], resWidths, true, false);
+    resDims.forEach((dim, di) => {
+      const cells = data.contents.map(c => {
+        const r = extractResonanceRating(c.resonance?.[dim.key]);
+        return r.rating;
+      });
+      drawMultiTableRow([dim.label, ...cells], resWidths, false, di % 2 === 0);
+    });
+
+    y += 3;
+
+    const hasExplanations = data.contents.some(c => {
+      if (!c.resonance) return false;
+      return resDims.some(d => {
+        const r = extractResonanceRating(c.resonance?.[d.key]);
+        return r.explanation;
+      });
+    });
+    if (hasExplanations) {
+      setColor(SAGE.muted);
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "italic");
+      doc.text("Detailed resonance explanations:", MARGIN, y);
+      y += 4;
+
+      data.contents.forEach((content, idx) => {
+        if (!content.resonance) return;
+        const explanations: string[] = [];
+        resDims.forEach(dim => {
+          const r = extractResonanceRating(content.resonance?.[dim.key]);
+          if (r.explanation) explanations.push(`${dim.label}: ${r.explanation}`);
+        });
+        if (explanations.length > 0) {
+          checkPage(10);
+          wrappedText(deduped[idx], SAGE.green, 7, CONTENT_W, true);
+          y += 1;
+          explanations.forEach(exp => {
+            checkPage(6);
+            wrappedText(`\u2022 ${exp}`, SAGE.bodyText, 6.5, CONTENT_W - 6, false, 4);
+            y += 0.5;
+          });
+          y += 2;
+        }
+      });
+    }
+  }
+
+  const hasAnyTopics = data.contents.some(c => c.keyTopics && c.keyTopics.length > 0);
+  if (hasAnyTopics) {
+    checkPage(30);
+    sectionTitle("Key Topics");
+    sourceTag("Source: Content Analysis");
+
+    data.contents.forEach((content, idx) => {
+      if (!content.keyTopics || content.keyTopics.length === 0) return;
+      checkPage(14);
+      wrappedText(`${idx + 1}. ${deduped[idx]}`, SAGE.green, 8, CONTENT_W, true);
+      y += 1;
+      content.keyTopics.slice(0, 4).forEach((t: any) => {
+        const parsed = extractTopicText(t);
+        if (!parsed.topic) return;
+        const text = parsed.detail ? `${parsed.topic}: ${parsed.detail}` : parsed.topic;
+        bulletPoint(text);
+      });
+      y += 2;
+    });
+  }
+
+  // === PAGE 5: CROSS-CONTENT ANALYSIS ===
+  const hasCross = data.crossAnalysis.sharedThemes.length > 0 || data.crossAnalysis.differentiators.length > 0 || data.crossAnalysis.contentGaps.length > 0;
+  if (hasCross) {
+    newPage();
+    sectionTitle("Cross-Content Analysis");
+    sourceTag("Source: Content Analysis");
+
+    if (data.crossAnalysis.sharedThemes.length > 0) {
+      checkPage(10);
+      wrappedText("Shared Themes", SAGE.green, 10, CONTENT_W, true);
+      y += 1;
+      data.crossAnalysis.sharedThemes.forEach(t => bulletPoint(t));
+      y += 3;
+    }
+
+    if (data.crossAnalysis.differentiators.length > 0) {
+      checkPage(10);
+      wrappedText("Key Differentiators", SAGE.green, 10, CONTENT_W, true);
+      y += 1;
+      data.crossAnalysis.differentiators.forEach(t => bulletPoint(t));
+      y += 3;
+    }
+
+    if (data.crossAnalysis.contentGaps.length > 0) {
+      checkPage(10);
+      wrappedText("Content Gaps", SAGE.sourceAmber, 10, CONTENT_W, true);
+      y += 1;
+      data.crossAnalysis.contentGaps.forEach(t => bulletPoint(t, SAGE.sourceAmber));
+      y += 3;
+    }
+  }
+
+  // === PAGE 6: IMPROVEMENTS + SUGGESTIONS + PERFORMANCE ===
+  const hasImprovements = data.contents.some(c => c.improvements && c.improvements.length > 0);
+  if (hasImprovements) {
+    newPage();
+    sectionTitle("Areas for Improvement");
+
+    data.contents.forEach((content, idx) => {
+      if (!content.improvements || content.improvements.length === 0) return;
+      checkPage(12);
+      wrappedText(`${idx + 1}. ${deduped[idx]}`, SAGE.green, 8, CONTENT_W, true);
+      y += 1;
+      content.improvements.slice(0, 3).forEach((item: any) => {
+        const text = typeof item === "string" ? item : (item?.point || item?.issue || item?.text || "");
+        if (text) bulletPoint(text, SAGE.sourceAmber);
+      });
+      y += 2;
+    });
+  }
 
   if (data.suggestions.length > 0) {
+    checkPage(30);
     sectionTitle("Recommendations");
-    data.suggestions.forEach((s) => {
-      bulletPoint(s.text, SAGE.bodyText);
+    data.suggestions.forEach((s, i) => {
+      checkPage(10);
+      wrappedText(`${i + 1}. ${s.text}`, SAGE.bodyText, 7.5, CONTENT_W - 4, false, 2);
+      y += 1;
       sourceTag(`[${s.source}]`);
     });
   }
 
-  if (data.crossAnalysis.sharedThemes.length > 0) {
-    sectionTitle("Shared Themes");
-    data.crossAnalysis.sharedThemes.forEach((t) => bulletPoint(t));
-  }
-
-  if (data.crossAnalysis.differentiators.length > 0) {
-    sectionTitle("Differentiators");
-    data.crossAnalysis.differentiators.forEach((t) => bulletPoint(t));
-  }
-
-  if (data.crossAnalysis.contentGaps.length > 0) {
-    sectionTitle("Content Gaps");
-    data.crossAnalysis.contentGaps.forEach((t) => bulletPoint(t));
-  }
-
-  const metricsWithData = data.contentMetrics.filter((cm) => cm.metrics.hasData);
+  const metricsWithData = data.contentMetrics.filter(cm => cm.metrics.hasData);
   if (metricsWithData.length > 0) {
+    checkPage(40);
     sectionTitle("Performance Comparison");
-    const colW = Math.min(30, (CONTENT_W - 40) / metricsWithData.length);
-    const metricWidths = [40, ...metricsWithData.map(() => colW)];
-    drawTableRow(["Metric", ...metricsWithData.map((cm) => cm.name.substring(0, 12))], metricWidths, true, false);
+    sourceTag("Source: Internal Data");
+
+    const perfLabelW = 32;
+    const perfColW = Math.floor((CONTENT_W - perfLabelW) / metricsWithData.length);
+    const perfWidths = [perfLabelW, ...metricsWithData.map(() => perfColW)];
+    const perfNames = metricsWithData.map(cm => {
+      const idx = data.contentNames.indexOf(cm.name);
+      return (idx >= 0 ? deduped[idx] : cm.name).substring(0, 18);
+    });
+
+    drawMultiTableRow(["Metric", ...perfNames], perfWidths, true, false);
     const metricKeys: { label: string; key: "pageviews" | "downloads" | "leads" | "sqos" | "avgTime" }[] = [
       { label: "Views", key: "pageviews" },
       { label: "Downloads", key: "downloads" },
@@ -940,75 +1303,10 @@ export function generateMultiComparisonPdf(data: MultiComparisonData) {
       { label: "Avg Time (s)", key: "avgTime" },
     ];
     metricKeys.forEach(({ label, key }, i) => {
-      drawTableRow([label, ...metricsWithData.map((cm) => cm.metrics[key].toLocaleString())], metricWidths, false, i % 2 === 0);
+      drawMultiTableRow([label, ...metricsWithData.map(cm => cm.metrics[key].toLocaleString())], perfWidths, false, i % 2 === 0);
     });
   }
 
-  data.contents.forEach((content, idx) => {
-    newPage();
-    sectionTitle(`${idx + 1}. ${content.name}`);
-
-    if (content.summary) {
-      checkPage(10);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      setColor(SAGE.white);
-      doc.text("Summary", MARGIN, y);
-      y += 4;
-      wrappedText(content.summary, SAGE.bodyText, 7.5, CONTENT_W);
-    }
-
-    if (content.resonance) {
-      checkPage(12);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      setColor(SAGE.white);
-      doc.text("Content Resonance", MARGIN, y);
-      y += 4;
-      const dims = ["product", "stage", "country", "industry"] as const;
-      dims.forEach((dim) => {
-        const val = content.resonance?.[dim];
-        if (val) {
-          checkPage(8);
-          doc.setFontSize(7);
-          doc.setFont("helvetica", "bold");
-          setColor(SAGE.green);
-          doc.text(`${dim.charAt(0).toUpperCase() + dim.slice(1)}: ${val.rating}`, MARGIN + 2, y);
-          y += 3.5;
-          if (val.detail) {
-            doc.setFont("helvetica", "normal");
-            setColor(SAGE.muted);
-            const detLines = doc.splitTextToSize(val.detail, CONTENT_W - 8);
-            detLines.forEach((l: string) => { doc.text(l, MARGIN + 4, y); y += 3; });
-            y += 1;
-          }
-        }
-      });
-    }
-
-    if (content.keyTopics && content.keyTopics.length > 0) {
-      checkPage(10);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      setColor(SAGE.white);
-      doc.text("Key Topics", MARGIN, y);
-      y += 4;
-      content.keyTopics.forEach((t) => {
-        bulletPoint(`${t.topic}: ${t.detail}`);
-      });
-    }
-
-    if (content.keywordTags && content.keywordTags.length > 0) {
-      checkPage(10);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      setColor(SAGE.white);
-      doc.text("Keywords", MARGIN, y);
-      y += 4;
-      wrappedText(content.keywordTags.join(", "), SAGE.muted, 7, CONTENT_W);
-    }
-  });
-
-  const names = data.contentNames.map((n) => n.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 15)).join("_");
+  const names = data.contentNames.map(n => n.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 15)).join("_");
   doc.save(`Multi_Comparison_${names}.pdf`);
 }
