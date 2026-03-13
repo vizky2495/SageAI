@@ -68,6 +68,7 @@ interface ContentStatusEntry {
   contentFormat: string | null;
   hasFile: boolean;
   originalFilename: string | null;
+  thumbnailUrl: string | null;
 }
 
 type ContentStatusMap = Record<string, ContentStatusEntry>;
@@ -1272,11 +1273,20 @@ function ContentCard({
             data-testid={`card-asset-${asset.contentId.replace(/\s+/g, "-").toLowerCase()}`}
           >
             <div
-              className="flex items-center justify-center h-[72px] rounded-t-xl relative"
-              style={{ background: `linear-gradient(135deg, ${tone.accent}22, ${tone.accent}44)` }}
+              className="flex items-center justify-center h-[72px] rounded-t-xl relative overflow-hidden"
+              style={{ background: contentStatus?.thumbnailUrl ? undefined : `linear-gradient(135deg, ${tone.accent}22, ${tone.accent}44)` }}
               data-testid="card-thumbnail"
             >
-              <ContentTypeIcon className="h-8 w-8" style={{ color: tone.accent, opacity: 0.7 }} />
+              {contentStatus?.thumbnailUrl ? (
+                <img
+                  src={contentStatus.thumbnailUrl}
+                  alt="Asset thumbnail"
+                  className="w-full h-full object-cover"
+                  data-testid="card-thumbnail-image"
+                />
+              ) : (
+                <ContentTypeIcon className="h-8 w-8" style={{ color: tone.accent, opacity: 0.7 }} />
+              )}
               <Badge
                 className={`absolute top-2 right-2 border text-[9px] px-1.5 py-0 ${tone.bg} ${tone.text} ${tone.border}`}
                 data-testid="card-stage-badge"

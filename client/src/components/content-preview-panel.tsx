@@ -143,6 +143,7 @@ interface ContentData {
   dateStored: string | null;
   dateLastUpdated: string | null;
   hasFile: boolean;
+  thumbnailUrl: string | null;
 }
 
 const stageTones: Record<string, { bg: string; text: string; border: string }> = {
@@ -241,6 +242,34 @@ export default function ContentPreviewPanel({
     },
   });
 
+  const thumbnailMutation = useMutation({
+    mutationFn: async (imageBase64: string) => {
+      const res = await authFetch(`/api/content/${encodeURIComponent(asset.contentId)}/upload-thumbnail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64 }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["content-detail", asset.contentId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content/status"] });
+    },
+  });
+
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+
+  const handleThumbnailSelect = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      thumbnailMutation.mutate(base64);
+    };
+    reader.readAsDataURL(file);
+  }, [thumbnailMutation]);
+
   const handleFileSelect = useCallback(async (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -301,6 +330,20 @@ export default function ContentPreviewPanel({
             </div>
           ) : hasContent ? (
             <>
+              {content.thumbnailUrl && (
+                <section data-testid="panel-thumbnail-preview">
+                  <div className="rounded-xl overflow-hidden border border-border/50 bg-white">
+                    <img
+                      src={content.thumbnailUrl}
+                      alt="Asset thumbnail"
+                      className="w-full object-contain object-top"
+                      style={{ maxHeight: 240 }}
+                      data-testid="panel-thumbnail-image"
+                    />
+                  </div>
+                </section>
+              )}
+
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <StatusIcon status={content.fetchStatus} />
                 <span className="capitalize">{content.fetchStatus}</span>
@@ -345,6 +388,48 @@ export default function ContentPreviewPanel({
               )}
 
               <UploadNewVersion onFileSelect={handleFileSelect} />
+
+              <section>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <Upload className="h-3.5 w-3.5" />
+                  Thumbnail
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => thumbnailInputRef.current?.click()}
+                    disabled={thumbnailMutation.isPending}
+                    data-testid="button-upload-thumbnail"
+                  >
+                    {thumbnailMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    {content.thumbnailUrl ? "Replace Thumbnail" : "Upload Thumbnail"}
+                  </Button>
+                  {thumbnailMutation.isError && (
+                    <span className="text-xs text-red-400">Failed to upload</span>
+                  )}
+                  {thumbnailMutation.isSuccess && (
+                    <span className="text-xs text-emerald-400">Uploaded</span>
+                  )}
+                </div>
+                <input
+                  ref={thumbnailInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleThumbnailSelect(file);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-thumbnail-file"
+                />
+              </section>
 
               {content.contentSummary && (
                 <section>

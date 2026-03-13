@@ -609,6 +609,54 @@ export function registerContentRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/content/:assetId/upload-thumbnail", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { imageBase64 } = req.body as { imageBase64?: string };
+      if (!imageBase64) {
+        return res.status(400).json({ message: "imageBase64 is required" });
+      }
+
+      const buffer = Buffer.from(imageBase64, "base64");
+      const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+      if (buffer.length > MAX_THUMBNAIL_BYTES) {
+        return res.status(413).json({ message: "Thumbnail image exceeds 5MB limit" });
+      }
+
+      let mime = "image/png";
+      if (buffer[0] === 0xFF && buffer[1] === 0xD8) mime = "image/jpeg";
+      else if (buffer[0] === 0x89 && buffer[1] === 0x50) mime = "image/png";
+      else if (buffer[0] === 0x47 && buffer[1] === 0x49) mime = "image/gif";
+      else if (buffer[0] === 0x52 && buffer[1] === 0x49) mime = "image/webp";
+
+      const dataUrl = `data:${mime};base64,${imageBase64}`;
+
+      const assetId = req.params.assetId;
+      const existing = await storage.getContentByAssetId(assetId);
+      if (existing) {
+        await storage.upsertContent({
+          assetId,
+          fetchStatus: existing.fetchStatus,
+          sourceType: existing.sourceType,
+          storedBy: existing.storedBy,
+          thumbnailUrl: dataUrl,
+        });
+      } else {
+        await storage.upsertContent({
+          assetId,
+          fetchStatus: "not_stored",
+          sourceType: "not_stored",
+          storedBy: "user",
+          thumbnailUrl: dataUrl,
+        });
+      }
+
+      res.json({ success: true, thumbnailUrl: dataUrl });
+    } catch (err: any) {
+      console.error("Upload thumbnail error:", err?.message || err);
+      res.status(500).json({ message: "Failed to upload thumbnail" });
+    }
+  });
+
   app.delete("/api/content/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deleteContent(req.params.assetId as string);

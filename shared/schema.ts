@@ -212,6 +212,7 @@ export const contentStored = pgTable("content_stored", {
   sourceUrl: text("source_url"),
   storedFileBase64: text("stored_file_base64"),
   thumbnailBase64: text("thumbnail_base64"),
+  thumbnailUrl: text("thumbnail_url"),
   originalFilename: text("original_filename"),
   fileSizeBytes: integer("file_size_bytes"),
   dateStored: timestamp("date_stored"),
