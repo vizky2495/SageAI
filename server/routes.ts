@@ -80,7 +80,7 @@ export async function registerRoutes(
 
   app.get("/api/sales-feedback/:contentId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const entries = await storage.getSalesFeedbackByContentId(req.params.contentId);
+      const entries = await storage.getSalesFeedbackByContentId(req.params.contentId as string);
       res.json(entries);
     } catch (err: any) {
       console.error("Sales feedback fetch error:", err);
@@ -104,7 +104,7 @@ export async function registerRoutes(
 
   app.get("/api/sales-feedback/:contentId/stats", requireAuth, async (req: Request, res: Response) => {
     try {
-      const stats = await storage.getSalesFeedbackStats(req.params.contentId);
+      const stats = await storage.getSalesFeedbackStats(req.params.contentId as string);
       res.json(stats);
     } catch (err: any) {
       console.error("Sales feedback stats error:", err);
@@ -1726,7 +1726,7 @@ Return ONLY valid JSON matching this schema:
 
   app.patch("/api/feedback/:id/status", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { status } = req.body as { status: string };
       if (!["open", "in_progress", "resolved", "closed"].includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
@@ -1756,7 +1756,7 @@ Return ONLY valid JSON matching this schema:
 
   app.get("/api/comparison-history/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const entry = await storage.getComparisonHistoryById(id);
       if (!entry) return res.status(404).json({ message: "Comparison not found" });
       res.json(entry);
@@ -1771,7 +1771,7 @@ Return ONLY valid JSON matching this schema:
       let performedByName = "Unknown";
       if (userId) {
         const u = await storage.getUserById(userId);
-        if (u) performedByName = u.displayName || u.email;
+        if (u) performedByName = u.displayName || (u as any).email || "Unknown";
       }
       const entry = await storage.createComparisonHistory({
         ...req.body,
@@ -1787,7 +1787,7 @@ Return ONLY valid JSON matching this schema:
 
   app.patch("/api/comparison-history/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const updated = await storage.updateComparisonHistory(id, req.body);
       if (!updated) return res.status(404).json({ message: "Comparison not found" });
       res.json(updated);
@@ -2343,7 +2343,7 @@ Return ONLY valid JSON matching this schema:
 
   app.delete("/api/journey/batch/:batchId", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const deleted = await storage.deleteJourneyInteractionsByBatch(req.params.batchId);
+      const deleted = await storage.deleteJourneyInteractionsByBatch(req.params.batchId as string);
       journeySummaryCache = null;
 
       const remaining = await storage.countJourneyInteractions();
@@ -2435,7 +2435,7 @@ Return ONLY valid JSON matching this schema:
 
   app.get("/api/journey/asset-stats/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const stats = await storage.getAssetJourneyStats(req.params.assetId);
+      const stats = await storage.getAssetJourneyStats(req.params.assetId as string);
       res.json(stats[0] || null);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to fetch asset journey stats" });

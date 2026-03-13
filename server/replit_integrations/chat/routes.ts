@@ -968,7 +968,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.get("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const userId = (req as any).userId as string;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
@@ -999,7 +999,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.delete("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const userId = (req as any).userId as string;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
@@ -1034,7 +1034,7 @@ export function registerChatRoutes(app: Express): void {
 
   app.post("/api/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
-      const conversationId = parseInt(req.params.id);
+      const conversationId = parseInt(req.params.id as string);
       const { content, comparisonContext } = req.body;
       let { images } = req.body;
 
@@ -1155,7 +1155,7 @@ export function registerChatRoutes(app: Express): void {
         : null;
 
       const mentionedAssetIds = content.match(/[A-Z]{2}_[A-Z]+_[A-Z0-9_]+/g) || [];
-      const uniqueMentionedIds = [...new Set(mentionedAssetIds)];
+      const uniqueMentionedIds = [...new Set(mentionedAssetIds)] as string[];
       const salesFeedbackCtx = (agentType === "cia" || agentType === "librarian") && uniqueMentionedIds.length > 0
         ? await buildSalesFeedbackContext(uniqueMentionedIds)
         : null;

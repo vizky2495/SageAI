@@ -582,9 +582,6 @@ export default function PageChat({
     if (s.action === "upload") {
       setInput(s.prompt);
       setTimeout(() => fileInputRef.current?.click(), 200);
-    } else if (s.action === "prefill") {
-      setInput(s.prompt);
-      setTimeout(() => chatInputRef.current?.focus(), 100);
     } else {
       ensureConversationAndSend(s.prompt);
     }

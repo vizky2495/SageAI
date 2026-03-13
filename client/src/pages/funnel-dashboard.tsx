@@ -151,7 +151,7 @@ function RecentFeedbackSection() {
 export default function FunnelDashboard() {
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
   const [dateRange, setDateRange] = useState<DateRangePreset>("all");
-  const [stageFilter, setStageFilter] = useState<FunnelStage | null>(null);
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
 
   const dateFiltered = useMemo(() => filterRowsByDateRange(rows, dateRange), [rows, dateRange]);
   const filtered = useMemo(() => stageFilter ? dateFiltered.filter(r => r.stage === stageFilter) : dateFiltered, [dateFiltered, stageFilter]);

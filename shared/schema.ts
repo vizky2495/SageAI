@@ -161,11 +161,9 @@ export const feedback = pgTable("feedback", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertFeedbackSchema = createInsertSchema(feedback).omit({
-  id: true,
-  status: true,
-  createdAt: true,
-});
+export const insertFeedbackSchema = createInsertSchema(feedback).omit(
+  { id: true, status: true, createdAt: true } as any
+);
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 
@@ -250,10 +248,9 @@ export const comparisonHistory = pgTable("comparison_history", {
   winnerName: text("winner_name"),
 });
 
-export const insertComparisonHistorySchema = createInsertSchema(comparisonHistory).omit({
-  id: true,
-  comparisonDate: true,
-});
+export const insertComparisonHistorySchema = createInsertSchema(comparisonHistory).omit(
+  { id: true, comparisonDate: true } as any
+);
 export type InsertComparisonHistory = z.infer<typeof insertComparisonHistorySchema>;
 export type ComparisonHistory = typeof comparisonHistory.$inferSelect;
 
@@ -408,9 +405,8 @@ export const salesFeedback = pgTable("sales_feedback", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertSalesFeedbackSchema = createInsertSchema(salesFeedback).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertSalesFeedbackSchema = createInsertSchema(salesFeedback).omit(
+  { id: true, createdAt: true } as any
+);
 export type InsertSalesFeedback = z.infer<typeof insertSalesFeedbackSchema>;
 export type SalesFeedback = typeof salesFeedback.$inferSelect;

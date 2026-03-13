@@ -491,7 +491,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.get("/api/content/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const content = await storage.getContentByAssetId(req.params.assetId);
+      const content = await storage.getContentByAssetId(req.params.assetId as string);
       if (!content) {
         return res.status(404).json({ message: "No stored content for this asset" });
       }
@@ -504,7 +504,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.get("/api/content/:assetId/download", requireAuth, async (req: Request, res: Response) => {
     try {
-      const content = await storage.getContentByAssetId(req.params.assetId);
+      const content = await storage.getContentByAssetId(req.params.assetId as string);
       if (!content || !content.storedFileBase64) {
         return res.status(404).json({ message: "No file stored for this asset" });
       }
@@ -520,7 +520,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.get("/api/content/:assetId/preview-file", requireAuth, async (req: Request, res: Response) => {
     try {
-      const content = await storage.getContentByAssetId(req.params.assetId);
+      const content = await storage.getContentByAssetId(req.params.assetId as string);
       if (!content || !content.storedFileBase64) {
         return res.status(404).json({ message: "No file stored for this asset" });
       }
@@ -547,7 +547,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.get("/api/content/:assetId/thumbnail", requireAuth, async (req: Request, res: Response) => {
     try {
-      const content = await storage.getContentByAssetId(req.params.assetId);
+      const content = await storage.getContentByAssetId(req.params.assetId as string);
       if (!content || !content.storedFileBase64) {
         return res.status(404).json({ message: "No file stored for this asset" });
       }
@@ -611,7 +611,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.delete("/api/content/:assetId", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deleteContent(req.params.assetId);
+      await storage.deleteContent(req.params.assetId as string);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to delete content" });
@@ -706,7 +706,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.put("/api/content/:assetId/tags", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { assetId } = req.params;
+      const assetId = req.params.assetId as string;
       const tags = req.body;
       if (!tags || typeof tags !== "object") {
         return res.status(400).json({ message: "Invalid tags structure" });
@@ -729,7 +729,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.post("/api/content/:assetId/regenerate-tags", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { assetId } = req.params;
+      const assetId = req.params.assetId as string;
       const content = await storage.getContentByAssetId(assetId);
       if (!content || !content.contentText || content.contentText.length < 50) {
         return res.status(400).json({ message: "No readable content to regenerate tags from" });
@@ -750,7 +750,7 @@ export function registerContentRoutes(app: Express): void {
 
   app.post("/api/content/:assetId/reanalyze", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { assetId } = req.params;
+      const assetId = req.params.assetId as string;
       const content = await storage.getContentByAssetId(assetId);
       if (!content) {
         return res.status(404).json({ message: "Content not found" });

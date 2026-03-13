@@ -883,7 +883,7 @@ function ContentFileThumbnail({ assetId, contentFormat, hasFile }: { assetId: st
             canvas.width = viewport.width;
             canvas.height = viewport.height;
             const ctx = canvas.getContext("2d")!;
-            await page.render({ canvasContext: ctx, viewport }).promise;
+            await page.render({ canvasContext: ctx, viewport } as any).promise;
             setThumbnailUrl(canvas.toDataURL("image/png"));
             setLoading(false);
           } catch {

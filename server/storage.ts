@@ -232,7 +232,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFeedback(item: InsertFeedback): Promise<Feedback> {
-    const [row] = await db.insert(feedback).values(item).returning();
+    const [row] = await db.insert(feedback).values(item as any).returning();
     return row;
   }
 
@@ -322,12 +322,12 @@ export class DatabaseStorage implements IStorage {
       const { dateStored: _ds, ...updateData } = data;
       const [row] = await db
         .update(contentStored)
-        .set({ ...updateData, dateLastUpdated: new Date() })
+        .set({ ...updateData, dateLastUpdated: new Date() } as any)
         .where(eq(contentStored.assetId, data.assetId))
         .returning();
       return row;
     }
-    const [row] = await db.insert(contentStored).values({ ...data, dateStored: data.dateStored || new Date() }).returning();
+    const [row] = await db.insert(contentStored).values({ ...data, dateStored: data.dateStored || new Date() } as any).returning();
     return row;
   }
 
@@ -532,7 +532,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createComparisonHistory(data: InsertComparisonHistory): Promise<ComparisonHistory> {
-    const [row] = await db.insert(comparisonHistory).values(data).returning();
+    const [row] = await db.insert(comparisonHistory).values(data as any).returning();
     return row;
   }
 
@@ -590,7 +590,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
   async createSalesFeedback(data: InsertSalesFeedback): Promise<SalesFeedback> {
-    const [row] = await db.insert(salesFeedback).values(data).returning();
+    const [row] = await db.insert(salesFeedback).values(data as any).returning();
     return row;
   }
 
