@@ -718,7 +718,7 @@ No explanation, no markdown, no extra text. Only JSON.`,
   app.post("/api/assets/full-comparison", requireAuth, async (req: Request, res: Response) => {
     try {
       const { contentA, contentB } = req.body as {
-        contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; country?: string; industry?: string; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
+        contentA: { contentId: string; name: string; stage: string; product: string | null; type: string | null; country?: string; industry?: string; text?: string; metrics: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
         contentB: { name: string; contentId?: string; stage: string; product: string; contentType: string; industry: string; country?: string; topic: string; text?: string; metrics?: { pageviews: number; downloads: number; leads: number; sqos: number; avgTime: number } };
       };
 
@@ -795,10 +795,10 @@ No explanation, no markdown, no extra text. Only JSON.`,
       try { contentAStored = await storage.getContentByAssetId(contentA.contentId); } catch (e) { console.error("Failed to fetch content A:", contentA.contentId, e); }
       try { if (contentB.contentId) contentBStored = await storage.getContentByAssetId(contentB.contentId); } catch (e) { console.error("Failed to fetch content B:", contentB.contentId, e); }
 
-      console.log(`[Comparison] Content A (${contentA.contentId}): stored=${!!contentAStored}, textLen=${contentAStored?.contentText?.length || 0}`);
+      console.log(`[Comparison] Content A (${contentA.contentId}): stored=${!!contentAStored}, textLen=${contentAStored?.contentText?.length || 0}, inlineTextLen=${contentA.text?.length || 0}`);
       console.log(`[Comparison] Content B (${contentB.contentId || 'no-id'}): stored=${!!contentBStored}, textLen=${contentBStored?.contentText?.length || 0}, inlineTextLen=${contentB.text?.length || 0}`);
 
-      const aTextForAnalysis = contentAStored?.contentText || "";
+      const aTextForAnalysis = contentAStored?.contentText || contentA.text || "";
       const bTextForAnalysis = contentBStored?.contentText || contentB.text || "";
       const bothHaveContent = !!(aTextForAnalysis && bTextForAnalysis);
       console.log(`[Comparison] bothHaveContent=${bothHaveContent}, aTextLen=${aTextForAnalysis.length}, bTextLen=${bTextForAnalysis.length}`);
