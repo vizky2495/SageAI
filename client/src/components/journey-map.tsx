@@ -101,8 +101,12 @@ function StageBadge({ stage, size = "sm" }: { stage: string; size?: "sm" | "md" 
 interface SankeyNode {
   id: string;
   name: string;
+  fullName: string;
   stage: string;
   stageOrder: number;
+  contacts: number;
+  dropOff: number;
+  isOther: boolean;
 }
 
 interface SankeyLink {
@@ -112,16 +116,39 @@ interface SankeyLink {
   avgDays: number | null;
 }
 
-function D3SankeyDiagram({ initialFlows }: { initialFlows?: StageFlow[] }) {
+const SANKEY_STAGES = ["TOFU", "MOFU", "BOFU"] as const;
+const SANKEY_COLORS: Record<string, { node: string; band: string }> = {
+  TOFU: { node: "#00D657", band: "rgba(0, 214, 87, 0.3)" },
+  MOFU: { node: "#4ECDC4", band: "rgba(78, 205, 196, 0.3)" },
+  BOFU: { node: "#9B59B6", band: "rgba(155, 89, 182, 0.3)" },
+};
+const SANKEY_HEIGHT = 650;
+const NODE_WIDTH = 170;
+const TOP_N_OPTIONS = [10, 15, 20, 30] as const;
+
+function truncateLabel(name: string, max = 25): string {
+  return name.length > max ? name.slice(0, max - 1) + "…" : name;
+}
+
+function resolveStage(fromStage: string, toStage: string, assetId: string): string {
+  if (SANKEY_STAGES.includes(fromStage as any)) return fromStage;
+  if (SANKEY_STAGES.includes(toStage as any)) return toStage;
+  return "BOFU";
+}
+
+function D3SankeyDiagram({ initialFlows, assetStats }: { initialFlows?: StageFlow[]; assetStats?: AssetStat[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredLink, setHoveredLink] = useState<number | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [minContacts, setMinContacts] = useState(3);
+  const [topN, setTopN] = useState<number>(15);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null);
 
   const { data: apiFlows } = useQuery<StageFlow[]>({
-    queryKey: ["/api/journey/stage-flows", minContacts],
+    queryKey: ["/api/journey/stage-flows", 1],
     queryFn: async () => {
-      const res = await authFetch(`/api/journey/stage-flows?minContacts=${minContacts}`);
+      const res = await authFetch(`/api/journey/stage-flows?minContacts=1`);
       if (!res.ok) throw new Error("Failed to load stage flows");
       return res.json();
     },
@@ -129,155 +156,357 @@ function D3SankeyDiagram({ initialFlows }: { initialFlows?: StageFlow[] }) {
     retry: 1,
   });
 
-  const flows = apiFlows || initialFlows || [];
-  const filtered = useMemo(() => flows.filter(f => f.contactCount >= minContacts), [flows, minContacts]);
+  const allFlows = apiFlows || initialFlows || [];
 
-  const { nodes, links, sankeyData } = useMemo(() => {
-    const nodeMap = new Map<string, SankeyNode>();
-    for (const f of filtered) {
-      if (!nodeMap.has(f.fromAssetId)) {
-        const stage = f.fromStage || "UNKNOWN";
-        nodeMap.set(f.fromAssetId, { id: f.fromAssetId, name: formatAssetName(f.fromAssetId), stage, stageOrder: STAGE_CONFIG[stage]?.order ?? 4 });
-      }
-      if (!nodeMap.has(f.toAssetId)) {
-        const stage = f.toStage || "UNKNOWN";
-        nodeMap.set(f.toAssetId, { id: f.toAssetId, name: formatAssetName(f.toAssetId), stage, stageOrder: STAGE_CONFIG[stage]?.order ?? 4 });
-      }
-    }
-
-    const nodesArr = [...nodeMap.values()].sort((a, b) => a.stageOrder - b.stageOrder || a.name.localeCompare(b.name));
-    const nodeIdxMap = new Map<string, number>();
-    nodesArr.forEach((n, i) => nodeIdxMap.set(n.id, i));
-
-    const linkMap = new Map<string, SankeyLink>();
-    for (const f of filtered) {
-      const srcIdx = nodeIdxMap.get(f.fromAssetId);
-      const tgtIdx = nodeIdxMap.get(f.toAssetId);
-      if (srcIdx !== undefined && tgtIdx !== undefined && srcIdx !== tgtIdx) {
-        const fwdKey = `${Math.min(srcIdx, tgtIdx)}-${Math.max(srcIdx, tgtIdx)}`;
-        const existing = linkMap.get(fwdKey);
-        if (!existing || f.contactCount > existing.value) {
-          linkMap.set(fwdKey, { source: srcIdx, target: tgtIdx, value: f.contactCount, avgDays: f.avgDaysBetween });
+  const assetStageMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (assetStats) {
+      for (const s of assetStats) {
+        if (s.funnelStage && SANKEY_STAGES.includes(s.funnelStage as any)) {
+          map.set(s.assetId, s.funnelStage);
         }
       }
     }
-    const linksArr = [...linkMap.values()];
+    return map;
+  }, [assetStats]);
+
+  const assetDropOffMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (assetStats) {
+      for (const s of assetStats) {
+        map.set(s.assetId, s.dropOffRate ?? 0);
+      }
+    }
+    return map;
+  }, [assetStats]);
+
+  const { sankeyData, totalNodes, totalLinks } = useMemo(() => {
+    if (allFlows.length === 0) return { sankeyData: null, totalNodes: 0, totalLinks: 0 };
+
+    const assetContacts = new Map<string, { contacts: number; stage: string }>();
+    for (const f of allFlows) {
+      const fromStage = assetStageMap.get(f.fromAssetId) || resolveStage(f.fromStage, "", f.fromAssetId);
+      const toStage = assetStageMap.get(f.toAssetId) || resolveStage(f.toStage, "", f.toAssetId);
+      
+      const existing1 = assetContacts.get(f.fromAssetId);
+      if (existing1) {
+        existing1.contacts += f.contactCount;
+      } else {
+        assetContacts.set(f.fromAssetId, { contacts: f.contactCount, stage: fromStage });
+      }
+      const existing2 = assetContacts.get(f.toAssetId);
+      if (existing2) {
+        existing2.contacts += f.contactCount;
+      } else {
+        assetContacts.set(f.toAssetId, { contacts: f.contactCount, stage: toStage });
+      }
+    }
+
+    const perStage: Record<string, Array<{ id: string; contacts: number }>> = { TOFU: [], MOFU: [], BOFU: [] };
+    for (const [id, info] of assetContacts) {
+      const stage = info.stage;
+      if (perStage[stage]) {
+        perStage[stage].push({ id, contacts: info.contacts });
+      } else {
+        perStage["BOFU"].push({ id, contacts: info.contacts });
+      }
+    }
+
+    for (const stage of SANKEY_STAGES) {
+      perStage[stage].sort((a, b) => b.contacts - a.contacts);
+    }
+
+    const perStageLimit = Math.max(3, Math.ceil(topN / 3));
+    const visibleIds = new Set<string>();
+    const otherBuckets: Record<string, { contacts: number; dropOff: number; count: number }> = {};
+
+    for (const stage of SANKEY_STAGES) {
+      const assets = perStage[stage];
+      const top = assets.slice(0, perStageLimit);
+      const rest = assets.slice(perStageLimit);
+
+      for (const a of top) visibleIds.add(a.id);
+
+      if (rest.length > 0) {
+        const totalContacts = rest.reduce((s, a) => s + a.contacts, 0);
+        const avgDropOff = rest.reduce((s, a) => s + (assetDropOffMap.get(a.id) ?? 0), 0) / rest.length;
+        otherBuckets[stage] = { contacts: totalContacts, dropOff: avgDropOff, count: rest.length };
+      }
+    }
+
+    const nodesArr: SankeyNode[] = [];
+    const nodeIdMap = new Map<string, number>();
+
+    for (const stage of SANKEY_STAGES) {
+      const assets = perStage[stage].filter(a => visibleIds.has(a.id));
+      for (const a of assets) {
+        const idx = nodesArr.length;
+        nodeIdMap.set(a.id, idx);
+        nodesArr.push({
+          id: a.id,
+          name: truncateLabel(formatAssetName(a.id)),
+          fullName: formatAssetName(a.id),
+          stage,
+          stageOrder: STAGE_CONFIG[stage]?.order ?? 3,
+          contacts: a.contacts,
+          dropOff: assetDropOffMap.get(a.id) ?? 0,
+          isOther: false,
+        });
+      }
+      if (otherBuckets[stage]) {
+        const otherId = `__other_${stage}__`;
+        const idx = nodesArr.length;
+        nodeIdMap.set(otherId, idx);
+        nodesArr.push({
+          id: otherId,
+          name: `Other ${stage} (${otherBuckets[stage].count})`,
+          fullName: `Other ${stage} Assets (${otherBuckets[stage].count} assets)`,
+          stage,
+          stageOrder: STAGE_CONFIG[stage]?.order ?? 3,
+          contacts: otherBuckets[stage].contacts,
+          dropOff: otherBuckets[stage].dropOff,
+          isOther: true,
+        });
+      }
+    }
+
+    const linkAgg = new Map<string, { value: number; avgDays: number | null; count: number }>();
+    for (const f of allFlows) {
+      const fromStage = assetStageMap.get(f.fromAssetId) || resolveStage(f.fromStage, "", f.fromAssetId);
+      const toStage = assetStageMap.get(f.toAssetId) || resolveStage(f.toStage, "", f.toAssetId);
+
+      let srcKey = f.fromAssetId;
+      if (!visibleIds.has(srcKey)) {
+        const s = fromStage as string;
+        srcKey = SANKEY_STAGES.includes(s as any) ? `__other_${s}__` : `__other_BOFU__`;
+      }
+      let tgtKey = f.toAssetId;
+      if (!visibleIds.has(tgtKey)) {
+        const s = toStage as string;
+        tgtKey = SANKEY_STAGES.includes(s as any) ? `__other_${s}__` : `__other_BOFU__`;
+      }
+
+      if (srcKey === tgtKey) continue;
+      const srcIdx = nodeIdMap.get(srcKey);
+      const tgtIdx = nodeIdMap.get(tgtKey);
+      if (srcIdx === undefined || tgtIdx === undefined) continue;
+
+      const srcStageOrd = nodesArr[srcIdx].stageOrder;
+      const tgtStageOrd = nodesArr[tgtIdx].stageOrder;
+      if (srcStageOrd > tgtStageOrd) continue;
+
+      const key = `${srcIdx}-${tgtIdx}`;
+      const existing = linkAgg.get(key);
+      if (existing) {
+        existing.value += f.contactCount;
+        existing.count += 1;
+        if (f.avgDaysBetween != null && existing.avgDays != null) {
+          existing.avgDays = (existing.avgDays * (existing.count - 1) + f.avgDaysBetween) / existing.count;
+        }
+      } else {
+        linkAgg.set(key, { value: f.contactCount, avgDays: f.avgDaysBetween, count: 1 });
+      }
+    }
+
+    const linksArr: SankeyLink[] = [];
+    for (const [key, agg] of linkAgg) {
+      if (agg.value < 20) continue;
+      const [s, t] = key.split("-").map(Number);
+      linksArr.push({ source: s, target: t, value: agg.value, avgDays: agg.avgDays });
+    }
 
     if (nodesArr.length === 0 || linksArr.length === 0) {
-      return { nodes: nodesArr, links: linksArr, sankeyData: null };
+      return { sankeyData: null, totalNodes: nodesArr.length, totalLinks: linksArr.length };
     }
 
-    const width = 900;
-    const stageColumns: Record<string, number> = {};
-    const stages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
-    const stageWidth = (width - 200) / stages.length;
-    stages.forEach((s, i) => { stageColumns[s] = 40 + i * stageWidth; });
-
-    const stageOrderOf = (idx: number) => nodesArr[idx]?.stageOrder ?? 4;
-    const forwardLinks = linksArr.filter(l => {
-      const srcOrder = stageOrderOf(l.source as number);
-      const tgtOrder = stageOrderOf(l.target as number);
-      return srcOrder <= tgtOrder;
+    const usedIdxs = new Set<number>();
+    for (const l of linksArr) { usedIdxs.add(l.source); usedIdxs.add(l.target); }
+    const prunedNodes = nodesArr.filter((_, i) => usedIdxs.has(i));
+    const reindexMap = new Map<number, number>();
+    prunedNodes.forEach((n, newI) => {
+      const oldI = nodesArr.indexOf(n);
+      reindexMap.set(oldI, newI);
     });
-
-    const finalLinks = forwardLinks.length > 0 ? forwardLinks : linksArr.slice(0, 50);
-
-    if (finalLinks.length === 0) {
-      return { nodes: nodesArr, links: linksArr, sankeyData: null };
-    }
-
-    const usedNodeIdxs = new Set<number>();
-    for (const l of finalLinks) {
-      usedNodeIdxs.add(l.source as number);
-      usedNodeIdxs.add(l.target as number);
-    }
-    const prunedNodes = nodesArr.filter((_, i) => usedNodeIdxs.has(i));
-    const newIdxMap = new Map<number, number>();
-    prunedNodes.forEach((n, newIdx) => {
-      const oldIdx = nodesArr.indexOf(n);
-      newIdxMap.set(oldIdx, newIdx);
-    });
-    const remappedLinks = finalLinks
-      .map(l => ({
-        source: newIdxMap.get(l.source as number)!,
-        target: newIdxMap.get(l.target as number)!,
-        value: l.value,
-        avgDays: l.avgDays,
-      }))
+    const prunedLinks = linksArr
+      .map(l => ({ source: reindexMap.get(l.source)!, target: reindexMap.get(l.target)!, value: l.value, avgDays: l.avgDays }))
       .filter(l => l.source !== undefined && l.target !== undefined && l.source !== l.target);
 
     try {
-      const h = Math.max(400, prunedNodes.length * 28);
+      const containerWidth = containerRef.current?.clientWidth || 900;
+      const svgW = Math.max(700, containerWidth - 20);
+
       const sankeyGen = sankey<SankeyNode, SankeyLink>()
-        .nodeWidth(16)
-        .nodePadding(14)
-        .extent([[40, 20], [width - 160, h - 20]])
+        .nodeWidth(NODE_WIDTH)
+        .nodePadding(4)
         .nodeAlign(sankeyLeft)
+        .extent([[0, 40], [svgW, SANKEY_HEIGHT]])
+        .nodeSort((a: any, b: any) => (b as SankeyNode).contacts - (a as SankeyNode).contacts)
         .iterations(6);
 
       const data = sankeyGen({
         nodes: prunedNodes.map(n => ({ ...n })),
-        links: remappedLinks.map(l => ({ ...l })),
+        links: prunedLinks.map(l => ({ ...l })),
       });
+
+      const colX: Record<string, number> = {};
+      const cols = SANKEY_STAGES.length;
+      const colSpacing = (svgW - NODE_WIDTH) / (cols - 1);
+      SANKEY_STAGES.forEach((s, i) => { colX[s] = i * colSpacing; });
 
       for (const node of data.nodes) {
         const sn = node as any;
-        const stage = (sn as SankeyNode).stage || "UNKNOWN";
-        sn.x0 = stageColumns[stage] || stageColumns["UNKNOWN"];
-        sn.x1 = sn.x0 + 16;
+        const stage = (sn as SankeyNode).stage;
+        sn.x0 = colX[stage] ?? colX["BOFU"];
+        sn.x1 = sn.x0 + NODE_WIDTH;
       }
 
-      return { nodes: prunedNodes, links: remappedLinks, sankeyData: data };
+      return { sankeyData: data, totalNodes: prunedNodes.length, totalLinks: prunedLinks.length };
     } catch (e) {
       console.error("Sankey layout error:", e);
-      return { nodes: prunedNodes, links: remappedLinks, sankeyData: null };
+      return { sankeyData: null, totalNodes: prunedNodes.length, totalLinks: prunedLinks.length };
     }
-  }, [filtered]);
+  }, [allFlows, assetStageMap, assetDropOffMap, topN]);
+
+  const searchMatchIds = useMemo(() => {
+    if (!searchTerm.trim()) return new Set<string>();
+    const q = searchTerm.toLowerCase();
+    const matches = new Set<string>();
+    if (sankeyData) {
+      for (const n of sankeyData.nodes) {
+        const sn = n as any as SankeyNode;
+        if (sn.id.toLowerCase().includes(q) || sn.fullName.toLowerCase().includes(q) || sn.name.toLowerCase().includes(q)) {
+          matches.add(sn.id);
+        }
+      }
+    }
+    return matches;
+  }, [searchTerm, sankeyData]);
+
+  const handleNodeHover = useCallback((nodeId: string | null, evt?: React.MouseEvent) => {
+    setHoveredNode(nodeId);
+    if (nodeId && sankeyData && evt) {
+      const node = (sankeyData.nodes as any[]).find((n: any) => n.id === nodeId) as any;
+      if (node) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const x = evt.clientX - (rect?.left ?? 0);
+        const y = evt.clientY - (rect?.top ?? 0);
+        setTooltip({
+          x, y,
+          content: [
+            node.fullName || node.name,
+            `${node.contacts?.toLocaleString() ?? "?"} contacts`,
+            `Drop-off: ${((node.dropOff ?? 0) * 100).toFixed(1)}%`,
+          ],
+        });
+      }
+    } else {
+      setTooltip(null);
+    }
+  }, [sankeyData]);
+
+  const handleLinkHover = useCallback((linkIdx: number | null, evt?: React.MouseEvent) => {
+    setHoveredLink(linkIdx);
+    if (linkIdx !== null && sankeyData && evt) {
+      const link = (sankeyData.links as any[])[linkIdx];
+      if (link) {
+        const srcNode = link.source as any;
+        const tgtNode = link.target as any;
+        const pct = srcNode.value ? ((link.value / srcNode.value) * 100).toFixed(1) : "?";
+        const rect = containerRef.current?.getBoundingClientRect();
+        const x = evt.clientX - (rect?.left ?? 0);
+        const y = evt.clientY - (rect?.top ?? 0);
+        setTooltip({
+          x, y,
+          content: [
+            `${srcNode.fullName || srcNode.name} → ${tgtNode.fullName || tgtNode.name}`,
+            `${link.value?.toLocaleString()} contacts (${pct}% of source)`,
+            link.avgDays != null ? `Avg ${link.avgDays.toFixed(1)} days between` : "",
+          ].filter(Boolean),
+        });
+      }
+    } else {
+      setTooltip(null);
+    }
+  }, [sankeyData]);
 
   if (!sankeyData || !sankeyData.nodes.length) {
     return (
-      <div className="text-center py-12 text-muted-foreground text-sm">
-        No asset flows found with {minContacts}+ contacts. Try lowering the minimum.
+      <div className="text-center py-12 text-muted-foreground text-sm" data-testid="d3-sankey-diagram">
+        No asset flow data available. Upload journey data from the Admin page to see the Sankey diagram.
       </div>
     );
   }
 
-  const width = 900;
-  const height = Math.max(400, nodes.length * 28);
+  const containerWidth = containerRef.current?.clientWidth || 900;
+  const svgW = Math.max(700, containerWidth - 20);
   const linkPathGen = sankeyLinkHorizontal();
 
-  const stageLabels = [
-    { label: "TOFU", x: 40, color: "#00D657" },
-    { label: "MOFU", x: 40 + (width - 200) / 4, color: "#67E8F9" },
-    { label: "BOFU", x: 40 + 2 * (width - 200) / 4, color: "#A78BFA" },
-    { label: "Unclassified", x: 40 + 3 * (width - 200) / 4, color: "#9CA3AF" },
-  ];
+  const colX: Record<string, number> = {};
+  const colSpacing = (svgW - NODE_WIDTH) / (SANKEY_STAGES.length - 1);
+  SANKEY_STAGES.forEach((s, i) => { colX[s] = i * colSpacing; });
+
+  const stageHeaders = SANKEY_STAGES.map(s => ({
+    stage: s,
+    label: s === "TOFU" ? "TOFU — Awareness" : s === "MOFU" ? "MOFU — Consideration" : "BOFU — Decision",
+    x: colX[s] + NODE_WIDTH / 2,
+    color: SANKEY_COLORS[s].node,
+  }));
+
+  const connectedToHovered = new Set<string>();
+  if (hoveredNode && sankeyData) {
+    for (const link of sankeyData.links as any[]) {
+      const src = link.source as any;
+      const tgt = link.target as any;
+      if (src.id === hoveredNode) connectedToHovered.add(tgt.id);
+      if (tgt.id === hoveredNode) connectedToHovered.add(src.id);
+    }
+  }
 
   return (
-    <div className="space-y-3" data-testid="d3-sankey-diagram">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className="space-y-3" data-testid="d3-sankey-diagram" ref={containerRef}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
           <Network className="h-4 w-4 text-[#00D657]" />
           <h4 className="text-sm font-semibold">Asset Flow Sankey</h4>
-          <span className="text-[10px] text-muted-foreground">{sankeyData.nodes.length} assets, {sankeyData.links.length} flows</span>
+          <span className="text-[10px] text-muted-foreground">{totalNodes} nodes, {totalLinks} flows</span>
+          <div className="flex items-center gap-1.5 ml-2">
+            <label className="text-[10px] text-muted-foreground">Show top</label>
+            <select
+              value={topN}
+              onChange={(e) => setTopN(Number(e.target.value))}
+              className="text-[11px] bg-black/30 border border-border/30 rounded px-1.5 py-0.5 text-foreground"
+              data-testid="select-sankey-top-n"
+            >
+              {TOP_N_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-[10px] text-muted-foreground whitespace-nowrap">Min contacts:</label>
-          <input type="range" min={1} max={50} value={minContacts}
-            onChange={(e) => setMinContacts(Number(e.target.value))}
-            className="w-[80px] h-1 accent-[#00D657]"
-            data-testid="slider-sankey-min-contacts" />
-          <span className="text-[10px] font-semibold w-[20px]">{minContacts}</span>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Find asset..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="text-[11px] bg-black/30 border border-border/30 rounded pl-6 pr-6 py-1 w-[160px] text-foreground placeholder:text-muted-foreground/50"
+              data-testid="input-sankey-search"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm("")} className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border/20 bg-black/20">
-        <svg ref={svgRef} width={width} height={height + 30} viewBox={`0 0 ${width} ${height + 30}`} className="w-full">
-          {stageLabels.map((sl) => (
-            <g key={sl.label}>
-              <text x={sl.x + 8} y={14} fill={sl.color} fontSize={11} fontWeight={600} textAnchor="start">{sl.label}</text>
-              <line x1={sl.x} y1={22} x2={sl.x} y2={height + 10} stroke={sl.color} strokeWidth={1} opacity={0.15} strokeDasharray="4,4" />
-            </g>
+      <div className="rounded-xl border border-border/20 bg-black/20 overflow-hidden relative" style={{ height: SANKEY_HEIGHT + 60 }}>
+        <svg ref={svgRef} width={svgW} height={SANKEY_HEIGHT + 50} viewBox={`0 0 ${svgW} ${SANKEY_HEIGHT + 50}`} className="w-full">
+          {stageHeaders.map(sh => (
+            <text key={sh.stage} x={sh.x} y={22} textAnchor="middle" fill={sh.color} fontSize={13} fontWeight={600}>
+              {sh.label}
+            </text>
           ))}
 
           {sankeyData.links.map((link: any, i: number) => {
@@ -285,96 +514,135 @@ function D3SankeyDiagram({ initialFlows }: { initialFlows?: StageFlow[] }) {
             if (!d) return null;
             const srcNode = link.source as any;
             const tgtNode = link.target as any;
-            const srcStage = srcNode.stage || "UNKNOWN";
-            const tgtStage = tgtNode.stage || "UNKNOWN";
-            const srcOrd = STAGE_CONFIG[srcStage]?.order ?? 4;
-            const tgtOrd = STAGE_CONFIG[tgtStage]?.order ?? 4;
-            let color = "#F59E0B";
-            if (srcOrd < tgtOrd) color = "#00D657";
-            else if (srcOrd > tgtOrd) color = "#EF4444";
+            const srcStage = srcNode.stage || "BOFU";
+            const bandColor = SANKEY_COLORS[srcStage]?.band || SANKEY_COLORS.BOFU.band;
 
-            const isHovered = hoveredLink === i;
-            const isNodeHovered = hoveredNode !== null && (srcNode.id === hoveredNode || tgtNode.id === hoveredNode);
-            const dimmed = (hoveredNode !== null || hoveredLink !== null) && !isHovered && !isNodeHovered;
+            const isLinkHovered = hoveredLink === i;
+            const isNodeConnected = hoveredNode !== null && (srcNode.id === hoveredNode || tgtNode.id === hoveredNode);
+            const isSearchMatch = searchMatchIds.size > 0 && (searchMatchIds.has(srcNode.id) || searchMatchIds.has(tgtNode.id));
+            const anyHover = hoveredNode !== null || hoveredLink !== null;
+            const anySearch = searchMatchIds.size > 0;
+
+            let opacity = 0.25;
+            if (isLinkHovered || isNodeConnected) opacity = 0.5;
+            else if (anyHover) opacity = 0.06;
+            if (anySearch && !isSearchMatch) opacity = 0.04;
+            if (anySearch && isSearchMatch) opacity = 0.5;
 
             return (
               <path
                 key={i}
                 d={d}
-                fill="none"
-                stroke={color}
-                strokeWidth={Math.max(1, link.width || 1)}
-                strokeOpacity={dimmed ? 0.08 : isHovered || isNodeHovered ? 0.7 : 0.3}
-                onMouseEnter={() => setHoveredLink(i)}
-                onMouseLeave={() => setHoveredLink(null)}
-                className="transition-all duration-200 cursor-pointer"
+                fill={bandColor}
+                stroke="none"
+                strokeWidth={0}
+                fillOpacity={opacity}
+                onMouseEnter={(e) => handleLinkHover(i, e)}
+                onMouseLeave={() => handleLinkHover(null)}
+                className="cursor-pointer"
+                style={{ transition: "fill-opacity 0.15s" }}
               />
             );
           })}
 
           {sankeyData.nodes.map((node: any, i: number) => {
-            const stage = node.stage || "UNKNOWN";
-            const cfg = getStageConfig(stage);
-            const nodeHeight = Math.max(4, (node.y1 || 0) - (node.y0 || 0));
-            const isHovered = hoveredNode === node.id;
-            const dimmed = hoveredNode !== null && !isHovered;
+            const sn = node as SankeyNode;
+            const stage = sn.stage || "BOFU";
+            const color = SANKEY_COLORS[stage]?.node || SANKEY_COLORS.BOFU.node;
+            const nodeH = Math.max(8, (node.y1 || 0) - (node.y0 || 0));
+            const isHovered = hoveredNode === sn.id;
+            const isConnected = connectedToHovered.has(sn.id);
+            const isSearchMatch = searchMatchIds.size > 0 && searchMatchIds.has(sn.id);
+            const anyHover = hoveredNode !== null;
+            const anySearch = searchMatchIds.size > 0;
+
+            let nodeOpacity = 0.8;
+            if (isHovered) nodeOpacity = 1;
+            else if (isConnected) nodeOpacity = 0.8;
+            else if (anyHover) nodeOpacity = 0.15;
+            if (anySearch && !isSearchMatch) nodeOpacity = 0.12;
+            if (anySearch && isSearchMatch) nodeOpacity = 1;
+
+            let textOpacity = 0.85;
+            if (anyHover && !isHovered && !isConnected) textOpacity = 0.15;
+            if (anySearch && !isSearchMatch) textOpacity = 0.1;
+
+            const labelX = stage === "BOFU" ? (node.x0 || 0) - 6 : (node.x1 || 0) + 6;
+            const labelAnchor = stage === "BOFU" ? "end" : "start";
+
+            const dropOffWidth = Math.max(0, Math.min(NODE_WIDTH, (sn.dropOff ?? 0) * NODE_WIDTH));
 
             return (
               <g
-                key={node.id || i}
-                onMouseEnter={() => setHoveredNode(node.id)}
-                onMouseLeave={() => setHoveredNode(null)}
+                key={sn.id || i}
+                onMouseEnter={(e) => handleNodeHover(sn.id, e)}
+                onMouseMove={(e) => handleNodeHover(sn.id, e)}
+                onMouseLeave={() => handleNodeHover(null)}
                 className="cursor-pointer"
               >
                 <rect
                   x={node.x0}
                   y={node.y0}
-                  width={(node.x1 || 0) - (node.x0 || 0)}
-                  height={nodeHeight}
-                  fill={cfg.color}
-                  fillOpacity={dimmed ? 0.2 : isHovered ? 1 : 0.7}
-                  rx={2}
-                  className="transition-all duration-200"
+                  width={NODE_WIDTH}
+                  height={nodeH}
+                  fill={sn.isOther ? `${color}88` : color}
+                  fillOpacity={nodeOpacity}
+                  rx={3}
+                  style={{ transition: "fill-opacity 0.15s" }}
                 />
-                <text
-                  x={(node.x1 || 0) + 6}
-                  y={((node.y0 || 0) + (node.y1 || 0)) / 2}
-                  dy="0.35em"
-                  fill={dimmed ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.85)"}
-                  fontSize={10}
-                  className="transition-all duration-200"
-                >
-                  {node.name}
-                </text>
+                {dropOffWidth > 2 && nodeH >= 8 && (
+                  <rect
+                    x={node.x0}
+                    y={(node.y1 || 0) - Math.min(3, nodeH * 0.3)}
+                    width={dropOffWidth}
+                    height={Math.min(3, nodeH * 0.3)}
+                    fill="#EF4444"
+                    fillOpacity={0.7}
+                    rx={1}
+                  />
+                )}
+                {nodeH >= 14 && (
+                  <text
+                    x={labelX}
+                    y={((node.y0 || 0) + (node.y1 || 0)) / 2}
+                    dy="0.35em"
+                    textAnchor={labelAnchor}
+                    fill={`rgba(255,255,255,${textOpacity})`}
+                    fontSize={11}
+                    fontWeight={sn.isOther ? 400 : 500}
+                    fontStyle={sn.isOther ? "italic" : "normal"}
+                    style={{ transition: "fill 0.15s" }}
+                  >
+                    {sn.name}
+                  </text>
+                )}
               </g>
             );
           })}
-
-          {hoveredLink !== null && sankeyData.links[hoveredLink] && (() => {
-            const link = sankeyData.links[hoveredLink] as any;
-            const srcNode = link.source as any;
-            const tgtNode = link.target as any;
-            const midX = ((srcNode.x1 || 0) + (tgtNode.x0 || 0)) / 2;
-            const midY = ((link.y0 || 0) + (link.y1 || 0)) / 2;
-            return (
-              <g>
-                <rect x={midX - 80} y={midY - 28} width={160} height={36} rx={6} fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.1)" />
-                <text x={midX} y={midY - 12} textAnchor="middle" fill="white" fontSize={10} fontWeight={600}>
-                  {link.value} contacts
-                </text>
-                <text x={midX} y={midY + 2} textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize={9}>
-                  {srcNode.name} → {tgtNode.name}
-                </text>
-              </g>
-            );
-          })()}
         </svg>
+
+        {tooltip && (
+          <div
+            className="absolute pointer-events-none z-50 bg-black/90 border border-white/10 rounded-lg px-3 py-2 shadow-xl"
+            style={{
+              left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth ?? 800) - 220),
+              top: Math.min(tooltip.y - 10, SANKEY_HEIGHT + 10),
+            }}
+          >
+            {tooltip.content.map((line, i) => (
+              <div key={i} className={`text-[11px] ${i === 0 ? "text-white font-semibold" : "text-white/60"}`}>
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-[#00D657] inline-block" /> Forward</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-amber-400 inline-block" /> Lateral</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-red-400 inline-block" /> Regression</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-[#00D657] inline-block" /> TOFU flow</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-[#4ECDC4] inline-block" /> MOFU flow</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-[#9B59B6] inline-block" /> BOFU flow</span>
+        <span className="flex items-center gap-1 ml-2"><span className="w-3 h-1 rounded-full bg-red-500 inline-block" /> Drop-off indicator</span>
       </div>
     </div>
   );
@@ -1218,7 +1486,7 @@ export default function JourneyMap({ transitions, topPatterns, topAssetStats, st
           </TabsList>
 
           <TabsContent value="asset-flow">
-            <D3SankeyDiagram initialFlows={stageFlows} />
+            <D3SankeyDiagram initialFlows={stageFlows} assetStats={topAssetStats} />
           </TabsContent>
 
           <TabsContent value="content-paths">
