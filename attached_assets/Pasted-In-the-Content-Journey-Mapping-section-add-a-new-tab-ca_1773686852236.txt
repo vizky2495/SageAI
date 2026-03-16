@@ -1,0 +1,64 @@
+In the Content Journey Mapping section, add a new tab called "Content Paths" alongside the existing Stage Flow, Journey Patterns, and Top Assets tabs.
+This tab answers one core question for the content team: "What content are people actually consuming in sequence, and where are they dropping off or progressing?"
+
+SECTION 1 — Content Flow Sankey / Path View
+At the top of the tab, render a horizontal flow diagram showing the top content-to-content transitions as flowing paths. Each node is a content asset (abbreviated name + stage badge). Each connection between nodes shows the number of contacts who made that transition. Thicker lines = more contacts.
+
+Show the top 20 most-traveled paths to keep it readable
+Color-code connections by direction:
+
+Green = forward funnel progression (TOFU→MOFU, MOFU→BOFU)
+Amber = lateral move (same stage to same stage)
+Red/muted = regression (BOFU→MOFU, MOFU→TOFU)
+
+
+If a true Sankey is too complex, render as a ranked flow list with visual bar widths instead — but the left-to-right from→to structure must be preserved
+
+
+SECTION 2 — Content Transition Table (the workhorse)
+Below the diagram, a filterable table showing every content-to-content transition. Columns:
+From AssetStage→To AssetStageContactsAvg DaysDrop-off After "To"
+
+Drop-off After "To": % of contacts whose journey ended at the "To" asset (no further interactions recorded). Red if >70%, amber if 40–70%, green if <40%. This tells the content team where journeys are stalling.
+Avg Days: time between the two interactions — high numbers may signal weak nurture sequences
+Clicking any row expands inline to show:
+
+Top 3 assets that came before the "From" asset (upstream context)
+Top 3 assets that came after the "To" asset (downstream continuation)
+A plain-English insight line, e.g. "83% of contacts who hit this transition continue to BOFU content — strong handoff" or "71% drop off here — potential nurture gap between these two assets"
+
+
+
+Filters:
+
+From Stage / To Stage (TOFU / MOFU / BOFU / Unclassified)
+Transition type: Forward only / Regression only / Lateral only / All
+Min contact threshold (slider: only show transitions with >N contacts, default 50)
+Asset name search (searches both From and To columns simultaneously)
+
+
+SECTION 3 — Asset Intelligence Cards (bottom of tab)
+Four highlight cards surfacing automatic insights the content team can act on:
+
+🔴 Biggest Drop-off Points — Top 5 assets where the journey most commonly ends. Label: "Journey ends here most often"
+🟢 Strongest Accelerators — Top 5 assets where contacts most reliably progress to the next funnel stage within 7 days
+🔁 Regression Triggers — Top 5 assets that most commonly precede a backward stage move
+⚡ Fast-Track Paths — Top 3 full sequences (3+ assets) where contacts moved TOFU→MOFU→BOFU fastest (lowest total avg days)
+
+Each card shows asset name, stage badge, contact count, and a one-line plain-English description of why it's flagged.
+
+Data logic (backend):
+
+Use existing pre-computed Eloqua interaction data already in the database
+For each contact, sort all interactions chronologically, then generate consecutive pairs: (interaction N → interaction N+1)
+Each pair = one transition record with: contact_id, from_asset_id, to_asset_id, from_stage, to_stage, days_between
+Aggregate into a transitions summary table: unique (from_asset_id, to_asset_id) pairs with count, avg_days, drop_off_rate
+Drop-off rate = contacts where to_asset_id was their last ever interaction / total contacts making that transition
+Exclude self-transitions (same asset back-to-back)
+Match asset names and stages from existing content library via asset_id
+Pre-compute on data load — do not run raw aggregation queries on every page render
+
+Styling: Dark theme matching existing Content Journey Mapping. Stage badge colors: TOFU = green #00D657, MOFU = cyan #00BCD4, BOFU = purple #9C27B0, Unclassified = grey. Drop-off indicators use red/amber/green inline. All consistent with existing Sage brand styling.
+No new data upload needed — derive everything from already-ingested Eloqua data.
+
+This gives the content team three layers: the visual story (flow diagram), the detailed evidence (transition table with drop-off rates), and the so-what (insight cards). Want me to adjust the emphasis on any section?

@@ -35,6 +35,7 @@ export async function registerRoutes(
   const JOURNEY_CACHE_TTL_MS = 5 * 60 * 1000;
   let journeySummaryCache: any = null;
   let journeySummaryCacheTime = 0;
+  const contentTransitionCache = new Map<string, { data: any; time: number }>();
 
   const feedbackTagsSchema = z.object({
     contentId: z.string().min(1),
@@ -2330,6 +2331,7 @@ Return ONLY valid JSON matching this schema:
       await storage.bulkInsertJourneyInteractions(result.processed);
 
       journeySummaryCache = null;
+      contentTransitionCache.clear();
       resetJourneyBuildProgress();
 
       buildJourneySummaries(result.batchId).catch(err => {
@@ -2369,6 +2371,7 @@ Return ONLY valid JSON matching this schema:
     try {
       const deleted = await storage.deleteJourneyInteractionsByBatch(req.params.batchId as string);
       journeySummaryCache = null;
+      contentTransitionCache.clear();
 
       const remaining = await storage.countJourneyInteractions();
       if (remaining === 0) {
@@ -2397,6 +2400,7 @@ Return ONLY valid JSON matching this schema:
     try {
       resetJourneyBuildProgress();
       journeySummaryCache = null;
+      contentTransitionCache.clear();
       buildJourneySummaries().catch(err => {
         console.error("Journey summary rebuild failed:", err);
       });
@@ -2472,6 +2476,39 @@ Return ONLY valid JSON matching this schema:
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to fetch asset journey stats" });
+    }
+  });
+
+  app.get("/api/journey/content-transitions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const fromStage = req.query.fromStage as string | undefined;
+      const toStage = req.query.toStage as string | undefined;
+      const search = req.query.search as string | undefined;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+      const cacheKey = `${fromStage || ""}_${toStage || ""}_${search || ""}_${limit}`;
+      const cached = contentTransitionCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < JOURNEY_CACHE_TTL_MS) {
+        return res.json(cached.data);
+      }
+
+      const transitions = await storage.getContentTransitions({ fromStage, toStage, search, limit });
+      contentTransitionCache.set(cacheKey, { data: transitions, time: Date.now() });
+      res.json(transitions);
+    } catch (err: any) {
+      console.error("Content transitions error:", err);
+      res.status(500).json({ message: "Failed to fetch content transitions" });
+    }
+  });
+
+  app.get("/api/journey/asset-neighbors/:assetId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = decodeURIComponent(req.params.assetId as string);
+      const neighbors = await storage.getAssetNeighbors(assetId);
+      res.json(neighbors);
+    } catch (err: any) {
+      console.error("Asset neighbors error:", err);
+      res.status(500).json({ message: "Failed to fetch asset neighbors" });
     }
   });
 

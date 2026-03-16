@@ -1,0 +1,39 @@
+In the Content Journey Mapping section, add a new tab called "Content Paths" alongside the existing Stage Flow, Journey Patterns, and Top Assets tabs.
+This tab should show content-to-content transition flows — i.e., for each content asset, which asset did contacts view before it, and which asset did they view after it. This is derived from the existing Eloqua interaction data already loaded into the system.
+What to build:
+
+Top-level summary table — List the most common content-to-content transitions across all contacts. Each row should show:
+
+From Asset (asset name + funnel stage badge)
+→ arrow
+To Asset (asset name + funnel stage badge)
+Contact count (how many contacts made this exact transition)
+Avg days between the two interactions
+
+Sort by contact count descending. Show top 50 transitions.
+Asset drill-down — When a user clicks any asset name in the table, expand or open a side panel showing:
+
+Came from (top 5 assets that led contacts to this asset, with counts)
+Went to (top 5 assets contacts viewed after this one, with counts)
+The funnel stage of each upstream/downstream asset
+
+
+Filter bar at the top with:
+
+Filter by funnel stage of the From asset (TOFU / MOFU / BOFU / Unclassified)
+Filter by funnel stage of the To asset
+Search box to find a specific asset by name
+
+
+
+Data logic:
+
+Use the existing pre-computed Eloqua interaction data already stored in the database
+For each contact, sort their interactions by timestamp, then pair consecutive interactions as (interaction N → interaction N+1)
+Each such pair is one content transition
+Aggregate all transitions across all contacts, counting how many contacts made each unique (from_asset_id, to_asset_id) pair
+Exclude self-transitions (same asset appearing twice in a row for the same contact)
+The asset names and funnel stage classifications should come from the existing content library matched via asset_id
+
+Styling: Match the existing Content Journey Mapping dark theme — use the same stage badge colors (TOFU = green, MOFU = cyan/blue, BOFU = purple, Unclassified = grey), same card/row styling, and the Sage brand color #00D657 for interaction count bars.
+Do not add any new data upload requirement — this should work entirely from the Eloqua data already ingested.

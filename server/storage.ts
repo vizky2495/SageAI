@@ -119,6 +119,13 @@ export interface IStorage {
   bulkInsertAssetJourneyStats(stats: InsertAssetJourneyStat[]): Promise<void>;
   getAssetJourneyStats(assetId?: string): Promise<AssetJourneyStat[]>;
   getJourneySummaryStatus(): Promise<{ contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number }>;
+  getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number }): Promise<Array<{
+    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null;
+  }>>;
+  getAssetNeighbors(assetId: string): Promise<{
+    cameFrom: Array<{ assetId: string; stage: string; count: number }>;
+    wentTo: Array<{ assetId: string; stage: string; count: number }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -807,6 +814,112 @@ export class DatabaseStorage implements IStorage {
       db.select({ total: count() }).from(assetJourneyStats),
     ]);
     return { contactJourneyCount: cj.total, patternCount: jp.total, transitionCount: st.total, assetStatCount: aj.total };
+  }
+
+  async getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number }): Promise<Array<{
+    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null;
+  }>> {
+    const validStages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
+    const safeLimit = Math.min(Math.max(opts?.limit || 50, 1), 200);
+
+    const conditions: SQL[] = [
+      sql`to_asset IS NOT NULL`,
+      sql`from_asset != to_asset`,
+    ];
+
+    if (opts?.fromStage && validStages.includes(opts.fromStage)) {
+      conditions.push(sql`from_stage = ${opts.fromStage}`);
+    }
+    if (opts?.toStage && validStages.includes(opts.toStage)) {
+      conditions.push(sql`to_stage = ${opts.toStage}`);
+    }
+    if (opts?.search && opts.search.trim()) {
+      const searchTerm = `%${opts.search.trim()}%`;
+      conditions.push(sql`(from_asset ILIKE ${searchTerm} OR to_asset ILIKE ${searchTerm})`);
+    }
+
+    const whereClause = conditions.reduce((acc, cond, idx) => idx === 0 ? cond : sql`${acc} AND ${cond}`);
+
+    const result = await db.execute(sql`
+      WITH ordered AS (
+        SELECT
+          contact_hash,
+          asset_id AS from_asset,
+          COALESCE(funnel_stage, 'UNKNOWN') AS from_stage,
+          LEAD(asset_id) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS to_asset,
+          LEAD(COALESCE(funnel_stage, 'UNKNOWN')) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS to_stage,
+          LEAD(interaction_timestamp) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS next_ts,
+          interaction_timestamp AS cur_ts
+        FROM journey_interactions
+        WHERE asset_id IS NOT NULL
+      )
+      SELECT
+        from_asset AS "fromAsset",
+        from_stage AS "fromStage",
+        to_asset AS "toAsset",
+        to_stage AS "toStage",
+        COUNT(DISTINCT contact_hash)::int AS "contactCount",
+        AVG(EXTRACT(EPOCH FROM (next_ts - cur_ts)) / 86400.0) AS "avgDaysBetween"
+      FROM ordered
+      WHERE ${whereClause}
+      GROUP BY from_asset, from_stage, to_asset, to_stage
+      ORDER BY "contactCount" DESC
+      LIMIT ${safeLimit}
+    `);
+    return (result as any).rows || result as any;
+  }
+
+  async getAssetNeighbors(assetId: string): Promise<{
+    cameFrom: Array<{ assetId: string; stage: string; count: number }>;
+    wentTo: Array<{ assetId: string; stage: string; count: number }>;
+  }> {
+    const [cameFromResult, wentToResult] = await Promise.all([
+      db.execute(sql`
+        WITH ordered AS (
+          SELECT
+            contact_hash,
+            asset_id,
+            COALESCE(funnel_stage, 'UNKNOWN') AS stage,
+            LEAD(asset_id) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS next_asset
+          FROM journey_interactions
+          WHERE asset_id IS NOT NULL
+        )
+        SELECT
+          asset_id AS "assetId",
+          stage,
+          COUNT(DISTINCT contact_hash)::int AS count
+        FROM ordered
+        WHERE next_asset = ${assetId} AND asset_id != ${assetId}
+        GROUP BY asset_id, stage
+        ORDER BY count DESC
+        LIMIT 5
+      `),
+      db.execute(sql`
+        WITH ordered AS (
+          SELECT
+            contact_hash,
+            asset_id,
+            COALESCE(funnel_stage, 'UNKNOWN') AS stage,
+            LAG(asset_id) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS prev_asset
+          FROM journey_interactions
+          WHERE asset_id IS NOT NULL
+        )
+        SELECT
+          asset_id AS "assetId",
+          stage,
+          COUNT(DISTINCT contact_hash)::int AS count
+        FROM ordered
+        WHERE prev_asset = ${assetId} AND asset_id != ${assetId}
+        GROUP BY asset_id, stage
+        ORDER BY count DESC
+        LIMIT 5
+      `),
+    ]);
+
+    return {
+      cameFrom: ((cameFromResult as any).rows || cameFromResult) as any,
+      wentTo: ((wentToResult as any).rows || wentToResult) as any,
+    };
   }
 }
 
