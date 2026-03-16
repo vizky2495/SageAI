@@ -149,38 +149,76 @@ function D3SankeyDiagram({ initialFlows }: { initialFlows?: StageFlow[] }) {
     const nodeIdxMap = new Map<string, number>();
     nodesArr.forEach((n, i) => nodeIdxMap.set(n.id, i));
 
-    const linksArr: SankeyLink[] = [];
+    const linkMap = new Map<string, SankeyLink>();
     for (const f of filtered) {
       const srcIdx = nodeIdxMap.get(f.fromAssetId);
       const tgtIdx = nodeIdxMap.get(f.toAssetId);
       if (srcIdx !== undefined && tgtIdx !== undefined && srcIdx !== tgtIdx) {
-        linksArr.push({ source: srcIdx, target: tgtIdx, value: f.contactCount, avgDays: f.avgDaysBetween });
+        const fwdKey = `${Math.min(srcIdx, tgtIdx)}-${Math.max(srcIdx, tgtIdx)}`;
+        const existing = linkMap.get(fwdKey);
+        if (!existing || f.contactCount > existing.value) {
+          linkMap.set(fwdKey, { source: srcIdx, target: tgtIdx, value: f.contactCount, avgDays: f.avgDaysBetween });
+        }
       }
     }
+    const linksArr = [...linkMap.values()];
 
     if (nodesArr.length === 0 || linksArr.length === 0) {
       return { nodes: nodesArr, links: linksArr, sankeyData: null };
     }
 
     const width = 900;
-    const height = Math.max(400, nodesArr.length * 28);
+    const stageColumns: Record<string, number> = {};
+    const stages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
+    const stageWidth = (width - 200) / stages.length;
+    stages.forEach((s, i) => { stageColumns[s] = 40 + i * stageWidth; });
+
+    const stageOrderOf = (idx: number) => nodesArr[idx]?.stageOrder ?? 4;
+    const forwardLinks = linksArr.filter(l => {
+      const srcOrder = stageOrderOf(l.source as number);
+      const tgtOrder = stageOrderOf(l.target as number);
+      return srcOrder <= tgtOrder;
+    });
+
+    const finalLinks = forwardLinks.length > 0 ? forwardLinks : linksArr.slice(0, 50);
+
+    if (finalLinks.length === 0) {
+      return { nodes: nodesArr, links: linksArr, sankeyData: null };
+    }
+
+    const usedNodeIdxs = new Set<number>();
+    for (const l of finalLinks) {
+      usedNodeIdxs.add(l.source as number);
+      usedNodeIdxs.add(l.target as number);
+    }
+    const prunedNodes = nodesArr.filter((_, i) => usedNodeIdxs.has(i));
+    const newIdxMap = new Map<number, number>();
+    prunedNodes.forEach((n, newIdx) => {
+      const oldIdx = nodesArr.indexOf(n);
+      newIdxMap.set(oldIdx, newIdx);
+    });
+    const remappedLinks = finalLinks
+      .map(l => ({
+        source: newIdxMap.get(l.source as number)!,
+        target: newIdxMap.get(l.target as number)!,
+        value: l.value,
+        avgDays: l.avgDays,
+      }))
+      .filter(l => l.source !== undefined && l.target !== undefined && l.source !== l.target);
 
     try {
+      const h = Math.max(400, prunedNodes.length * 28);
       const sankeyGen = sankey<SankeyNode, SankeyLink>()
         .nodeWidth(16)
         .nodePadding(14)
-        .extent([[40, 20], [width - 160, height - 20]])
-        .nodeAlign(sankeyLeft);
+        .extent([[40, 20], [width - 160, h - 20]])
+        .nodeAlign(sankeyLeft)
+        .iterations(6);
 
       const data = sankeyGen({
-        nodes: nodesArr.map(n => ({ ...n })),
-        links: linksArr.map(l => ({ ...l })),
+        nodes: prunedNodes.map(n => ({ ...n })),
+        links: remappedLinks.map(l => ({ ...l })),
       });
-
-      const stageColumns: Record<string, number> = {};
-      const stages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
-      const stageWidth = (width - 200) / (stages.length);
-      stages.forEach((s, i) => { stageColumns[s] = 40 + i * stageWidth; });
 
       for (const node of data.nodes) {
         const sn = node as any;
@@ -189,9 +227,10 @@ function D3SankeyDiagram({ initialFlows }: { initialFlows?: StageFlow[] }) {
         sn.x1 = sn.x0 + 16;
       }
 
-      return { nodes: nodesArr, links: linksArr, sankeyData: data };
-    } catch {
-      return { nodes: nodesArr, links: linksArr, sankeyData: null };
+      return { nodes: prunedNodes, links: remappedLinks, sankeyData: data };
+    } catch (e) {
+      console.error("Sankey layout error:", e);
+      return { nodes: prunedNodes, links: remappedLinks, sankeyData: null };
     }
   }, [filtered]);
 
