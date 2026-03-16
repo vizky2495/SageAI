@@ -116,6 +116,11 @@ function SankeyFlow({ transitions }: { transitions: Transition[] }) {
 
   return (
     <div className="space-y-6" data-testid="sankey-flow">
+      <div className="rounded-xl border border-border/20 bg-muted/5 p-3 mb-4">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">What am I looking at?</span> Each box below represents a funnel stage. The number inside shows how many contacts moved into or out of that stage. Below the boxes, you'll see the actual paths contacts took — forward moves (progressing down the funnel) and backward moves (re-engaging with earlier-stage content). The bar width shows relative volume, and the time shown is the average days between stages.
+        </p>
+      </div>
       <div className="grid grid-cols-4 gap-3">
         {stages.map(stage => {
           const cfg = getStageConfig(stage);
@@ -143,10 +148,13 @@ function SankeyFlow({ transitions }: { transitions: Transition[] }) {
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-4 w-4 text-[#00D657]" />
-          <h4 className="text-xs font-semibold">Forward Progression</h4>
-          <span className="text-[10px] text-muted-foreground">({forwardTransitions.length} paths)</span>
+        <div className="mb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-[#00D657]" />
+            <h4 className="text-xs font-semibold">Forward Progression</h4>
+            <span className="text-[10px] text-muted-foreground">({forwardTransitions.length} paths)</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1 ml-6">Contacts moving deeper into the funnel — from awareness toward purchase intent. Larger bars mean more people taking that path.</p>
         </div>
         <div className="grid gap-2">
           {forwardTransitions.map((t, i) => {
@@ -192,10 +200,13 @@ function SankeyFlow({ transitions }: { transitions: Transition[] }) {
 
       {backwardTransitions.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="h-4 w-4 text-amber-400" />
-            <h4 className="text-xs font-semibold">Regression / Re-engagement</h4>
-            <span className="text-[10px] text-muted-foreground">({backwardTransitions.length} paths)</span>
+          <div className="mb-2">
+            <div className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-amber-400" />
+              <h4 className="text-xs font-semibold">Regression / Re-engagement</h4>
+              <span className="text-[10px] text-muted-foreground">({backwardTransitions.length} paths)</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1 ml-6">Contacts returning to an earlier funnel stage. This can mean they're revisiting educational content after evaluating, or re-engaging after going quiet. High numbers here may signal nurturing gaps.</p>
           </div>
           <div className="grid gap-2">
             {backwardTransitions.map((t, i) => {
@@ -249,6 +260,11 @@ function PatternList({ patterns }: { patterns: Pattern[] }) {
 
   return (
     <div className="space-y-2" data-testid="pattern-list">
+      <div className="rounded-xl border border-border/20 bg-muted/5 p-3 mb-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">What am I looking at?</span> A journey pattern is the exact sequence of funnel stages a group of contacts followed — for example, TOFU then MOFU then BOFU. Each row shows one pattern, how many contacts followed it, and the average time it took. Click any pattern to see which specific content assets were the entry and exit points. Patterns with more contacts represent your most common buyer journeys.
+        </p>
+      </div>
       {patterns.slice(0, 15).map((p, i) => {
         const stages = p.patternStages.split("→").map(s => s.trim());
         const pct = (p.contactCount / maxContacts) * 100;
@@ -321,6 +337,11 @@ function TopAssets({ assets }: { assets: AssetStat[] }) {
 
   return (
     <div className="space-y-2" data-testid="top-assets-list">
+      <div className="rounded-xl border border-border/20 bg-muted/5 p-3 mb-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">What am I looking at?</span> These are the content assets that appear most often in contact journeys. "Appearances" is how many journeys included this asset. "Avg position" tells you where in the journey it typically sits (1 = first touch, higher = later). "Drop-off" is the percentage of contacts whose journey ended after this asset — a high drop-off (red) means contacts stop engaging after viewing it, while a low drop-off (green) means they continue to the next piece of content.
+        </p>
+      </div>
       {assets.slice(0, 15).map((a, i) => {
         const appearances = a.totalJourneyAppearances || 0;
         const pct = (appearances / maxApp) * 100;
@@ -376,26 +397,35 @@ function TopAssets({ assets }: { assets: AssetStat[] }) {
 export default function JourneyMap({ transitions, topPatterns, topAssetStats, totalInteractions, status }: JourneyMapProps) {
   return (
     <div className="space-y-6" data-testid="journey-map">
+      <div className="rounded-xl border border-[#00D657]/20 bg-[#00D657]/[0.04] p-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">Journey Overview</span> — This map shows how your contacts move through your marketing funnel based on the Eloqua activity data you uploaded. Each contact's content interactions are grouped into a journey, classified by funnel stage (TOFU = awareness, MOFU = consideration, BOFU = decision). Use the tabs below to explore stage-to-stage flow, common journey sequences, and which content assets drive the most engagement.
+        </p>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-border/30 bg-muted/10 p-4 text-center">
           <Users className="h-5 w-5 mx-auto mb-1.5 text-[#00D657]" />
           <p className="text-2xl font-bold" data-testid="text-jm-contacts">{status.contactJourneyCount.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">Unique Contacts</p>
+          <p className="text-[9px] text-muted-foreground/60 mt-0.5">People with tracked journeys</p>
         </div>
         <div className="rounded-xl border border-border/30 bg-muted/10 p-4 text-center">
           <GitBranch className="h-5 w-5 mx-auto mb-1.5 text-[#67E8F9]" />
           <p className="text-2xl font-bold" data-testid="text-jm-patterns">{status.patternCount.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">Journey Patterns</p>
+          <p className="text-[9px] text-muted-foreground/60 mt-0.5">Distinct stage sequences found</p>
         </div>
         <div className="rounded-xl border border-border/30 bg-muted/10 p-4 text-center">
           <Zap className="h-5 w-5 mx-auto mb-1.5 text-[#A78BFA]" />
           <p className="text-2xl font-bold" data-testid="text-jm-transitions">{status.transitionCount.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">Stage Transitions</p>
+          <p className="text-[9px] text-muted-foreground/60 mt-0.5">Stage-to-stage movement paths</p>
         </div>
         <div className="rounded-xl border border-border/30 bg-muted/10 p-4 text-center">
           <BarChart3 className="h-5 w-5 mx-auto mb-1.5 text-amber-400" />
           <p className="text-2xl font-bold" data-testid="text-jm-interactions">{totalInteractions.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">Total Interactions</p>
+          <p className="text-[9px] text-muted-foreground/60 mt-0.5">All content touchpoints recorded</p>
         </div>
       </div>
 
