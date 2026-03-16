@@ -118,13 +118,7 @@ export default function JourneyUpload({ onClose }: { onClose: () => void }) {
   const handleFile = useCallback(async (f: File) => {
     setFile(f);
     setError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1] || result;
-      setFileBase64(base64);
-    };
-    reader.readAsDataURL(f);
+    setFileBase64("ready");
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -139,10 +133,11 @@ export default function JourneyUpload({ onClose }: { onClose: () => void }) {
     setUploading(true);
     setError(null);
     try {
+      const formData = new FormData();
+      formData.append("file", file);
       const res = await authFetch("/api/journey/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64: fileBase64, filename: file.name }),
+        body: formData,
       });
       if (!res.ok) {
         const data = await res.json();
@@ -164,10 +159,12 @@ export default function JourneyUpload({ onClose }: { onClose: () => void }) {
     setPreviewing(true);
     setError(null);
     try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fieldMapping", JSON.stringify(fieldMapping));
       const res = await authFetch("/api/journey/preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64: fileBase64, filename: file.name, fieldMapping }),
+        body: formData,
       });
       if (!res.ok) {
         const data = await res.json();
@@ -188,10 +185,12 @@ export default function JourneyUpload({ onClose }: { onClose: () => void }) {
     setProcessing(true);
     setError(null);
     try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fieldMapping", JSON.stringify(fieldMapping));
       const res = await authFetch("/api/journey/process", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64: fileBase64, filename: file.name, fieldMapping }),
+        body: formData,
       });
       if (!res.ok) {
         const data = await res.json();

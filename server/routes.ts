@@ -7,6 +7,7 @@ import https from "https";
 import http from "http";
 import Anthropic from "@anthropic-ai/sdk";
 import * as XLSX from "xlsx";
+import multer from "multer";
 import { buildInsightsSummary } from "./insights";
 import {
   requireAuth,
@@ -21,6 +22,8 @@ import { registerContentRoutes, analyzeContentWithAI } from "./content-routes";
 import { type StructuredKeywordTags, normalizeKeywordTags, flattenKeywordTags } from "@shared/schema";
 import { parseDelimitedText } from "./csv-parser";
 import { buildJourneySummaries, getJourneyBuildProgress, resetJourneyBuildProgress } from "./journey-builder";
+
+const journeyUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1844,14 +1847,22 @@ Return ONLY valid JSON matching this schema:
     }
   });
 
-  app.post("/api/journey/upload", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/journey/upload", requireAdmin, journeyUpload.single("file"), async (req: Request, res: Response) => {
     try {
-      const { base64, filename } = req.body as { base64: string; filename: string };
-      if (!base64) {
-        return res.status(400).json({ message: "No file data provided" });
-      }
+      let buffer: Buffer;
+      let filename: string;
 
-      const buffer = Buffer.from(base64, "base64");
+      if (req.file) {
+        buffer = req.file.buffer;
+        filename = req.file.originalname || req.body?.filename || "upload";
+      } else {
+        const { base64, filename: fn } = req.body as { base64: string; filename: string };
+        if (!base64) {
+          return res.status(400).json({ message: "No file data provided" });
+        }
+        buffer = Buffer.from(base64, "base64");
+        filename = fn;
+      }
       const ext = (filename || "").toLowerCase().split(".").pop() || "";
 
       let rows: Record<string, any>[] = [];
@@ -2259,13 +2270,19 @@ Return ONLY valid JSON matching this schema:
     };
   }
 
-  app.post("/api/journey/preview", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/journey/preview", requireAdmin, journeyUpload.single("file"), async (req: Request, res: Response) => {
     try {
-      const { base64, filename, fieldMapping } = req.body as {
-        base64: string;
-        filename: string;
-        fieldMapping: Record<string, string>;
-      };
+      let base64: string;
+      let filename: string;
+      let fieldMapping: Record<string, string>;
+
+      if (req.file) {
+        base64 = req.file.buffer.toString("base64");
+        filename = req.file.originalname || req.body?.filename || "upload";
+        fieldMapping = typeof req.body?.fieldMapping === "string" ? JSON.parse(req.body.fieldMapping) : req.body?.fieldMapping;
+      } else {
+        ({ base64, filename, fieldMapping } = req.body as { base64: string; filename: string; fieldMapping: Record<string, string> });
+      }
 
       if (!base64 || !fieldMapping) {
         return res.status(400).json({ message: "Missing file data or field mapping" });
@@ -2291,13 +2308,19 @@ Return ONLY valid JSON matching this schema:
     }
   });
 
-  app.post("/api/journey/process", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/journey/process", requireAdmin, journeyUpload.single("file"), async (req: Request, res: Response) => {
     try {
-      const { base64, filename, fieldMapping } = req.body as {
-        base64: string;
-        filename: string;
-        fieldMapping: Record<string, string>;
-      };
+      let base64: string;
+      let filename: string;
+      let fieldMapping: Record<string, string>;
+
+      if (req.file) {
+        base64 = req.file.buffer.toString("base64");
+        filename = req.file.originalname || req.body?.filename || "upload";
+        fieldMapping = typeof req.body?.fieldMapping === "string" ? JSON.parse(req.body.fieldMapping) : req.body?.fieldMapping;
+      } else {
+        ({ base64, filename, fieldMapping } = req.body as { base64: string; filename: string; fieldMapping: Record<string, string> });
+      }
 
       if (!base64 || !fieldMapping) {
         return res.status(400).json({ message: "Missing file data or field mapping" });
