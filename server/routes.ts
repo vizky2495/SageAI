@@ -2484,15 +2484,17 @@ Return ONLY valid JSON matching this schema:
       const fromStage = req.query.fromStage as string | undefined;
       const toStage = req.query.toStage as string | undefined;
       const search = req.query.search as string | undefined;
+      const transitionType = req.query.transitionType as string | undefined;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const minContacts = Math.max(parseInt(req.query.minContacts as string) || 1, 1);
 
-      const cacheKey = `${fromStage || ""}_${toStage || ""}_${search || ""}_${limit}`;
+      const cacheKey = `${fromStage || ""}_${toStage || ""}_${search || ""}_${transitionType || ""}_${minContacts}_${limit}`;
       const cached = contentTransitionCache.get(cacheKey);
       if (cached && Date.now() - cached.time < JOURNEY_CACHE_TTL_MS) {
         return res.json(cached.data);
       }
 
-      const transitions = await storage.getContentTransitions({ fromStage, toStage, search, limit });
+      const transitions = await storage.getContentTransitions({ fromStage, toStage, search, transitionType, minContacts, limit });
       contentTransitionCache.set(cacheKey, { data: transitions, time: Date.now() });
       res.json(transitions);
     } catch (err: any) {
@@ -2501,14 +2503,32 @@ Return ONLY valid JSON matching this schema:
     }
   });
 
-  app.get("/api/journey/asset-neighbors/:assetId", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/journey/transition-context", requireAuth, async (req: Request, res: Response) => {
     try {
-      const assetId = decodeURIComponent(req.params.assetId as string);
-      const neighbors = await storage.getAssetNeighbors(assetId);
-      res.json(neighbors);
+      const fromAsset = req.query.fromAsset as string;
+      const toAsset = req.query.toAsset as string;
+      if (!fromAsset || !toAsset) return res.status(400).json({ message: "fromAsset and toAsset required" });
+      const context = await storage.getTransitionContext(fromAsset, toAsset);
+      res.json(context);
     } catch (err: any) {
-      console.error("Asset neighbors error:", err);
-      res.status(500).json({ message: "Failed to fetch asset neighbors" });
+      console.error("Transition context error:", err);
+      res.status(500).json({ message: "Failed to fetch transition context" });
+    }
+  });
+
+  app.get("/api/journey/content-path-insights", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const cacheKey = "__insights__";
+      const cached = contentTransitionCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < JOURNEY_CACHE_TTL_MS) {
+        return res.json(cached.data);
+      }
+      const insights = await storage.getContentPathInsights();
+      contentTransitionCache.set(cacheKey, { data: insights, time: Date.now() });
+      res.json(insights);
+    } catch (err: any) {
+      console.error("Content path insights error:", err);
+      res.status(500).json({ message: "Failed to fetch content path insights" });
     }
   });
 

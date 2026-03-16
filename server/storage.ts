@@ -119,12 +119,18 @@ export interface IStorage {
   bulkInsertAssetJourneyStats(stats: InsertAssetJourneyStat[]): Promise<void>;
   getAssetJourneyStats(assetId?: string): Promise<AssetJourneyStat[]>;
   getJourneySummaryStatus(): Promise<{ contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number }>;
-  getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number }): Promise<Array<{
-    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null;
+  getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number; transitionType?: string; minContacts?: number }): Promise<Array<{
+    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null; dropOffRate: number;
   }>>;
-  getAssetNeighbors(assetId: string): Promise<{
-    cameFrom: Array<{ assetId: string; stage: string; count: number }>;
-    wentTo: Array<{ assetId: string; stage: string; count: number }>;
+  getTransitionContext(fromAsset: string, toAsset: string): Promise<{
+    upstream: Array<{ assetId: string; stage: string; count: number }>;
+    downstream: Array<{ assetId: string; stage: string; count: number }>;
+  }>;
+  getContentPathInsights(): Promise<{
+    dropOffPoints: Array<{ assetId: string; stage: string; dropOffRate: number; appearances: number }>;
+    accelerators: Array<{ assetId: string; stage: string; forwardCount: number; avgDays: number }>;
+    regressionTriggers: Array<{ assetId: string; stage: string; regressionCount: number }>;
+    fastTrackPaths: Array<{ pattern: string; contactCount: number; avgDays: number; entryAsset: string; exitAsset: string }>;
   }>;
 }
 
@@ -816,11 +822,12 @@ export class DatabaseStorage implements IStorage {
     return { contactJourneyCount: cj.total, patternCount: jp.total, transitionCount: st.total, assetStatCount: aj.total };
   }
 
-  async getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number }): Promise<Array<{
-    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null;
+  async getContentTransitions(opts?: { fromStage?: string; toStage?: string; search?: string; limit?: number; transitionType?: string; minContacts?: number }): Promise<Array<{
+    fromAsset: string; fromStage: string; toAsset: string; toStage: string; contactCount: number; avgDaysBetween: number | null; dropOffRate: number;
   }>> {
     const validStages = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
     const safeLimit = Math.min(Math.max(opts?.limit || 50, 1), 200);
+    const minContacts = Math.max(opts?.minContacts || 1, 1);
 
     const conditions: SQL[] = [
       sql`to_asset IS NOT NULL`,
@@ -838,7 +845,30 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`(from_asset ILIKE ${searchTerm} OR to_asset ILIKE ${searchTerm})`);
     }
 
-    const whereClause = conditions.reduce((acc, cond, idx) => idx === 0 ? cond : sql`${acc} AND ${cond}`);
+    if (opts?.transitionType && opts.transitionType !== "all") {
+      const stageMap: Record<string, string[]> = {
+        forward: ["TOFU", "MOFU", "BOFU"],
+        regression: ["TOFU", "MOFU", "BOFU"],
+        lateral: ["TOFU", "MOFU", "BOFU", "UNKNOWN"],
+      };
+      if (stageMap[opts.transitionType]) {
+        if (opts.transitionType === "forward") {
+          conditions.push(sql`(
+            (from_stage = 'TOFU' AND to_stage IN ('MOFU', 'BOFU'))
+            OR (from_stage = 'MOFU' AND to_stage = 'BOFU')
+          )`);
+        } else if (opts.transitionType === "regression") {
+          conditions.push(sql`(
+            (from_stage = 'BOFU' AND to_stage IN ('MOFU', 'TOFU'))
+            OR (from_stage = 'MOFU' AND to_stage = 'TOFU')
+          )`);
+        } else if (opts.transitionType === "lateral") {
+          conditions.push(sql`from_stage = to_stage`);
+        }
+      }
+    }
+
+    const whereClause = conditions.reduce((acc: SQL, cond: SQL, idx: number) => idx === 0 ? cond : sql`${acc} AND ${cond}`);
 
     const result = await db.execute(sql`
       WITH ordered AS (
@@ -846,12 +876,14 @@ export class DatabaseStorage implements IStorage {
           contact_hash,
           asset_id AS from_asset,
           COALESCE(funnel_stage, 'UNKNOWN') AS from_stage,
-          LEAD(asset_id) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS to_asset,
-          LEAD(COALESCE(funnel_stage, 'UNKNOWN')) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS to_stage,
-          LEAD(interaction_timestamp) OVER (PARTITION BY contact_hash ORDER BY interaction_timestamp) AS next_ts,
-          interaction_timestamp AS cur_ts
+          LEAD(asset_id) OVER w AS to_asset,
+          LEAD(COALESCE(funnel_stage, 'UNKNOWN')) OVER w AS to_stage,
+          LEAD(interaction_timestamp) OVER w AS next_ts,
+          interaction_timestamp AS cur_ts,
+          LEAD(asset_id, 2) OVER w AS after_to_asset
         FROM journey_interactions
         WHERE asset_id IS NOT NULL
+        WINDOW w AS (PARTITION BY contact_hash ORDER BY interaction_timestamp)
       )
       SELECT
         from_asset AS "fromAsset",
@@ -859,21 +891,24 @@ export class DatabaseStorage implements IStorage {
         to_asset AS "toAsset",
         to_stage AS "toStage",
         COUNT(DISTINCT contact_hash)::int AS "contactCount",
-        AVG(EXTRACT(EPOCH FROM (next_ts - cur_ts)) / 86400.0) AS "avgDaysBetween"
+        AVG(EXTRACT(EPOCH FROM (next_ts - cur_ts)) / 86400.0) AS "avgDaysBetween",
+        ROUND((SUM(CASE WHEN after_to_asset IS NULL THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*)::numeric, 0)), 3) AS "dropOffRate"
       FROM ordered
       WHERE ${whereClause}
       GROUP BY from_asset, from_stage, to_asset, to_stage
+      HAVING COUNT(DISTINCT contact_hash) >= ${minContacts}
       ORDER BY "contactCount" DESC
       LIMIT ${safeLimit}
     `);
-    return (result as any).rows || result as any;
+
+    return ((result as any).rows || result) as any;
   }
 
-  async getAssetNeighbors(assetId: string): Promise<{
-    cameFrom: Array<{ assetId: string; stage: string; count: number }>;
-    wentTo: Array<{ assetId: string; stage: string; count: number }>;
+  async getTransitionContext(fromAsset: string, toAsset: string): Promise<{
+    upstream: Array<{ assetId: string; stage: string; count: number }>;
+    downstream: Array<{ assetId: string; stage: string; count: number }>;
   }> {
-    const [cameFromResult, wentToResult] = await Promise.all([
+    const [upstreamResult, downstreamResult] = await Promise.all([
       db.execute(sql`
         WITH ordered AS (
           SELECT
@@ -889,10 +924,10 @@ export class DatabaseStorage implements IStorage {
           stage,
           COUNT(DISTINCT contact_hash)::int AS count
         FROM ordered
-        WHERE next_asset = ${assetId} AND asset_id != ${assetId}
+        WHERE next_asset = ${fromAsset} AND asset_id != ${fromAsset}
         GROUP BY asset_id, stage
         ORDER BY count DESC
-        LIMIT 5
+        LIMIT 3
       `),
       db.execute(sql`
         WITH ordered AS (
@@ -909,16 +944,114 @@ export class DatabaseStorage implements IStorage {
           stage,
           COUNT(DISTINCT contact_hash)::int AS count
         FROM ordered
-        WHERE prev_asset = ${assetId} AND asset_id != ${assetId}
+        WHERE prev_asset = ${toAsset} AND asset_id != ${toAsset}
         GROUP BY asset_id, stage
         ORDER BY count DESC
-        LIMIT 5
+        LIMIT 3
       `),
     ]);
 
     return {
-      cameFrom: ((cameFromResult as any).rows || cameFromResult) as any,
-      wentTo: ((wentToResult as any).rows || wentToResult) as any,
+      upstream: ((upstreamResult as any).rows || upstreamResult) as any,
+      downstream: ((downstreamResult as any).rows || downstreamResult) as any,
+    };
+  }
+
+  async getContentPathInsights(): Promise<{
+    dropOffPoints: Array<{ assetId: string; stage: string; dropOffRate: number; appearances: number }>;
+    accelerators: Array<{ assetId: string; stage: string; forwardCount: number; avgDays: number }>;
+    regressionTriggers: Array<{ assetId: string; stage: string; regressionCount: number }>;
+    fastTrackPaths: Array<{ pattern: string; contactCount: number; avgDays: number; entryAsset: string; exitAsset: string }>;
+  }> {
+    const [dropOffResult, acceleratorResult, regressionResult, fastTrackResult] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          asset_id AS "assetId",
+          COALESCE(funnel_stage, 'UNKNOWN') AS stage,
+          drop_off_rate AS "dropOffRate",
+          total_journey_appearances AS appearances
+        FROM asset_journey_stats
+        WHERE total_journey_appearances >= 10
+        ORDER BY drop_off_rate DESC
+        LIMIT 5
+      `),
+
+      db.execute(sql`
+        WITH ordered AS (
+          SELECT
+            contact_hash,
+            asset_id,
+            COALESCE(funnel_stage, 'UNKNOWN') AS stage,
+            LEAD(COALESCE(funnel_stage, 'UNKNOWN')) OVER w AS next_stage,
+            LEAD(interaction_timestamp) OVER w AS next_ts,
+            interaction_timestamp AS cur_ts
+          FROM journey_interactions
+          WHERE asset_id IS NOT NULL
+          WINDOW w AS (PARTITION BY contact_hash ORDER BY interaction_timestamp)
+        ),
+        forward_moves AS (
+          SELECT asset_id, stage, COUNT(DISTINCT contact_hash)::int AS forward_count,
+            AVG(EXTRACT(EPOCH FROM (next_ts - cur_ts)) / 86400.0) AS avg_days
+          FROM ordered
+          WHERE next_stage IS NOT NULL
+            AND (
+              (stage = 'TOFU' AND next_stage IN ('MOFU', 'BOFU'))
+              OR (stage = 'MOFU' AND next_stage = 'BOFU')
+            )
+            AND EXTRACT(EPOCH FROM (next_ts - cur_ts)) / 86400.0 <= 7
+          GROUP BY asset_id, stage
+          HAVING COUNT(DISTINCT contact_hash) >= 5
+        )
+        SELECT asset_id AS "assetId", stage, forward_count AS "forwardCount", ROUND(avg_days::numeric, 2) AS "avgDays"
+        FROM forward_moves
+        ORDER BY forward_count DESC
+        LIMIT 5
+      `),
+
+      db.execute(sql`
+        WITH ordered AS (
+          SELECT
+            contact_hash,
+            asset_id,
+            COALESCE(funnel_stage, 'UNKNOWN') AS stage,
+            LEAD(COALESCE(funnel_stage, 'UNKNOWN')) OVER w AS next_stage
+          FROM journey_interactions
+          WHERE asset_id IS NOT NULL
+          WINDOW w AS (PARTITION BY contact_hash ORDER BY interaction_timestamp)
+        )
+        SELECT asset_id AS "assetId", stage, COUNT(DISTINCT contact_hash)::int AS "regressionCount"
+        FROM ordered
+        WHERE next_stage IS NOT NULL
+          AND (
+            (stage = 'BOFU' AND next_stage IN ('MOFU', 'TOFU'))
+            OR (stage = 'MOFU' AND next_stage = 'TOFU')
+          )
+        GROUP BY asset_id, stage
+        HAVING COUNT(DISTINCT contact_hash) >= 3
+        ORDER BY "regressionCount" DESC
+        LIMIT 5
+      `),
+
+      db.execute(sql`
+        SELECT
+          pattern_stages AS pattern,
+          contact_count AS "contactCount",
+          ROUND(avg_duration_days::numeric, 2) AS "avgDays",
+          COALESCE(top_entry_asset, '') AS "entryAsset",
+          COALESCE(top_exit_asset, '') AS "exitAsset"
+        FROM journey_patterns
+        WHERE pattern_stages LIKE '%TOFU%' AND pattern_stages LIKE '%BOFU%'
+          AND contact_count >= 5
+        ORDER BY avg_duration_days ASC
+        LIMIT 3
+      `),
+    ]);
+
+    return {
+      dropOffPoints: ((dropOffResult as any).rows || dropOffResult) as any,
+      accelerators: ((acceleratorResult as any).rows || acceleratorResult) as any,
+      regressionTriggers: ((regressionResult as any).rows || regressionResult) as any,
+      fastTrackPaths: ((fastTrackResult as any).rows || fastTrackResult) as any,
     };
   }
 }

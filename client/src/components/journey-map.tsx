@@ -404,26 +404,339 @@ interface ContentTransition {
   toStage: string;
   contactCount: number;
   avgDaysBetween: number | null;
+  dropOffRate: number;
 }
 
-interface AssetNeighbors {
-  cameFrom: Array<{ assetId: string; stage: string; count: number }>;
-  wentTo: Array<{ assetId: string; stage: string; count: number }>;
+interface TransitionContext {
+  upstream: Array<{ assetId: string; stage: string; count: number }>;
+  downstream: Array<{ assetId: string; stage: string; count: number }>;
+}
+
+interface PathInsights {
+  dropOffPoints: Array<{ assetId: string; stage: string; dropOffRate: number; appearances: number }>;
+  accelerators: Array<{ assetId: string; stage: string; forwardCount: number; avgDays: number }>;
+  regressionTriggers: Array<{ assetId: string; stage: string; regressionCount: number }>;
+  fastTrackPaths: Array<{ pattern: string; contactCount: number; avgDays: number; entryAsset: string; exitAsset: string }>;
+}
+
+const STAGE_ORDER: Record<string, number> = { TOFU: 1, MOFU: 2, BOFU: 3, UNKNOWN: 0 };
+
+function getTransitionColor(fromStage: string, toStage: string): string {
+  const fromOrd = STAGE_ORDER[fromStage] ?? 0;
+  const toOrd = STAGE_ORDER[toStage] ?? 0;
+  if (fromOrd > 0 && toOrd > 0 && toOrd > fromOrd) return "#00D657";
+  if (fromOrd > 0 && toOrd > 0 && toOrd < fromOrd) return "#EF4444";
+  return "#F59E0B";
+}
+
+function getTransitionLabel(fromStage: string, toStage: string): string {
+  const fromOrd = STAGE_ORDER[fromStage] ?? 0;
+  const toOrd = STAGE_ORDER[toStage] ?? 0;
+  if (fromOrd > 0 && toOrd > 0 && toOrd > fromOrd) return "Forward";
+  if (fromOrd > 0 && toOrd > 0 && toOrd < fromOrd) return "Regression";
+  return "Lateral";
+}
+
+function dropOffColor(rate: number): string {
+  if (rate > 0.7) return "text-red-400";
+  if (rate > 0.4) return "text-amber-400";
+  return "text-[#00D657]";
+}
+
+function generateInsightLine(t: ContentTransition): string {
+  const dropPct = Math.round((t.dropOffRate || 0) * 100);
+  const continuePct = 100 - dropPct;
+  const direction = getTransitionLabel(t.fromStage, t.toStage);
+
+  if (dropPct > 70) return `${dropPct}% of contacts drop off after this transition — potential nurture gap between these two assets.`;
+  if (dropPct < 30 && direction === "Forward") return `${continuePct}% of contacts continue onward after this forward transition — strong handoff.`;
+  if (direction === "Regression") return `This is a backward move (${t.fromStage} to ${t.toStage}). ${dropPct}% drop off here.`;
+  return `${continuePct}% of contacts continue their journey after this ${direction.toLowerCase()} transition.`;
+}
+
+function ContentFlowDiagram({ transitions }: { transitions: ContentTransition[] }) {
+  const top20 = transitions.slice(0, 20);
+  const maxContacts = Math.max(...top20.map(t => t.contactCount), 1);
+
+  return (
+    <div className="space-y-3" data-testid="content-flow-diagram">
+      <div className="flex items-center gap-2 mb-2">
+        <ArrowLeftRight className="h-4 w-4 text-[#00D657]" />
+        <h4 className="text-sm font-semibold">Top Content Flows</h4>
+        <span className="text-[10px] text-muted-foreground">Top 20 most-traveled paths</span>
+      </div>
+      <div className="flex items-center gap-4 text-[10px] text-muted-foreground mb-2">
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-[#00D657] inline-block" /> Forward</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-amber-400 inline-block" /> Lateral</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-red-400 inline-block" /> Regression</span>
+      </div>
+      <div className="space-y-1">
+        {top20.map((t, i) => {
+          const pct = (t.contactCount / maxContacts) * 100;
+          const color = getTransitionColor(t.fromStage, t.toStage);
+          return (
+            <motion.div
+              key={`flow-${i}`}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className="flex items-center gap-2 group"
+              data-testid={`flow-path-${i}`}
+            >
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <StageBadge stage={t.fromStage} />
+                <span className="text-[10px] truncate max-w-[120px]">{formatAssetName(t.fromAsset)}</span>
+                <ArrowRight className="h-3 w-3 shrink-0" style={{ color }} />
+                <StageBadge stage={t.toStage} />
+                <span className="text-[10px] truncate max-w-[120px]">{formatAssetName(t.toAsset)}</span>
+              </div>
+              <div className="w-[200px] shrink-0 flex items-center gap-2">
+                <div className="flex-1 h-2 rounded-full bg-black/20 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%`, backgroundColor: `${color}80` }}
+                  />
+                </div>
+                <span className="text-[10px] font-semibold w-[40px] text-right" style={{ color }}>{t.contactCount.toLocaleString()}</span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TransitionRow({ t, i, maxContacts, onExpand, isExpanded, context, contextLoading, contextError }: {
+  t: ContentTransition; i: number; maxContacts: number; onExpand: () => void; isExpanded: boolean;
+  context?: TransitionContext; contextLoading: boolean; contextError?: boolean;
+}) {
+  const pct = (t.contactCount / maxContacts) * 100;
+  const color = getTransitionColor(t.fromStage, t.toStage);
+  const dRate = Number(t.dropOffRate) || 0;
+
+  return (
+    <div data-testid={`content-path-row-${i}`}>
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(i * 0.02, 0.5) }}
+        className={`rounded-xl border hover:bg-muted/10 transition-colors p-3 cursor-pointer ${isExpanded ? "border-[#00D657]/30 bg-[#00D657]/[0.03]" : "border-border/30 bg-muted/5"}`}
+        onClick={onExpand}
+      >
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <StageBadge stage={t.fromStage} />
+              <span className="text-xs font-medium truncate">{formatAssetName(t.fromAsset)}</span>
+            </div>
+            <p className="text-[9px] text-muted-foreground font-mono truncate mt-0.5 ml-1">{t.fromAsset}</p>
+          </div>
+
+          <div className="shrink-0 flex flex-col items-center px-2">
+            <ArrowRight className="h-4 w-4" style={{ color }} />
+            {t.avgDaysBetween != null && (
+              <span className="text-[9px] text-muted-foreground mt-0.5">{Number(t.avgDaysBetween).toFixed(1)}d</span>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <StageBadge stage={t.toStage} />
+              <span className="text-xs font-medium truncate">{formatAssetName(t.toAsset)}</span>
+            </div>
+            <p className="text-[9px] text-muted-foreground font-mono truncate mt-0.5 ml-1">{t.toAsset}</p>
+          </div>
+
+          <div className="shrink-0 text-right min-w-[50px]">
+            <p className="text-sm font-bold" style={{ color }}>{t.contactCount.toLocaleString()}</p>
+            <p className="text-[9px] text-muted-foreground">contacts</p>
+          </div>
+
+          <div className="shrink-0 text-right min-w-[50px]">
+            <p className={`text-sm font-bold ${dropOffColor(dRate)}`}>{Math.round(dRate * 100)}%</p>
+            <p className="text-[9px] text-muted-foreground">drop-off</p>
+          </div>
+
+          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+        </div>
+
+        <div className="mt-2 h-1 rounded-full bg-black/20 overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: `${color}66` }} />
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="ml-4 mr-2 my-1.5 rounded-xl border border-[#00D657]/20 bg-[#00D657]/[0.03] p-4 space-y-3" data-testid="transition-drill-down">
+              <p className="text-xs text-muted-foreground italic">{generateInsightLine(t)}</p>
+
+              {contextLoading ? (
+                <div className="flex items-center gap-2 py-3 justify-center text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-xs">Loading context...</span>
+                </div>
+              ) : contextError ? (
+                <div className="text-center py-3 text-red-400 text-xs">Failed to load context data.</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h5 className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" /> Before "{formatAssetName(t.fromAsset)}"
+                    </h5>
+                    {context?.upstream?.length ? (
+                      <div className="space-y-1.5">
+                        {context.upstream.map((n, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5 text-xs">
+                            <StageBadge stage={n.stage} />
+                            <span className="truncate flex-1">{formatAssetName(n.assetId)}</span>
+                            <span className="font-semibold shrink-0 text-[#00D657]">{n.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="text-[10px] text-muted-foreground/60">No upstream assets found</p>}
+                  </div>
+                  <div>
+                    <h5 className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> After "{formatAssetName(t.toAsset)}"
+                    </h5>
+                    {context?.downstream?.length ? (
+                      <div className="space-y-1.5">
+                        {context.downstream.map((n, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5 text-xs">
+                            <StageBadge stage={n.stage} />
+                            <span className="truncate flex-1">{formatAssetName(n.assetId)}</span>
+                            <span className="font-semibold shrink-0 text-[#00D657]">{n.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="text-[10px] text-muted-foreground/60">No downstream assets found</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function InsightCards({ insights }: { insights: PathInsights }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="insight-cards">
+      <div className="rounded-xl border border-red-400/20 bg-red-400/[0.04] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-red-400/20 flex items-center justify-center text-red-400 text-xs">!</div>
+          <h5 className="text-xs font-semibold">Biggest Drop-off Points</h5>
+        </div>
+        <p className="text-[10px] text-muted-foreground mb-2">Journey ends here most often</p>
+        {insights.dropOffPoints.length ? (
+          <div className="space-y-2">
+            {insights.dropOffPoints.map((d, i) => (
+              <div key={i} className="flex items-center gap-1.5" data-testid={`dropoff-card-${i}`}>
+                <StageBadge stage={d.stage} />
+                <span className="text-[11px] truncate flex-1">{formatAssetName(d.assetId)}</span>
+                <span className={`text-[11px] font-bold ${dropOffColor(Number(d.dropOffRate))}`}>{Math.round(Number(d.dropOffRate) * 100)}%</span>
+                <span className="text-[9px] text-muted-foreground">({Number(d.appearances).toLocaleString()})</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-[10px] text-muted-foreground/60">No data</p>}
+      </div>
+
+      <div className="rounded-xl border border-[#00D657]/20 bg-[#00D657]/[0.04] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-[#00D657]/20 flex items-center justify-center text-[#00D657] text-xs">+</div>
+          <h5 className="text-xs font-semibold">Strongest Accelerators</h5>
+        </div>
+        <p className="text-[10px] text-muted-foreground mb-2">Reliably moves contacts forward within 7 days</p>
+        {insights.accelerators.length ? (
+          <div className="space-y-2">
+            {insights.accelerators.map((a, i) => (
+              <div key={i} className="flex items-center gap-1.5" data-testid={`accelerator-card-${i}`}>
+                <StageBadge stage={a.stage} />
+                <span className="text-[11px] truncate flex-1">{formatAssetName(a.assetId)}</span>
+                <span className="text-[11px] font-bold text-[#00D657]">{a.forwardCount}</span>
+                <span className="text-[9px] text-muted-foreground">({Number(a.avgDays).toFixed(1)}d avg)</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-[10px] text-muted-foreground/60">No data</p>}
+      </div>
+
+      <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-400 text-xs font-bold">&#8634;</div>
+          <h5 className="text-xs font-semibold">Regression Triggers</h5>
+        </div>
+        <p className="text-[10px] text-muted-foreground mb-2">Most commonly precedes a backward stage move</p>
+        {insights.regressionTriggers.length ? (
+          <div className="space-y-2">
+            {insights.regressionTriggers.map((r, i) => (
+              <div key={i} className="flex items-center gap-1.5" data-testid={`regression-card-${i}`}>
+                <StageBadge stage={r.stage} />
+                <span className="text-[11px] truncate flex-1">{formatAssetName(r.assetId)}</span>
+                <span className="text-[11px] font-bold text-amber-400">{r.regressionCount} contacts</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-[10px] text-muted-foreground/60">No data</p>}
+      </div>
+
+      <div className="rounded-xl border border-[#A78BFA]/20 bg-[#A78BFA]/[0.04] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-[#A78BFA]/20 flex items-center justify-center text-[#A78BFA]">
+            <Zap className="h-3 w-3" />
+          </div>
+          <h5 className="text-xs font-semibold">Fast-Track Paths</h5>
+        </div>
+        <p className="text-[10px] text-muted-foreground mb-2">Fastest TOFU-to-BOFU sequences</p>
+        {insights.fastTrackPaths.length ? (
+          <div className="space-y-2">
+            {insights.fastTrackPaths.map((f, i) => {
+              const stages = f.pattern.split("\u2192").map((s: string) => s.trim());
+              return (
+                <div key={i} data-testid={`fasttrack-card-${i}`}>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {stages.map((s: string, si: number) => (
+                      <span key={si} className="flex items-center gap-0.5">
+                        <StageBadge stage={s} />
+                        {si < stages.length - 1 && <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/40" />}
+                      </span>
+                    ))}
+                    <span className="text-[11px] font-bold text-[#A78BFA] ml-1">{Number(f.avgDays).toFixed(1)}d</span>
+                    <span className="text-[9px] text-muted-foreground">({f.contactCount} contacts)</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : <p className="text-[10px] text-muted-foreground/60">No data</p>}
+      </div>
+    </div>
+  );
 }
 
 function ContentPaths() {
   const [fromStageFilter, setFromStageFilter] = useState<string>("");
   const [toStageFilter, setToStageFilter] = useState<string>("");
+  const [transitionType, setTransitionType] = useState<string>("");
+  const [minContacts, setMinContacts] = useState(5);
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [expandedAsset, setExpandedAsset] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { return () => { if (debounceRef.current) clearTimeout(debounceRef.current); }; }, []);
 
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
+  useEffect(() => { setExpandedIdx(null); }, [fromStageFilter, toStageFilter, transitionType, minContacts, debouncedSearch]);
 
   const handleSearch = useCallback((val: string) => {
     setSearchText(val);
@@ -435,10 +748,12 @@ function ContentPaths() {
     const p = new URLSearchParams();
     if (fromStageFilter) p.set("fromStage", fromStageFilter);
     if (toStageFilter) p.set("toStage", toStageFilter);
+    if (transitionType) p.set("transitionType", transitionType);
     if (debouncedSearch) p.set("search", debouncedSearch);
-    p.set("limit", "50");
+    p.set("minContacts", String(minContacts));
+    p.set("limit", "100");
     return p.toString();
-  }, [fromStageFilter, toStageFilter, debouncedSearch]);
+  }, [fromStageFilter, toStageFilter, transitionType, debouncedSearch, minContacts]);
 
   const { data: transitions, isLoading, isError } = useQuery<ContentTransition[]>({
     queryKey: ["/api/journey/content-transitions", queryParams],
@@ -451,14 +766,27 @@ function ContentPaths() {
     retry: 1,
   });
 
-  const { data: neighbors, isLoading: neighborsLoading } = useQuery<AssetNeighbors>({
-    queryKey: ["/api/journey/asset-neighbors", expandedAsset],
+  const expandedTransition = expandedIdx !== null && transitions ? transitions[expandedIdx] : null;
+
+  const { data: context, isLoading: contextLoading, isError: contextError } = useQuery<TransitionContext>({
+    queryKey: ["/api/journey/transition-context", expandedTransition?.fromAsset, expandedTransition?.toAsset],
     queryFn: async () => {
-      const res = await authFetch(`/api/journey/asset-neighbors/${encodeURIComponent(expandedAsset!)}`);
-      if (!res.ok) throw new Error("Failed to load asset neighbors");
+      const res = await authFetch(`/api/journey/transition-context?fromAsset=${encodeURIComponent(expandedTransition!.fromAsset)}&toAsset=${encodeURIComponent(expandedTransition!.toAsset)}`);
+      if (!res.ok) throw new Error("Failed to load context");
       return res.json();
     },
-    enabled: !!expandedAsset,
+    enabled: !!expandedTransition,
+    staleTime: 120_000,
+    retry: 1,
+  });
+
+  const { data: insights, isLoading: insightsLoading, isError: insightsError } = useQuery<PathInsights>({
+    queryKey: ["/api/journey/content-path-insights"],
+    queryFn: async () => {
+      const res = await authFetch("/api/journey/content-path-insights");
+      if (!res.ok) throw new Error("Failed to load insights");
+      return res.json();
+    },
     staleTime: 120_000,
     retry: 1,
   });
@@ -471,222 +799,108 @@ function ContentPaths() {
   const stageOptions = ["TOFU", "MOFU", "BOFU", "UNKNOWN"];
 
   return (
-    <div className="space-y-3" data-testid="content-paths">
-      <div className="rounded-xl border border-border/20 bg-muted/5 p-3 mb-3">
+    <div className="space-y-6" data-testid="content-paths">
+      <div className="rounded-xl border border-border/20 bg-muted/5 p-3">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          <span className="font-medium text-foreground">What am I looking at?</span> Content paths show which assets contacts viewed in sequence. Each row is one content-to-content transition — the "From" asset was viewed first, then the "To" asset. The contact count tells you how many people followed that exact path. Use this to understand how content pieces connect and which sequences are most common in your funnel.
+          <span className="font-medium text-foreground">What am I looking at?</span> Content Paths answers: "What content are people consuming in sequence, and where are they dropping off or progressing?" The flow diagram shows top paths, the table shows every transition with drop-off rates, and the insight cards surface actionable patterns.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search asset names..."
-            value={searchText}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="pl-8 h-8 text-xs bg-muted/10 border-border/30"
-            data-testid="input-search-paths"
-          />
-          {searchText && (
-            <button onClick={() => { setSearchText(""); setDebouncedSearch(""); }} className="absolute right-2 top-1/2 -translate-y-1/2">
-              <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-            </button>
-          )}
-        </div>
-        <select
-          value={fromStageFilter}
-          onChange={(e) => setFromStageFilter(e.target.value)}
-          className="h-8 px-2 text-xs rounded-md border border-border/30 bg-muted/10 text-foreground"
-          data-testid="select-from-stage"
-        >
-          <option value="">From: All stages</option>
-          {stageOptions.map(s => (
-            <option key={s} value={s}>{getStageConfig(s).label}</option>
-          ))}
-        </select>
-        <select
-          value={toStageFilter}
-          onChange={(e) => setToStageFilter(e.target.value)}
-          className="h-8 px-2 text-xs rounded-md border border-border/30 bg-muted/10 text-foreground"
-          data-testid="select-to-stage"
-        >
-          <option value="">To: All stages</option>
-          {stageOptions.map(s => (
-            <option key={s} value={s}>{getStageConfig(s).label}</option>
-          ))}
-        </select>
-      </div>
-
       {isLoading ? (
-        <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-xs">Computing content transitions...</span>
+        <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Computing content transitions...</span>
         </div>
       ) : isError ? (
-        <div className="text-center py-12 text-red-400 text-xs">Failed to load content transitions. Please try again.</div>
+        <div className="text-center py-16 text-red-400 text-sm">Failed to load content transitions. Please try again.</div>
       ) : !transitions?.length ? (
-        <div className="text-center py-12 text-muted-foreground text-xs">No content transitions found for the current filters.</div>
+        <div className="text-center py-16 text-muted-foreground text-sm">No content transitions found.</div>
       ) : (
-        <div className="space-y-1.5">
-          {transitions.map((t, i) => {
-            const pct = (t.contactCount / maxContacts) * 100;
-            const isExpanded = expandedAsset === t.fromAsset || expandedAsset === t.toAsset;
+        <>
+          <ContentFlowDiagram transitions={transitions} />
 
-            return (
-              <div key={`${t.fromAsset}-${t.toAsset}-${i}`}>
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.02, 0.5) }}
-                  className="rounded-xl border border-border/30 bg-muted/5 hover:bg-muted/10 transition-colors p-3"
-                  data-testid={`content-path-row-${i}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <button
-                        className="text-left w-full group"
-                        onClick={() => setExpandedAsset(expandedAsset === t.fromAsset ? null : t.fromAsset)}
-                        data-testid={`btn-expand-from-${i}`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <StageBadge stage={t.fromStage} />
-                          <span className="text-xs font-medium truncate group-hover:text-[#00D657] transition-colors">
-                            {formatAssetName(t.fromAsset)}
-                          </span>
-                        </div>
-                        <p className="text-[9px] text-muted-foreground font-mono truncate mt-0.5 ml-1">{t.fromAsset}</p>
-                      </button>
-                    </div>
+          <div className="border-t border-border/20 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="h-4 w-4 text-[#00D657]" />
+              <h4 className="text-sm font-semibold">Content Transition Table</h4>
+            </div>
 
-                    <div className="shrink-0 flex flex-col items-center px-2">
-                      <ArrowRight className="h-4 w-4 text-[#00D657]/60" />
-                      {t.avgDaysBetween != null && (
-                        <span className="text-[9px] text-muted-foreground mt-0.5">{Number(t.avgDaysBetween).toFixed(1)}d</span>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <button
-                        className="text-left w-full group"
-                        onClick={() => setExpandedAsset(expandedAsset === t.toAsset ? null : t.toAsset)}
-                        data-testid={`btn-expand-to-${i}`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <StageBadge stage={t.toStage} />
-                          <span className="text-xs font-medium truncate group-hover:text-[#00D657] transition-colors">
-                            {formatAssetName(t.toAsset)}
-                          </span>
-                        </div>
-                        <p className="text-[9px] text-muted-foreground font-mono truncate mt-0.5 ml-1">{t.toAsset}</p>
-                      </button>
-                    </div>
-
-                    <div className="shrink-0 text-right min-w-[60px]">
-                      <p className="text-sm font-bold text-[#00D657]">{t.contactCount.toLocaleString()}</p>
-                      <p className="text-[9px] text-muted-foreground">contacts</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 h-1 rounded-full bg-black/20 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#00D657]/40 transition-all duration-500" style={{ width: `${pct}%` }} />
-                  </div>
-                </motion.div>
-
-                <AnimatePresence>
-                  {(expandedAsset === t.fromAsset || expandedAsset === t.toAsset) && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <AssetDrillDown
-                        assetId={expandedAsset!}
-                        neighbors={neighbors}
-                        isLoading={neighborsLoading}
-                        onClose={() => setExpandedAsset(null)}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <div className="relative flex-1 min-w-[160px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search asset names..."
+                  value={searchText}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="pl-8 h-8 text-xs bg-muted/10 border-border/30"
+                  data-testid="input-search-paths"
+                />
+                {searchText && (
+                  <button onClick={() => { setSearchText(""); setDebouncedSearch(""); }} className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AssetDrillDown({
-  assetId,
-  neighbors,
-  isLoading,
-  onClose,
-}: {
-  assetId: string;
-  neighbors?: AssetNeighbors;
-  isLoading: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <div className="ml-4 mr-2 my-1.5 rounded-xl border border-[#00D657]/20 bg-[#00D657]/[0.03] p-4" data-testid="asset-drill-down">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <ArrowLeftRight className="h-4 w-4 text-[#00D657]" />
-          <span className="text-xs font-semibold">{formatAssetName(assetId)}</span>
-        </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground" data-testid="btn-close-drilldown">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <p className="text-[9px] text-muted-foreground font-mono mb-3 truncate">{assetId}</p>
-
-      {isLoading ? (
-        <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span className="text-xs">Loading neighbors...</span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <h5 className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1">
-              <TrendingDown className="h-3 w-3" /> Came from
-            </h5>
-            {neighbors?.cameFrom.length ? (
-              <div className="space-y-1.5">
-                {neighbors.cameFrom.map((n, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs" data-testid={`came-from-${i}`}>
-                    <StageBadge stage={n.stage} />
-                    <span className="truncate flex-1">{formatAssetName(n.assetId)}</span>
-                    <span className="font-semibold shrink-0 text-[#00D657]">{n.count}</span>
-                  </div>
-                ))}
+              <select value={fromStageFilter} onChange={(e) => setFromStageFilter(e.target.value)}
+                className="h-8 px-2 text-xs rounded-md border border-border/30 bg-muted/10 text-foreground" data-testid="select-from-stage">
+                <option value="">From: All</option>
+                {stageOptions.map(s => <option key={s} value={s}>{getStageConfig(s).label}</option>)}
+              </select>
+              <select value={toStageFilter} onChange={(e) => setToStageFilter(e.target.value)}
+                className="h-8 px-2 text-xs rounded-md border border-border/30 bg-muted/10 text-foreground" data-testid="select-to-stage">
+                <option value="">To: All</option>
+                {stageOptions.map(s => <option key={s} value={s}>{getStageConfig(s).label}</option>)}
+              </select>
+              <select value={transitionType} onChange={(e) => setTransitionType(e.target.value)}
+                className="h-8 px-2 text-xs rounded-md border border-border/30 bg-muted/10 text-foreground" data-testid="select-transition-type">
+                <option value="">All types</option>
+                <option value="forward">Forward only</option>
+                <option value="regression">Regression only</option>
+                <option value="lateral">Lateral only</option>
+              </select>
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] text-muted-foreground whitespace-nowrap">Min contacts:</label>
+                <input type="range" min={1} max={100} value={minContacts}
+                  onChange={(e) => setMinContacts(Number(e.target.value))}
+                  className="w-[80px] h-1 accent-[#00D657]"
+                  data-testid="slider-min-contacts" />
+                <span className="text-[10px] font-semibold w-[24px]">{minContacts}</span>
               </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/60">No upstream assets found</p>
-            )}
+            </div>
+
+            <div className="space-y-1.5">
+              {transitions.map((t, i) => (
+                <TransitionRow
+                  key={`${t.fromAsset}-${t.toAsset}-${i}`}
+                  t={t} i={i} maxContacts={maxContacts}
+                  onExpand={() => setExpandedIdx(expandedIdx === i ? null : i)}
+                  isExpanded={expandedIdx === i}
+                  context={expandedIdx === i ? context : undefined}
+                  contextLoading={expandedIdx === i && contextLoading}
+                  contextError={expandedIdx === i && contextError}
+                />
+              ))}
+            </div>
           </div>
-          <div>
-            <h5 className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> Went to
-            </h5>
-            {neighbors?.wentTo.length ? (
-              <div className="space-y-1.5">
-                {neighbors.wentTo.map((n, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs" data-testid={`went-to-${i}`}>
-                    <StageBadge stage={n.stage} />
-                    <span className="truncate flex-1">{formatAssetName(n.assetId)}</span>
-                    <span className="font-semibold shrink-0 text-[#00D657]">{n.count}</span>
-                  </div>
-                ))}
+
+          <div className="border-t border-border/20 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-4 w-4 text-[#A78BFA]" />
+              <h4 className="text-sm font-semibold">Asset Intelligence</h4>
+              <span className="text-[10px] text-muted-foreground">Auto-surfaced insights from your content data</span>
+            </div>
+            {insightsLoading ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs">Computing insights...</span>
               </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/60">No downstream assets found</p>
-            )}
+            ) : insightsError ? (
+              <div className="text-center py-8 text-red-400 text-xs">Failed to load asset intelligence data.</div>
+            ) : insights ? (
+              <InsightCards insights={insights} />
+            ) : null}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
