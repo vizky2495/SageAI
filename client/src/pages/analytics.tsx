@@ -2,9 +2,10 @@ import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
 import AiInsightsBar from "@/components/ai-insights-bar";
 import JourneyUpload from "@/components/journey-upload";
+import JourneyMap from "@/components/journey-map";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { authFetch } from "@/lib/queryClient";
+import { authFetch, queryClient } from "@/lib/queryClient";
 import { motion } from "framer-motion";
 import {
   Filter,
@@ -16,7 +17,6 @@ import {
   ArrowRight,
   Plug,
   Upload,
-  CheckCircle2,
 } from "lucide-react";
 import {
   Bar,
@@ -80,7 +80,8 @@ export default function AnalyticsPage() {
   const { data: journeySummaries } = useQuery<{
     status: { contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number };
     transitions: Array<{ fromStage: string; toStage: string; contactCount: number; avgDaysBetween: number | null }>;
-    topPatterns: Array<{ patternString: string; patternStages: string; contactCount: number; conversionRate: number }>;
+    topPatterns: Array<{ patternString: string; patternStages: string; contactCount: number; conversionRate: number; topEntryAsset?: string; topExitAsset?: string; avgDurationDays?: number }>;
+    topAssetStats: Array<{ assetId: string; totalJourneyAppearances: number; avgPositionInJourney: number; mostCommonNextAsset: string | null; mostCommonPrevAsset: string | null; journeyConversionRate: number; avgJourneyLengthWhenIncluded: number; dropOffRate: number }>;
     totalInteractions: number;
     buildProgress: { status: string; message: string };
   }>({
@@ -91,6 +92,7 @@ export default function AnalyticsPage() {
       return res.json();
     },
     enabled: !!(journeyBatches && journeyBatches.totalInteractions > 0),
+    staleTime: 60_000,
   });
 
   const [stageFilter, setStageFilter] = useState<FunnelStage | "ALL">("ALL");
@@ -800,7 +802,7 @@ export default function AnalyticsPage() {
         <Card className="rounded-2xl border border-border/40 bg-card/70 p-6 shadow-sm backdrop-blur relative overflow-hidden" data-testid="card-journey-mapping">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#00D657]/[0.03] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-4 mb-6">
             <div className="h-12 w-12 rounded-xl bg-[#00D657]/10 flex items-center justify-center shrink-0">
               <GitBranch className="h-6 w-6 text-[#00D657]" />
             </div>
@@ -816,114 +818,71 @@ export default function AnalyticsPage() {
                 )}
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl" data-testid="text-journey-description">
-                Upload Eloqua activity data to map content journeys. See how contacts interact with your content
-                across TOFU → MOFU → BOFU stages with interaction tracking and asset matching.
+                How contacts interact with your content across TOFU → MOFU → BOFU stages with interaction tracking and asset matching.
               </p>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-2 w-2 rounded-full bg-[#00D657]" />
-                    <span className="text-xs font-medium">Upload & Parse</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Drag and drop TSV, CSV, or XLSX exports from Eloqua with auto-detected delimiters and field mapping.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-2 w-2 rounded-full bg-amber-400" />
-                    <span className="text-xs font-medium">Data Cleaning</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    SHA-256 hashed emails, deduplication, dirty value removal, and interaction type normalization.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-2 w-2 rounded-full bg-blue-400" />
-                    <span className="text-xs font-medium">Asset Matching</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Automatically matches asset IDs against your content library for funnel stage and product data.
-                  </p>
-                </div>
-              </div>
-
-              {journeySummaries && journeySummaries.status.contactJourneyCount > 0 && (
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground">Contacts</p>
-                    <p className="text-lg font-semibold" data-testid="text-summary-contacts">{journeySummaries.status.contactJourneyCount.toLocaleString()}</p>
-                  </div>
-                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground">Patterns</p>
-                    <p className="text-lg font-semibold" data-testid="text-summary-patterns">{journeySummaries.status.patternCount.toLocaleString()}</p>
-                  </div>
-                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground">Transitions</p>
-                    <p className="text-lg font-semibold" data-testid="text-summary-transitions">{journeySummaries.status.transitionCount.toLocaleString()}</p>
-                  </div>
-                  <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
-                    <p className="text-[10px] text-muted-foreground">Asset Stats</p>
-                    <p className="text-lg font-semibold" data-testid="text-summary-assets">{journeySummaries.status.assetStatCount.toLocaleString()}</p>
-                  </div>
-                </div>
-              )}
-
-              {journeySummaries && journeySummaries.topPatterns && journeySummaries.topPatterns.length > 0 && (
-                <div className="mt-3 rounded-xl border border-border/30 bg-muted/10 p-3">
-                  <h4 className="text-xs font-semibold mb-2">Top Journey Patterns</h4>
-                  <div className="space-y-1.5">
-                    {journeySummaries.topPatterns.slice(0, 5).map((p, i) => (
-                      <div key={i} className="flex items-center justify-between text-[11px]" data-testid={`pattern-${i}`}>
-                        <span className="font-mono truncate max-w-[60%]">{p.patternStages}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-muted-foreground">{p.contactCount.toLocaleString()} contacts</span>
-                          <span className="text-[#00D657]">{(p.conversionRate * 100).toFixed(1)}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {journeyBatches && journeyBatches.batches.length > 0 && (
-                <div className="mt-3 rounded-xl border border-border/30 bg-muted/10 p-3">
-                  <h4 className="text-xs font-semibold mb-2">Upload History</h4>
-                  <div className="space-y-1.5">
-                    {journeyBatches.batches.slice(0, 3).map((batch) => (
-                      <div key={batch.batchId} className="flex items-center justify-between text-[11px]" data-testid={`batch-${batch.batchId}`}>
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-3 w-3 text-[#00D657]" />
-                          <span className="font-mono text-muted-foreground">{batch.batchId.slice(0, 8)}...</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-muted-foreground">{batch.interactionCount.toLocaleString()} interactions</span>
-                          <span className="text-muted-foreground/60">{new Date(batch.uploadDate).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4">
+              <div className="mt-3 flex items-center gap-3">
                 <Button
                   onClick={() => setShowJourneyUpload(true)}
-                  className="bg-[#00D657] hover:bg-[#00D657]/90 text-black"
+                  variant="outline"
+                  size="sm"
+                  className="border-[#00D657]/30 text-[#00D657] hover:bg-[#00D657]/10"
                   data-testid="button-upload-journey"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Eloqua Activity Data
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  Upload Data
                 </Button>
+                {journeyBatches && journeyBatches.batches.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Last upload: {new Date(journeyBatches.batches[0].uploadDate).toLocaleDateString()} ({journeyBatches.batches[0].interactionCount.toLocaleString()} interactions)
+                  </span>
+                )}
               </div>
             </div>
           </div>
+
+          {journeySummaries && journeySummaries.status.contactJourneyCount > 0 ? (
+            <JourneyMap
+              transitions={journeySummaries.transitions}
+              topPatterns={journeySummaries.topPatterns}
+              topAssetStats={journeySummaries.topAssetStats}
+              totalInteractions={journeySummaries.totalInteractions}
+              status={journeySummaries.status}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="h-2 w-2 rounded-full bg-[#00D657]" />
+                  <span className="text-xs font-medium">Upload & Parse</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Drag and drop TSV, CSV, or XLSX exports from Eloqua with auto-detected delimiters and field mapping.
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span className="text-xs font-medium">Data Cleaning</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  SHA-256 hashed emails, deduplication, dirty value removal, and interaction type normalization.
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="h-2 w-2 rounded-full bg-blue-400" />
+                  <span className="text-xs font-medium">Asset Matching</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Automatically matches asset IDs against your content library for funnel stage and product data.
+                </p>
+              </div>
+            </div>
+          )}
         </Card>
 
         {showJourneyUpload && (
-          <JourneyUpload onClose={() => { setShowJourneyUpload(false); refetchJourneyBatches(); }} />
+          <JourneyUpload onClose={() => { setShowJourneyUpload(false); refetchJourneyBatches(); queryClient.invalidateQueries({ queryKey: ["/api/journey/summaries"] }); }} />
         )}
       </motion.div>
 
