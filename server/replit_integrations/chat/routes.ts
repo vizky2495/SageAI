@@ -77,6 +77,8 @@ STRICT RULES — follow these on every response:
 
 18. SALES FEEDBACK. When sales feedback exists for content being discussed, incorporate it naturally. Reference specific tag patterns (e.g., "4 of 6 SDR reviews tagged this as strong hook") and relevant notes. Treat sales feedback as qualitative signal that complements the quantitative metrics. If feedback contradicts the performance metrics (e.g., high pageviews but reps say "no reaction"), flag that discrepancy.
 
+19. JOURNEY DATA. When journey mapping data is available, use it to answer questions about contact journeys, content sequencing, stage transitions, drop-off points, conversion paths, and asset flow patterns. Journey data includes: stage transitions (how contacts move between TOFU/MOFU/BOFU), journey patterns (common stage sequences), asset journey stats (appearances, entry/exit counts, conversion rates, drop-off rates), asset-to-asset flows (which content leads to which), and path insights (drop-off points, accelerators, regression triggers, fast-track paths). Cross-reference journey data with performance metrics when both are available — e.g., an asset with high pageviews but high drop-off rate signals engagement without progression.
+
 Dataset: ${summary.dataset_info.total_rows} content assets across ${summary.stage_summary.map(s => s.stage).join("/")} stages.`;
 }
 
@@ -421,6 +423,128 @@ function buildPlannerContext(summary: InsightsSummary): string {
   }
 
   return context;
+}
+
+async function buildJourneyContext(): Promise<string | null> {
+  try {
+    const status = await storage.getJourneySummaryStatus();
+    if (status.contactJourneyCount === 0 && status.assetStatCount === 0) {
+      return null;
+    }
+
+    let ctx = `=== JOURNEY MAPPING DATA ===\n`;
+    ctx += `Journey data covers ${status.contactJourneyCount.toLocaleString()} contact journeys, ${status.assetStatCount} assets tracked, ${status.patternCount} journey patterns, ${status.transitionCount} stage transitions.\n\n`;
+
+    const transitions = await storage.getStageTransitions();
+    if (transitions.length > 0) {
+      ctx += `--- STAGE TRANSITIONS ---\n`;
+      ctx += `Shows how contacts move between funnel stages (from_stage -> to_stage), with contact counts and average days between transitions.\n`;
+      const grouped: Record<string, Array<{ to: string; count: number; days: number | null }>> = {};
+      for (const t of transitions) {
+        if (!grouped[t.fromStage]) grouped[t.fromStage] = [];
+        grouped[t.fromStage].push({ to: t.toStage, count: t.contactCount, days: t.avgDaysBetween });
+      }
+      for (const [from, tos] of Object.entries(grouped)) {
+        const sorted = tos.sort((a, b) => b.count - a.count).slice(0, 5);
+        for (const t of sorted) {
+          ctx += `${from} -> ${t.to}: ${t.count.toLocaleString()} contacts | avg ${t.days?.toFixed(1) ?? "N/A"} days\n`;
+        }
+      }
+      ctx += `\n`;
+    }
+
+    const { data: patterns } = await storage.getJourneyPatterns({ limit: 15, sortBy: "contact_count" });
+    if (patterns.length > 0) {
+      ctx += `--- TOP JOURNEY PATTERNS (by contact volume) ---\n`;
+      ctx += `Each pattern is a sequence of funnel stages a contact moves through.\n`;
+      for (const p of patterns) {
+        ctx += `Pattern: ${p.patternStages} | ${p.contactCount.toLocaleString()} contacts | conversion: ${(p.conversionRate * 100).toFixed(1)}% | avg duration: ${p.avgDurationDays?.toFixed(1) ?? "N/A"} days`;
+        if (p.topEntryAsset) ctx += ` | entry: ${p.topEntryAsset}`;
+        if (p.topExitAsset) ctx += ` | exit: ${p.topExitAsset}`;
+        ctx += `\n`;
+      }
+      ctx += `\n`;
+    }
+
+    const assetStats = await storage.getAssetJourneyStats();
+    if (assetStats.length > 0) {
+      const sorted = [...assetStats].sort((a, b) => b.totalJourneyAppearances - a.totalJourneyAppearances);
+      const top = sorted.slice(0, 30);
+
+      ctx += `--- TOP ASSETS BY JOURNEY APPEARANCES (${assetStats.length} total tracked) ---\n`;
+      ctx += `Columns: asset_id | stage | appearances | unique_contacts | entry_count | exit_count | pass_through | conversion_rate | drop_off_rate | avg_position | avg_journey_length\n`;
+      for (const a of top) {
+        ctx += `${a.assetId} | ${a.funnelStage || "UNKNOWN"} | ${a.totalJourneyAppearances} appearances | ${a.uniqueContacts ?? 0} contacts | entry: ${a.entryCount ?? 0} | exit: ${a.exitCount ?? 0} | pass-through: ${a.passThroughCount ?? 0} | conv: ${((a.journeyConversionRate ?? 0) * 100).toFixed(1)}% | drop-off: ${((a.dropOffRate ?? 0) * 100).toFixed(1)}% | pos: ${a.avgPositionInJourney?.toFixed(1) ?? "N/A"} | journey len: ${a.avgJourneyLengthWhenIncluded?.toFixed(1) ?? "N/A"}\n`;
+      }
+
+      const highConv = sorted.filter(a => (a.journeyConversionRate ?? 0) > 0.1 && a.totalJourneyAppearances >= 50)
+        .sort((a, b) => (b.journeyConversionRate ?? 0) - (a.journeyConversionRate ?? 0))
+        .slice(0, 10);
+      if (highConv.length > 0) {
+        ctx += `\n--- HIGH-CONVERTING JOURNEY ASSETS (>10% conversion, 50+ appearances) ---\n`;
+        for (const a of highConv) {
+          ctx += `${a.assetId} | ${a.funnelStage || "UNKNOWN"} | conv: ${((a.journeyConversionRate ?? 0) * 100).toFixed(1)}% | ${a.totalJourneyAppearances} appearances | drop-off: ${((a.dropOffRate ?? 0) * 100).toFixed(1)}%\n`;
+        }
+      }
+
+      const highDropOff = sorted.filter(a => (a.dropOffRate ?? 0) > 0.5 && a.totalJourneyAppearances >= 50)
+        .sort((a, b) => (b.dropOffRate ?? 0) - (a.dropOffRate ?? 0))
+        .slice(0, 10);
+      if (highDropOff.length > 0) {
+        ctx += `\n--- HIGH DROP-OFF ASSETS (>50% drop-off, 50+ appearances) ---\n`;
+        for (const a of highDropOff) {
+          ctx += `${a.assetId} | ${a.funnelStage || "UNKNOWN"} | drop-off: ${((a.dropOffRate ?? 0) * 100).toFixed(1)}% | ${a.totalJourneyAppearances} appearances | conv: ${((a.journeyConversionRate ?? 0) * 100).toFixed(1)}%\n`;
+        }
+      }
+      ctx += `\n`;
+    }
+
+    const flows = await storage.getJourneyStageFlows(50);
+    if (flows.length > 0) {
+      ctx += `--- TOP ASSET-TO-ASSET FLOWS (50+ contacts) ---\n`;
+      ctx += `Shows how contacts transition between specific content assets, with contact counts and average days between.\n`;
+      const topFlows = flows.slice(0, 30);
+      for (const f of topFlows) {
+        ctx += `${f.fromAssetId} (${f.fromStage}) -> ${f.toAssetId} (${f.toStage}): ${f.contactCount.toLocaleString()} contacts | avg ${f.avgDaysBetween?.toFixed(1) ?? "N/A"} days\n`;
+      }
+      ctx += `\n`;
+    }
+
+    const insights = await storage.getContentPathInsights();
+    if (insights.dropOffPoints.length > 0 || insights.accelerators.length > 0) {
+      ctx += `--- JOURNEY INSIGHTS ---\n`;
+      if (insights.dropOffPoints.length > 0) {
+        ctx += `Drop-off points (assets where contacts leave the funnel):\n`;
+        for (const d of insights.dropOffPoints.slice(0, 8)) {
+          ctx += `  ${d.assetId} (${d.stage}): ${(d.dropOffRate * 100).toFixed(1)}% drop-off, ${d.appearances} appearances\n`;
+        }
+      }
+      if (insights.accelerators.length > 0) {
+        ctx += `Accelerators (assets that push contacts forward quickly):\n`;
+        for (const a of insights.accelerators.slice(0, 8)) {
+          ctx += `  ${a.assetId} (${a.stage}): ${a.forwardCount} forward moves, avg ${a.avgDays.toFixed(1)} days\n`;
+        }
+      }
+      if (insights.regressionTriggers.length > 0) {
+        ctx += `Regression triggers (assets after which contacts move backward):\n`;
+        for (const r of insights.regressionTriggers.slice(0, 5)) {
+          ctx += `  ${r.assetId} (${r.stage}): ${r.regressionCount} backward moves\n`;
+        }
+      }
+      if (insights.fastTrackPaths.length > 0) {
+        ctx += `Fast-track paths (quickest TOFU-to-BOFU patterns):\n`;
+        for (const f of insights.fastTrackPaths.slice(0, 5)) {
+          ctx += `  ${f.pattern}: ${f.contactCount} contacts, avg ${f.avgDays.toFixed(1)} days | entry: ${f.entryAsset} | exit: ${f.exitAsset}\n`;
+        }
+      }
+      ctx += `\n`;
+    }
+
+    return ctx;
+  } catch (e) {
+    console.error("Failed to build journey context:", e);
+    return null;
+  }
 }
 
 function buildDynamicSuggestions(summary: InsightsSummary): string[] {
@@ -1159,9 +1283,14 @@ export function registerChatRoutes(app: Express): void {
         ? await buildSalesFeedbackContext(uniqueMentionedIds)
         : null;
 
+      const journeyCtx = (agentType === "cia") ? await buildJourneyContext() : null;
+
       if (agentType === "cia") {
         const groundedContext = buildGroundedContext(content, summary);
         systemPrompt = `${buildCIASystemPrompt(summary)}\n\n=== GROUNDED CONTEXT (your ONLY data source) ===\n${groundedContext}`;
+        if (journeyCtx) {
+          systemPrompt += `\n\n${journeyCtx}`;
+        }
         if (campaignContext) {
           systemPrompt += `\n\n=== CAMPAIGN PLANNING DATA ===\nThe following campaign plans have been created in the Campaign Planner. You can reference this data when users ask about planned campaigns, strategies, or content allocation.\n${campaignContext}`;
         }

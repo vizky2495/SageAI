@@ -1,0 +1,221 @@
+# Content Journey Mapping — Sankey Fix Prompt
+
+## Problem
+
+The current Sankey diagram is broken. It's rendering every individual asset as a separate node, creating a massively tall, unreadable visualization (~100+ nodes in the BOFU column alone). The bands overlap, labels are illegible, and the TOFU/MOFU columns are nearly empty while BOFU is overloaded.
+
+## Root Causes to Fix
+
+### 1. Too Many Nodes — Add Aggregation + Threshold
+
+The Sankey should NOT show every single asset. Apply these rules:
+
+**Default view: Show only the top 15-20 nodes total across all stages.**
+
+- Rank all assets by unique contact volume
+- Show the top 5-7 assets per stage (TOFU, MOFU, BOFU)
+- Collapse everything else into an "Other [Stage] Assets" bucket per stage
+- The "Other" bucket still has bands flowing in/out — it just consolidates the long tail
+
+**Add a "Min. contacts" threshold slider** (default: 100 or top 20 assets, whichever shows fewer nodes):
+- Any asset below the threshold gets folded into the "Other" bucket
+- Slider range: 10 to max asset volume
+- Update the diagram dynamically as the slider moves
+
+**Add a "Show top N assets" dropdown**: Options: 10, 15, 20, 30, All
+- Default: 15
+- "All" should warn: "Showing all assets may reduce readability"
+
+### 2. The Diagram is Too Tall — Fix the Layout
+
+The Sankey height should be **fixed at the viewport height** (e.g., 600-700px max), NOT grow with the number of nodes. Nodes should be compressed to fit within this fixed height.
+
+```
+WRONG:  Height = (number of nodes) × node height + padding  → results in 3000px+ diagram
+RIGHT:  Height = 650px fixed → nodes scale down to fit, minimum node height = 8px
+```
+
+D3-sankey configuration:
+```javascript
+const sankey = d3.sankey()
+  .nodeWidth(180)          // Width of each node rectangle
+  .nodePadding(4)          // Minimum padding between nodes — keep small
+  .nodeAlign(d3.sankeyLeft) // Align to left for consistent column positioning
+  .extent([[0, 0], [width, 650]])  // FIXED HEIGHT — do not let it grow
+  .nodeSort((a, b) => b.value - a.value)  // Largest nodes at top
+```
+
+### 3. Column Imbalance — BOFU is Overloaded
+
+The data is heavily skewed toward BOFU assets. This likely means the funnel stage classification is wrong — many assets that should be TOFU or MOFU are being classified as BOFU.
+
+**Review the classification logic:**
+- Look at the asset names in the BOFU column. If names like "BOFU SSCAPre-Registration" or "BOFU Site-Stand Funnel" appear — these might actually be TOFU/MOFU assets that happen to have "BOFU" in their naming convention from Eloqua
+- The classification should be based on the asset's **position in the journey**, not just its name prefix
+- Alternative approach: classify based on **where the asset typically appears in contact journeys** (first third = TOFU, middle third = MOFU, last third = BOFU)
+
+**If name-based classification must stay**, then at minimum aggregate the BOFU column more aggressively — show only top 5 BOFU assets and collapse the rest.
+
+### 4. Unclassified Column is Wasted Space
+
+The "Unclassified" column (visible on the far right) adds a 4th column that spreads the layout too thin. Fix:
+- Remove "Unclassified" as a separate column
+- Either: assign unclassified assets to the nearest stage based on their journey position
+- Or: fold them into an "Other" bucket within the stage they most commonly transition to/from
+- At minimum: hide unclassified from the Sankey and show them only in the table view
+
+### 5. Band Colors Need More Contrast
+
+The current dark olive/brown bands on the dark background are hard to distinguish. Use brighter, more saturated colors with transparency:
+
+```javascript
+const stageColors = {
+  'TOFU': { node: '#00D657', band: 'rgba(0, 214, 87, 0.3)' },     // Sage green
+  'MOFU': { node: '#4ECDC4', band: 'rgba(78, 205, 196, 0.3)' },    // Teal
+  'BOFU': { node: '#9B59B6', band: 'rgba(155, 89, 182, 0.3)' },    // Purple
+};
+```
+
+Band color should be based on the **source node's stage**, so you can visually trace which stage the flow originates from.
+
+### 6. Labels Must Be Readable
+
+Current labels are overlapping and illegible. Fix:
+- **Truncate asset names** to 25 characters max, with ellipsis
+- **Font size**: 11px minimum, 12px preferred
+- **Position labels outside the node** on the side with more space (left of TOFU nodes, right of BOFU nodes, either side for MOFU)
+- **Only show labels for nodes above the threshold** — the "Other" bucket gets a label, small individual nodes do not
+- On **hover**, show full asset name in a tooltip
+
+---
+
+## Revised Sankey Implementation Spec
+
+### Container
+```
+Fixed height: 650px
+Full width of the content area
+Horizontal padding: 40px on each side
+Background: transparent (inherits page dark background)
+Overflow: hidden (no scroll within the Sankey — if it doesn't fit, aggregate more)
+```
+
+### Node Layout
+```
+3 columns only: TOFU | MOFU | BOFU (no Unclassified column)
+Column spacing: evenly distributed across width
+Node width: 160-180px
+Node padding: 4-6px (tight to avoid height explosion)
+Max nodes per column: 7 (top 6 + "Other" bucket)
+Max total nodes: 21
+Node corner radius: 3px
+```
+
+### Column Headers
+```
+Centered above each column:
+"TOFU — Awareness" | "MOFU — Consideration" | "BOFU — Decision"
+Font: 13px, white, semi-bold
+Margin below header: 16px
+```
+
+### Bands/Links
+```
+Opacity: 0.25 default, 0.5 on hover
+Color: based on source node's stage color
+Stroke: none
+Curve: d3.sankeyLinkHorizontal() (standard S-curve)
+```
+
+### Hover Behavior
+```
+Hover on node:
+  - Highlight node (brighten)
+  - Highlight all connected bands (increase opacity to 0.5)
+  - Dim all other bands (reduce opacity to 0.1)
+  - Show tooltip: asset name, contacts count, drop-off rate
+
+Hover on band:
+  - Highlight that band only (opacity 0.5)
+  - Dim all other bands
+  - Show tooltip: "From → To", contact count, % of source
+```
+
+### Controls Bar (above diagram)
+```
+Left side:
+  - "Show top" dropdown: [10] [15] [20] [30] — default 15
+  - Stage filter pills: [TOFU ✓] [MOFU ✓] [BOFU ✓]
+
+Right side:
+  - Search input: "Find asset..." — highlights matching nodes
+  - View toggle: [Detailed] [Simplified] — simplified collapses to 3 stage-level nodes
+```
+
+### Drop-Off Indicators
+```
+For each node, show drop-off as:
+  - Small red indicator bar on the bottom edge of the node
+  - Width proportional to drop-off rate
+  - Tooltip on hover: "X contacts (Y%) did not continue"
+Do NOT render drop-offs as separate outgoing bands — this adds visual noise
+```
+
+---
+
+## Data Query for Sankey
+
+```sql
+-- Get top N assets per stage for nodes
+WITH ranked_assets AS (
+  SELECT 
+    asset_id,
+    asset_name,
+    funnel_stage,
+    unique_contacts,
+    exit_count,
+    ROW_NUMBER() OVER (PARTITION BY funnel_stage ORDER BY unique_contacts DESC) as rank
+  FROM journey_asset_summary
+  WHERE funnel_stage IN ('TOFU', 'MOFU', 'BOFU')
+)
+SELECT * FROM ranked_assets WHERE rank <= 6
+
+UNION ALL
+
+-- "Other" buckets per stage
+SELECT 
+  'other_' || funnel_stage as asset_id,
+  'Other ' || funnel_stage || ' Assets' as asset_name,
+  funnel_stage,
+  SUM(unique_contacts) as unique_contacts,
+  SUM(exit_count) as exit_count,
+  999 as rank
+FROM ranked_assets 
+WHERE rank > 6
+GROUP BY funnel_stage;
+
+-- Get flows between visible nodes (aggregate flows to/from "Other" buckets)
+SELECT 
+  CASE WHEN src.rank <= 6 THEN f.from_asset_id ELSE 'other_' || f.from_stage END as source,
+  CASE WHEN dst.rank <= 6 THEN f.to_asset_id ELSE 'other_' || f.to_stage END as target,
+  SUM(f.contact_count) as value
+FROM journey_stage_flows f
+JOIN ranked_assets src ON f.from_asset_id = src.asset_id
+JOIN ranked_assets dst ON f.to_asset_id = dst.asset_id
+GROUP BY source, target
+HAVING SUM(f.contact_count) >= 50;  -- minimum flow threshold
+```
+
+---
+
+## Summary of Changes from Current Implementation
+
+| Issue | Current | Fix |
+|-------|---------|-----|
+| Too many nodes | Every asset = a node (~100+) | Top 6 per stage + "Other" bucket (max 21 nodes) |
+| Height | Grows with node count (3000px+) | Fixed at 650px |
+| Unclassified column | Shown as 4th column | Remove — fold into nearest stage or hide |
+| Band colors | Dark olive/brown, low contrast | Bright stage-colored bands with 0.25 opacity |
+| Labels | Overlapping, illegible | Truncated, positioned outside nodes, tooltip for full name |
+| Column balance | BOFU overloaded, TOFU/MOFU empty | Aggregate more aggressively in heavy columns |
+| Interactivity | Static | Hover highlights, click filters, search, threshold controls |
