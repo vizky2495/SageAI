@@ -5,6 +5,7 @@ import type {
   InsertJourneyPattern,
   InsertStageTransition,
   InsertAssetJourneyStat,
+  InsertJourneyStageFlow,
 } from "@shared/schema";
 
 export interface JourneyBuildProgress {
@@ -87,7 +88,7 @@ export async function buildJourneySummaries(batchId?: string): Promise<void> {
     status: "building",
     phase: "Fetching contacts",
     currentStep: 0,
-    totalSteps: 4,
+    totalSteps: 5,
     message: "Fetching distinct contacts...",
     startedAt: Date.now(),
     completedAt: null,
@@ -109,6 +110,7 @@ export async function buildJourneySummaries(batchId?: string): Promise<void> {
 
     const CONTACT_BATCH_SIZE = 1000;
     const allContactJourneys: InsertContactJourney[] = [];
+    const perAssetStages: Array<{ contactHash: string; assetStages: Array<{ assetId: string; stage: string }>; outcome: string; firstTouchDate: Date | null; lastTouchDate: Date | null }> = [];
     let contactsProcessed = 0;
 
     for (let i = 0; i < allContactHashes.length; i += CONTACT_BATCH_SIZE) {
@@ -182,6 +184,18 @@ export async function buildJourneySummaries(batchId?: string): Promise<void> {
           country: getMostCommon(sorted.map(ix => ix.country)),
           industry: null,
           uploadBatchId: batchId || null,
+        });
+
+        const assetStagesForContact = orderedAssetIds.map((assetId, idx) => ({
+          assetId,
+          stage: orderedStages[idx] || "UNKNOWN",
+        }));
+        perAssetStages.push({
+          contactHash,
+          assetStages: assetStagesForContact,
+          outcome: outcome || "unknown",
+          firstTouchDate: firstTs,
+          lastTouchDate: lastTs,
         });
       }
 
@@ -310,33 +324,47 @@ export async function buildJourneySummaries(batchId?: string): Promise<void> {
       sqoJourneys: number;
       totalJourneys: number;
       lastInJourney: number;
+      firstInJourney: number;
+      contacts: Set<string>;
+      stages: string[];
     }>();
 
-    for (const cj of allContactJourneys) {
-      const seq = cj.journeySequence;
+    for (const pas of perAssetStages) {
+      const seq = pas.assetStages;
       for (let p = 0; p < seq.length; p++) {
-        const assetId = seq[p];
+        const { assetId, stage } = seq[p];
         if (!assetId) continue;
         const stat = assetStats.get(assetId) || {
           appearances: 0, positions: [], nextAssets: [], prevAssets: [],
           journeyLengths: [], sqoJourneys: 0, totalJourneys: 0, lastInJourney: 0,
+          firstInJourney: 0, contacts: new Set<string>(), stages: [],
         };
         stat.appearances++;
         stat.positions.push(p + 1);
         stat.journeyLengths.push(seq.length);
         stat.totalJourneys++;
-        if (cj.outcome === "sqo") stat.sqoJourneys++;
-        if (p < seq.length - 1 && seq[p + 1]) stat.nextAssets.push(seq[p + 1]);
-        if (p > 0 && seq[p - 1]) stat.prevAssets.push(seq[p - 1]);
+        stat.contacts.add(pas.contactHash);
+        stat.stages.push(stage);
+        if (pas.outcome === "sqo") stat.sqoJourneys++;
+        if (p < seq.length - 1 && seq[p + 1]) stat.nextAssets.push(seq[p + 1].assetId);
+        if (p > 0 && seq[p - 1]) stat.prevAssets.push(seq[p - 1].assetId);
         if (p === seq.length - 1) stat.lastInJourney++;
+        if (p === 0) stat.firstInJourney++;
         assetStats.set(assetId, stat);
       }
+    }
+
+    const assetStageMap = new Map<string, string>();
+    for (const [assetId, stat] of assetStats) {
+      assetStageMap.set(assetId, getMostCommon(stat.stages) || "UNKNOWN");
     }
 
     const assetInserts: InsertAssetJourneyStat[] = [];
     for (const [assetId, stat] of assetStats) {
       const avgPos = stat.positions.reduce((a, b) => a + b, 0) / stat.positions.length;
       const avgLen = stat.journeyLengths.reduce((a, b) => a + b, 0) / stat.journeyLengths.length;
+      const dominantStage = getMostCommon(stat.stages) || "UNKNOWN";
+      const middleCount = stat.appearances - stat.firstInJourney - stat.lastInJourney;
       assetInserts.push({
         assetId,
         totalJourneyAppearances: stat.appearances,
@@ -346,14 +374,78 @@ export async function buildJourneySummaries(batchId?: string): Promise<void> {
         journeyConversionRate: stat.totalJourneys > 0 ? Math.round((stat.sqoJourneys / stat.totalJourneys) * 1000) / 1000 : 0,
         avgJourneyLengthWhenIncluded: Math.round(avgLen * 10) / 10,
         dropOffRate: stat.totalJourneys > 0 ? Math.round((stat.lastInJourney / stat.totalJourneys) * 1000) / 1000 : 0,
+        funnelStage: dominantStage,
+        uniqueContacts: stat.contacts.size,
+        entryCount: stat.firstInJourney,
+        exitCount: stat.lastInJourney,
+        passThroughCount: Math.max(0, middleCount),
       });
     }
     await storage.bulkInsertAssetJourneyStats(assetInserts);
 
     updateProgress({
+      phase: "Computing asset-to-asset flows",
+      currentStep: 5,
+      message: "Computing asset-to-asset transition flows...",
+    });
+
+    await storage.deleteJourneyStageFlows();
+
+    const flowMap = new Map<string, { fromAssetId: string; fromStage: string; toAssetId: string; toStage: string; contacts: Set<string>; daysBetween: number[] }>();
+
+    for (const pas of perAssetStages) {
+      const seq = pas.assetStages;
+      if (seq.length < 2) continue;
+
+      for (let p = 0; p < seq.length - 1; p++) {
+        const from = seq[p];
+        const to = seq[p + 1];
+        if (!from.assetId || !to.assetId) continue;
+
+        const key = `${from.assetId}|${to.assetId}`;
+
+        const existing = flowMap.get(key) || {
+          fromAssetId: from.assetId,
+          fromStage: from.stage,
+          toAssetId: to.assetId,
+          toStage: to.stage,
+          contacts: new Set<string>(),
+          daysBetween: [],
+        };
+
+        existing.contacts.add(pas.contactHash);
+
+        if (pas.firstTouchDate && pas.lastTouchDate && seq.length > 1) {
+          const totalDays = (pas.lastTouchDate.getTime() - pas.firstTouchDate.getTime()) / (1000 * 60 * 60 * 24);
+          const stepDays = totalDays / (seq.length - 1);
+          existing.daysBetween.push(stepDays);
+        }
+
+        flowMap.set(key, existing);
+      }
+    }
+
+    const flowInserts: InsertJourneyStageFlow[] = [];
+    for (const [, flow] of flowMap) {
+      if (flow.contacts.size < 1) continue;
+      const avgDays = flow.daysBetween.length > 0
+        ? Math.round((flow.daysBetween.reduce((a, b) => a + b, 0) / flow.daysBetween.length) * 10) / 10
+        : null;
+      flowInserts.push({
+        fromAssetId: flow.fromAssetId,
+        fromStage: flow.fromStage,
+        toAssetId: flow.toAssetId,
+        toStage: flow.toStage,
+        contactCount: flow.contacts.size,
+        avgDaysBetween: avgDays,
+      });
+    }
+    await storage.bulkInsertJourneyStageFlows(flowInserts);
+
+    updateProgress({
       status: "complete",
       phase: "Done",
-      message: `Journey summaries built: ${allContactJourneys.length.toLocaleString()} contacts, ${patternInserts.length} patterns, ${transitionInserts.length} transitions, ${assetInserts.length} asset stats`,
+      message: `Journey summaries built: ${allContactJourneys.length.toLocaleString()} contacts, ${patternInserts.length} patterns, ${transitionInserts.length} transitions, ${assetInserts.length} asset stats, ${flowInserts.length} flows`,
       completedAt: Date.now(),
       result: {
         contactsProcessed: allContactJourneys.length,

@@ -81,7 +81,8 @@ export default function AnalyticsPage() {
     status: { contactJourneyCount: number; patternCount: number; transitionCount: number; assetStatCount: number };
     transitions: Array<{ fromStage: string; toStage: string; contactCount: number; avgDaysBetween: number | null }>;
     topPatterns: Array<{ patternString: string; patternStages: string; contactCount: number; conversionRate: number; topEntryAsset?: string; topExitAsset?: string; avgDurationDays?: number }>;
-    topAssetStats: Array<{ assetId: string; totalJourneyAppearances: number; avgPositionInJourney: number; mostCommonNextAsset: string | null; mostCommonPrevAsset: string | null; journeyConversionRate: number; avgJourneyLengthWhenIncluded: number; dropOffRate: number }>;
+    topAssetStats: Array<{ assetId: string; totalJourneyAppearances: number; avgPositionInJourney: number; mostCommonNextAsset: string | null; mostCommonPrevAsset: string | null; journeyConversionRate: number; avgJourneyLengthWhenIncluded: number; dropOffRate: number; funnelStage?: string | null; uniqueContacts?: number | null; entryCount?: number | null; exitCount?: number | null; passThroughCount?: number | null }>;
+    stageFlows?: Array<{ fromAssetId: string; fromStage: string; toAssetId: string; toStage: string; contactCount: number; avgDaysBetween: number | null }>;
     totalInteractions: number;
     buildProgress: { status: string; message: string };
   }>({
@@ -845,6 +846,7 @@ export default function AnalyticsPage() {
               transitions={journeySummaries.transitions}
               topPatterns={journeySummaries.topPatterns}
               topAssetStats={journeySummaries.topAssetStats}
+              stageFlows={journeySummaries.stageFlows}
               totalInteractions={journeySummaries.totalInteractions}
               status={journeySummaries.status}
             />

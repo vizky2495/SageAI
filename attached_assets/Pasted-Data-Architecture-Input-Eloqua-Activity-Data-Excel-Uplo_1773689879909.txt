@@ -1,0 +1,215 @@
+Data Architecture
+Input: Eloqua Activity Data (Excel Upload)
+The admin uploads an Eloqua activity export via the existing admin upload flow. Each row represents a single interaction between a contact and a content asset. Expected columns:
+ColumnDescriptionExampleContact IdUnique Eloqua contact identifierCON-12345Email AddressContact email (used for deduplication)jane@company.comActivity TypeType of interactionEmail Open, Email Click, Form Submit, Page View, Email SendActivity DateTimestamp of the interaction2026-01-15 09:32:00Asset NameName of the content asset interacted withBOFU SSCAPre-RegistrationAsset TypeType of content assetEmail, Form, Landing Page, Web PageAsset IdEloqua asset identifierAST-7890Campaign Name(Optional) Associated campaignQ1 SSC LaunchCampaign Id(Optional) Eloqua campaign IDCMP-456
+Two-Layer Processing Architecture
+This is critical for performance given the ~400K row dataset. Do NOT query raw data at render time.
+Layer 1 — Raw Interaction Storage (write once)
+
+Store the uploaded Eloqua rows in a journey_raw_interactions table
+Each row = one contact × one asset × one interaction
+This table is written once during upload and never queried directly by the UI
+
+Layer 2 — Pre-Computed Summary Tables (built during upload processing)
+After raw data is stored, run a background processing job that computes and stores:
+journey_summary_stats
+├── unique_contacts (COUNT DISTINCT Contact Id)
+├── total_interactions (COUNT *)
+├── journey_patterns (COUNT DISTINCT ordered sequences)
+├── stage_transitions (COUNT DISTINCT stage-pair combinations)
+└── last_updated (timestamp)
+
+journey_stage_flows
+├── from_asset_id
+├── from_asset_name
+├── from_stage (TOFU/MOFU/BOFU)
+├── to_asset_id
+├── to_asset_name
+├── to_stage (TOFU/MOFU/BOFU)
+├── contact_count (how many contacts made this transition)
+└── avg_days_between (average time between the two interactions)
+
+journey_asset_summary
+├── asset_id
+├── asset_name
+├── asset_type
+├── funnel_stage (TOFU/MOFU/BOFU/Unclassified)
+├── unique_contacts
+├── total_interactions
+├── entry_count (contacts who started their journey here)
+├── exit_count (contacts whose journey ended here — i.e., drop-offs)
+└── pass_through_count (contacts who continued to another asset after this one)
+
+journey_top_paths
+├── path_sequence (JSON array of ordered asset names)
+├── path_stages (JSON array of corresponding stages)
+├── contact_count
+└── conversion_flag (boolean: did this path reach BOFU?)
+Funnel Stage Classification
+Assets are classified into funnel stages based on their Asset Name prefix or pattern matching. The classification rules (based on the current data):
+
+BOFU: Asset name starts with BOFU — purchase, verification, payment flows
+MOFU: Asset name starts with MOFU or contains consideration-stage keywords
+TOFU: Asset name starts with TOFU — awareness, newsletter, introductory content
+Unclassified: Anything that doesn't match the above patterns
+
+Store classification rules in a configurable lookup so admins can reclassify assets without re-uploading data.
+
+UI Implementation
+Page Header
+Same pattern as existing pages:
+
+Title: Content Journey Mapping
+Badge: BETA or NEW FEATURE (green badge)
+Subtitle: "How contacts interact with your content across TOFU → MOFU → BOFU stages with interaction tracking and asset matching."
+Upload Data button (opens admin upload modal)
+Last updated timestamp
+
+Summary Stats Bar
+Four metric cards in a horizontal row (same pattern as current implementation):
+MetricSourceUnique Contactsjourney_summary_stats.unique_contactsJourney Patternsjourney_summary_stats.journey_patternsStage Transitionsjourney_summary_stats.stage_transitionsTotal Interactionsjourney_summary_stats.total_interactions
+Tab Navigation
+Four tabs below the stats bar:
+
+Stage Flows (default) — Sankey diagram
+Journey Patterns — Top content paths table
+Top Assets — Asset performance within journey context
+Content Paths — Existing detailed transition table (keep current implementation)
+
+
+Tab 1: Stage Flows (Sankey Diagram) — PRIMARY NEW FEATURE
+Visualization: Sankey Diagram
+Use D3.js with the d3-sankey plugin to render an interactive Sankey diagram showing contact flow through funnel stages.
+Layout
+
+Three columns representing funnel stages: TOFU (left), MOFU (center), BOFU (right)
+Nodes = individual content assets, sized by contact volume
+Links/bands = transitions between assets, width proportional to contact count
+Vertical ordering within each column: highest-volume assets at top
+
+Color Coding
+Use Sage-compatible colors on the dark background:
+StageNode ColorBand Color (with transparency)TOFU#00D657 (Brilliant Green)rgba(0, 214, 87, 0.2)MOFU#4ECDC4 (Teal)rgba(78, 205, 196, 0.2)BOFU#9B59B6 (Purple)rgba(155, 89, 182, 0.2)Unclassified#95A5A6 (Gray)rgba(149, 165, 166, 0.15)Drop-off#E74C3C (Red)—
+Interactions
+
+Hover on a node: Highlight all connected bands (in + out). Show tooltip with:
+
+Asset name
+Funnel stage
+Unique contacts: X
+Entry rate: X% (contacts who started here)
+Drop-off rate: X% (contacts who ended here)
+Top next assets: [list top 3]
+
+
+Hover on a band/link: Highlight that specific flow. Show tooltip with:
+
+From: [asset name] → To: [asset name]
+Contacts: X
+% of source asset's contacts
+Avg. days between interactions
+
+
+Click on a node: Filter the entire diagram to show only paths flowing through that asset. Add a "Clear filter" button to reset.
+Click on a band: Open a detail panel below the diagram showing:
+
+The specific contacts making this transition (count, not PII)
+Common next steps after the destination asset
+Time distribution (histogram of days between the two interactions)
+
+
+
+Drop-Off Visualization
+For each node, calculate exit_count / unique_contacts = drop-off rate. Show this as:
+
+A thin red band flowing downward/off-screen from the right side of each node
+Width proportional to drop-off volume
+Label on hover: "X contacts (Y%) dropped off after this asset"
+
+Controls
+Above the Sankey diagram, add:
+
+Min. contacts threshold slider (default: 50) — hides low-volume flows to reduce clutter
+Stage filter checkboxes: TOFU ✓, MOFU ✓, BOFU ✓, Unclassified ☐
+Search field to find and highlight a specific asset
+
+Data Source
+Query journey_stage_flows for the links and journey_asset_summary for the nodes. Apply the min-contacts filter client-side for responsiveness.
+Responsive Behavior
+
+On narrow screens, allow horizontal scroll
+Provide a "Simplified view" toggle that collapses individual assets into stage-level aggregates (just 3 nodes: TOFU → MOFU → BOFU with aggregate volumes)
+
+
+Tab 2: Journey Patterns
+Keep the existing "Top Content Flows" table but enhance with:
+
+Each row shows a path sequence with colored stage pills (green for TOFU, teal for MOFU, purple for BOFU)
+Horizontal bar showing relative volume
+Add a conversion indicator column: ✓ if the path reaches BOFU, ✗ if it doesn't
+Sort by contact count descending by default
+Add filter: "Show only converting paths" toggle
+
+Data source: journey_top_paths
+
+Tab 3: Top Assets
+A ranked table of content assets by journey engagement:
+ColumnDescriptionRankBy unique contactsAsset NameWith funnel stage pillUnique ContactsTotal contacts who interactedEntry Rate% of contacts who started their journey herePass-Through Rate% who continued to another assetDrop-Off Rate% whose journey ended hereAvg. PositionAverage position in journey sequences (1 = first touch, higher = later)
+Add sort on any column. Add filters for funnel stage.
+Data source: journey_asset_summary
+
+Tab 4: Content Paths (Existing)
+Keep the current Content Transition Table implementation as-is. This is the detailed row-level view showing specific asset-to-asset transitions with from/to details and conversion rates. No changes needed — this complements the Sankey view for users who want the raw data.
+
+Processing Pipeline (Upload Flow)
+When an admin uploads the Eloqua Excel file:
+Step 1: Validation
+
+Check required columns exist
+Validate date formats
+Report row count and any parsing errors
+Show preview of first 10 rows
+
+Step 2: Raw Storage
+
+Insert all rows into journey_raw_interactions
+Deduplicate by Contact Id + Asset Id + Activity Date (same contact, same asset, same timestamp = one interaction)
+
+Step 3: Pre-Compute Summaries
+Show a progress indicator during this step — it will take time with 400K rows.
+
+Classify assets into funnel stages using the prefix rules
+Build contact journeys: For each unique contact, order their interactions by Activity Date to create a sequence
+Compute transitions: For each consecutive pair in a contact's journey, record the from→to transition
+Aggregate into summary tables:
+
+journey_stage_flows: GROUP BY (from_asset, to_asset), COUNT DISTINCT contacts
+journey_asset_summary: Per-asset aggregates
+journey_top_paths: GROUP BY full path sequence (cap at first 6 steps to avoid explosion), COUNT contacts
+journey_summary_stats: Global aggregates
+
+
+Update timestamp and flag processing as complete
+
+Step 4: Refresh UI
+
+Reload the Content Journey Mapping page with new data
+Display "Last updated" timestamp
+
+
+Technical Notes
+
+Database: Use the existing shared persistent database (not SQLite in-memory — must be visible in deployed browser, not just Replit editor)
+D3 Sankey: Use d3-sankey from CDN or npm. The d3-sankey plugin provides sankey() layout generator that handles node positioning and link path computation
+Performance: The Sankey diagram should render from pre-computed summary tables only. Never query raw 400K rows for UI rendering.
+Export: Add a "Download as PDF" button that exports the current Sankey view using the Sage brand template (black background, green accents, white text) — same pattern as existing comparison report PDFs
+Empty state: If no Eloqua data is uploaded yet, show an empty state with upload CTA and a brief explanation of what this section does
+
+
+What This Section Does NOT Do
+
+Does NOT create content — this is purely analytical
+Does NOT connect to Eloqua in real-time — data comes via Excel upload only
+Does NOT show individual contact PII — all views are aggregated
+Does NOT predict future journeys — it maps historical paths only
+Does NOT replace the existing Content Library or Campaign Planner — it complements them with journey context

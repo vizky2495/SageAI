@@ -350,11 +350,30 @@ export const assetJourneyStats = pgTable("asset_journey_stats", {
   journeyConversionRate: real("journey_conversion_rate"),
   avgJourneyLengthWhenIncluded: real("avg_journey_length_when_included"),
   dropOffRate: real("drop_off_rate"),
+  funnelStage: text("funnel_stage"),
+  uniqueContacts: integer("unique_contacts"),
+  entryCount: integer("entry_count"),
+  exitCount: integer("exit_count"),
+  passThroughCount: integer("pass_through_count"),
 });
 
 export const insertAssetJourneyStatSchema = createInsertSchema(assetJourneyStats).omit({ id: true });
 export type InsertAssetJourneyStat = z.infer<typeof insertAssetJourneyStatSchema>;
 export type AssetJourneyStat = typeof assetJourneyStats.$inferSelect;
+
+export const journeyStageFlows = pgTable("journey_stage_flows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromAssetId: text("from_asset_id").notNull(),
+  fromStage: text("from_stage").notNull(),
+  toAssetId: text("to_asset_id").notNull(),
+  toStage: text("to_stage").notNull(),
+  contactCount: integer("contact_count").notNull().default(0),
+  avgDaysBetween: real("avg_days_between"),
+});
+
+export const insertJourneyStageFlowSchema = createInsertSchema(journeyStageFlows).omit({ id: true });
+export type InsertJourneyStageFlow = z.infer<typeof insertJourneyStageFlowSchema>;
+export type JourneyStageFlow = typeof journeyStageFlows.$inferSelect;
 
 export const SALES_FEEDBACK_TAGS = {
   prospect_reaction: [

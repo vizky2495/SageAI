@@ -2379,6 +2379,7 @@ Return ONLY valid JSON matching this schema:
         await storage.clearJourneyPatterns();
         await storage.clearStageTransitions();
         await storage.clearAssetJourneyStats();
+        await storage.deleteJourneyStageFlows();
       } else {
         resetJourneyBuildProgress();
         buildJourneySummaries().catch(err => {
@@ -2421,6 +2422,7 @@ Return ONLY valid JSON matching this schema:
       const { data: topPatterns } = await storage.getJourneyPatterns({ limit: 20, sortBy: "contact_count" });
       const assetStats = await storage.getAssetJourneyStats();
       const totalInteractions = await storage.countJourneyInteractions();
+      const stageFlows = await storage.getJourneyStageFlows(2);
 
       const summaryData = {
         status,
@@ -2428,6 +2430,7 @@ Return ONLY valid JSON matching this schema:
         topPatterns,
         topAssetStats: assetStats.slice(0, 20),
         totalInteractions,
+        stageFlows: stageFlows.slice(0, 100),
         buildProgress: getJourneyBuildProgress(),
       };
 
@@ -2529,6 +2532,23 @@ Return ONLY valid JSON matching this schema:
     } catch (err: any) {
       console.error("Content path insights error:", err);
       res.status(500).json({ message: "Failed to fetch content path insights" });
+    }
+  });
+
+  app.get("/api/journey/stage-flows", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const minContacts = parseInt(req.query.minContacts as string) || 1;
+      const cacheKey = `__flows_${minContacts}__`;
+      const cached = contentTransitionCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < JOURNEY_CACHE_TTL_MS) {
+        return res.json(cached.data);
+      }
+      const flows = await storage.getJourneyStageFlows(minContacts);
+      contentTransitionCache.set(cacheKey, { data: flows, time: Date.now() });
+      res.json(flows);
+    } catch (err: any) {
+      console.error("Stage flows error:", err);
+      res.status(500).json({ message: "Failed to fetch stage flows" });
     }
   });
 

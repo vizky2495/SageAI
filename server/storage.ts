@@ -35,6 +35,9 @@ import {
   type AssetJourneyStat,
   type InsertAssetJourneyStat,
   assetJourneyStats,
+  type JourneyStageFlow,
+  type InsertJourneyStageFlow,
+  journeyStageFlows,
   POSITIVE_TAGS,
   NEGATIVE_TAGS,
   type StructuredKeywordTags,
@@ -132,6 +135,9 @@ export interface IStorage {
     regressionTriggers: Array<{ assetId: string; stage: string; regressionCount: number }>;
     fastTrackPaths: Array<{ pattern: string; contactCount: number; avgDays: number; entryAsset: string; exitAsset: string }>;
   }>;
+  getJourneyStageFlows(minContacts?: number): Promise<JourneyStageFlow[]>;
+  bulkInsertJourneyStageFlows(flows: InsertJourneyStageFlow[]): Promise<void>;
+  deleteJourneyStageFlows(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1053,6 +1059,32 @@ export class DatabaseStorage implements IStorage {
       regressionTriggers: ((regressionResult as any).rows || regressionResult) as any,
       fastTrackPaths: ((fastTrackResult as any).rows || fastTrackResult) as any,
     };
+  }
+
+  async getJourneyStageFlows(minContacts?: number): Promise<JourneyStageFlow[]> {
+    const threshold = minContacts ?? 1;
+    const result = await db.execute(sql`
+      SELECT id, from_asset_id AS "fromAssetId", from_stage AS "fromStage",
+             to_asset_id AS "toAssetId", to_stage AS "toStage",
+             contact_count AS "contactCount", avg_days_between AS "avgDaysBetween"
+      FROM journey_stage_flows
+      WHERE contact_count >= ${threshold}
+      ORDER BY contact_count DESC
+      LIMIT 200
+    `);
+    return ((result as any).rows || result) as JourneyStageFlow[];
+  }
+
+  async bulkInsertJourneyStageFlows(flows: InsertJourneyStageFlow[]): Promise<void> {
+    if (flows.length === 0) return;
+    const batchSize = 500;
+    for (let i = 0; i < flows.length; i += batchSize) {
+      await db.insert(journeyStageFlows).values(flows.slice(i, i + batchSize) as any);
+    }
+  }
+
+  async deleteJourneyStageFlows(): Promise<void> {
+    await db.delete(journeyStageFlows);
   }
 }
 
