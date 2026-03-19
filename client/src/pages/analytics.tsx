@@ -4,6 +4,7 @@ import PageChat from "@/components/page-chat";
 import JourneyUpload from "@/components/journey-upload";
 import JourneyMap from "@/components/journey-map";
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch, queryClient } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -160,6 +161,7 @@ function SearchableSelect({ value, onValueChange, options, placeholder, allLabel
 }
 
 export default function AnalyticsPage() {
+  const [, navigate] = useLocation();
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
   const [showJourneyUpload, setShowJourneyUpload] = useState(false);
 
@@ -875,7 +877,12 @@ export default function AnalyticsPage() {
                                       <div className="max-h-[180px] overflow-y-auto space-y-1">
                                         {stageContentIds.map((item, idx) => (
                                           <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixTab}-drilldown-item-${idx}`}>
-                                            <div className="min-w-0 flex-1 font-medium break-all" title={item.content}>{item.content}</div>
+                                            <button
+                                              className="min-w-0 flex-1 font-medium break-all text-left text-[#00D657] hover:underline cursor-pointer"
+                                              title={`View ${item.content} in Content Library`}
+                                              onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content)}`); }}
+                                              data-testid={`link-content-${idx}`}
+                                            >{item.content}</button>
                                             <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
                                               {mixTab === "channel" && item.product && <span>{item.product}</span>}
                                               {mixTab === "product" && item.channel && <span>{item.channel}</span>}
