@@ -199,6 +199,7 @@ export default function AnalyticsPage() {
   const [stageFilter, setStageFilter] = useState<FunnelStage | "ALL">("ALL");
   const [dimension, setDimension] = useState<"utmChannel" | "productFranchise" | "contentType">("utmChannel");
   const [contentTypeFilter, setContentTypeFilter] = useState<string>("ALL");
+  const [contentIdFilter, setContentIdFilter] = useState<string>("ALL");
   const [productFilter, setProductFilter] = useState<string>("ALL");
   const [productStageExpand, setProductStageExpand] = useState<{ product: string; stage: string } | null>(null);
   const [industryFilter, setIndustryFilter] = useState<string>("ALL");
@@ -231,16 +232,25 @@ export default function AnalyticsPage() {
     return Array.from(s).sort();
   }, [rows]);
 
+  const contentIdList = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) { if (r.content) s.add(r.content); }
+    return Array.from(s).sort();
+  }, [rows]);
+
   const filtered = useMemo(() => {
     let result = stageFilter === "ALL" ? rows : rows.filter((r) => r.stage === stageFilter);
     if (contentTypeFilter !== "ALL") {
       result = result.filter((r) => (r.contentType || "(unattributed)") === contentTypeFilter);
     }
+    if (contentIdFilter !== "ALL") {
+      result = result.filter((r) => (r.content || "") === contentIdFilter);
+    }
     if (campaignFilter !== "ALL") {
       result = result.filter((r) => (r.campaignName || "(unattributed)") === campaignFilter);
     }
     return result;
-  }, [rows, stageFilter, contentTypeFilter, campaignFilter]);
+  }, [rows, stageFilter, contentTypeFilter, contentIdFilter, campaignFilter]);
 
   const allContentTypes = useMemo(() => {
     const set = new Set<string>();
@@ -604,6 +614,18 @@ export default function AnalyticsPage() {
                     placeholder="types"
                     allLabel="All types"
                     testId="select-content-type"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Content</span>
+                  <SearchableSelect
+                    value={contentIdFilter}
+                    onValueChange={setContentIdFilter}
+                    options={contentIdList}
+                    placeholder="content IDs"
+                    allLabel="All content"
+                    width="w-[160px]"
+                    testId="select-content-id"
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
