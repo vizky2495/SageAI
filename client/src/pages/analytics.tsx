@@ -1046,7 +1046,7 @@ export default function AnalyticsPage() {
                           <div className="text-sm font-medium" data-testid={`text-top-title-${s.toLowerCase()}`}>Top {s} content</div>
                           <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-top-subtitle-${s.toLowerCase()}`}>Ranked by {stageMetrics.primary}.</div>
                         </div>
-                        <Badge className={`border ${stageMeta[s].tone}`} data-testid={`badge-top-${s.toLowerCase()}`}>{stageMetrics.primary}</Badge>
+                        <Badge className="text-[10px] border" style={{ backgroundColor: (s === "TOFU" ? "#00D657" : s === "MOFU" ? "#4ECDC4" : "#9B59B6") + "20", color: s === "TOFU" ? "#00D657" : s === "MOFU" ? "#4ECDC4" : "#9B59B6", borderColor: (s === "TOFU" ? "#00D657" : s === "MOFU" ? "#4ECDC4" : "#9B59B6") + "40" }} data-testid={`badge-top-${s.toLowerCase()}`}>{stageMetrics.primary}</Badge>
                       </div>
                       <div className="mt-3">
                         <div className="rounded-2xl border bg-card/60">
@@ -1236,7 +1236,7 @@ export default function AnalyticsPage() {
                             return (
                               <TableRow key={stage} data-testid={`ct-stage-row-${stage.toLowerCase()}`}>
                                 <TableCell>
-                                  <Badge className={`text-[10px] ${stageMeta[stage as StageKey]?.tone || ""}`}>{stage}</Badge>
+                                  <Badge className="text-[10px] border" style={{ backgroundColor: (stage === "TOFU" ? "#00D657" : stage === "MOFU" ? "#4ECDC4" : "#9B59B6") + "20", color: stage === "TOFU" ? "#00D657" : stage === "MOFU" ? "#4ECDC4" : "#9B59B6", borderColor: (stage === "TOFU" ? "#00D657" : stage === "MOFU" ? "#4ECDC4" : "#9B59B6") + "40" }}>{stage}</Badge>
                                 </TableCell>
                                 <TableCell className="text-right text-sm">{formatCompact(d.views)}</TableCell>
                                 <TableCell className="text-right text-sm">{formatCompact(d.downloads)}</TableCell>
@@ -1316,7 +1316,7 @@ export default function AnalyticsPage() {
                               data-testid={`link-ct-content-${idx}`}
                             >{r.content || "(untitled)"}</button>
                           </TableCell>
-                          <TableCell><Badge className={`text-[10px] ${stageMeta[r.stage as StageKey]?.tone || ""}`}>{r.stage}</Badge></TableCell>
+                          <TableCell><Badge className="text-[10px] border" style={{ backgroundColor: (r.stage === "TOFU" ? "#00D657" : r.stage === "MOFU" ? "#4ECDC4" : r.stage === "BOFU" ? "#9B59B6" : "#888") + "20", color: r.stage === "TOFU" ? "#00D657" : r.stage === "MOFU" ? "#4ECDC4" : r.stage === "BOFU" ? "#9B59B6" : "#888", borderColor: (r.stage === "TOFU" ? "#00D657" : r.stage === "MOFU" ? "#4ECDC4" : r.stage === "BOFU" ? "#9B59B6" : "#888") + "40" }}>{r.stage}</Badge></TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.utmChannel || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.productFranchise || "—"}</TableCell>
                           <TableCell className="text-right text-sm">{formatCompact(r.pageViews ?? 0)}</TableCell>
