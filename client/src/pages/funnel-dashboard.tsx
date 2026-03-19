@@ -657,40 +657,40 @@ export default function FunnelDashboard() {
             <div className="overflow-y-auto p-5 space-y-5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-assets">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <FileText className="h-3.5 w-3.5" /> Assets
                   </div>
-                  <div className="text-xl font-semibold">{drilldownOpen.item.count}</div>
+                  <div className="text-2xl font-bold tracking-tight">{drilldownOpen.item.count}</div>
                 </div>
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-views">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <Eye className="h-3.5 w-3.5" /> Page Views
                   </div>
-                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.views)}</div>
+                  <div className="text-2xl font-bold tracking-tight">{formatCompact(drilldownOpen.item.views)}</div>
                 </div>
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-leads">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <Users className="h-3.5 w-3.5" /> Leads
                   </div>
-                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.leads)}</div>
+                  <div className="text-2xl font-bold tracking-tight">{formatCompact(drilldownOpen.item.leads)}</div>
                 </div>
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-sqos">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <TrendingUp className="h-3.5 w-3.5" /> SQOs
                   </div>
-                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.sqos)}</div>
+                  <div className="text-2xl font-bold tracking-tight">{formatCompact(drilldownOpen.item.sqos)}</div>
                 </div>
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-downloads">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <Download className="h-3.5 w-3.5" /> Downloads
                   </div>
-                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.downloads)}</div>
+                  <div className="text-2xl font-bold tracking-tight">{formatCompact(drilldownOpen.item.downloads)}</div>
                 </div>
                 <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-avgtime">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                     <Clock className="h-3.5 w-3.5" /> Avg Time
                   </div>
-                  <div className="text-xl font-semibold">
+                  <div className="text-2xl font-bold tracking-tight">
                     {drilldownOpen.item.avgTime > 0
                       ? drilldownOpen.item.avgTime >= 60
                         ? `${Math.floor(drilldownOpen.item.avgTime / 60)}m ${drilldownOpen.item.avgTime % 60}s`
