@@ -67,7 +67,7 @@ import {
   type TopByStage,
 } from "@/hooks/use-funnel-data";
 
-function SearchableSelect({ value, onValueChange, options, placeholder, allLabel, width = "w-[130px]", testId }: {
+function SearchableSelect({ value, onValueChange, options, placeholder, allLabel, width = "w-[130px]", testId, labelMap, hideAll }: {
   value: string;
   onValueChange: (v: string) => void;
   options: string[];
@@ -75,6 +75,8 @@ function SearchableSelect({ value, onValueChange, options, placeholder, allLabel
   allLabel: string;
   width?: string;
   testId: string;
+  labelMap?: Record<string, string>;
+  hideAll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -97,9 +99,11 @@ function SearchableSelect({ value, onValueChange, options, placeholder, allLabel
     }
   }, [open]);
 
+  const getLabel = (v: string) => labelMap?.[v] ?? v;
   const q = search.trim().toLowerCase();
-  const filtered = q ? options.filter(o => o !== "ALL" && o.toLowerCase().includes(q)) : options.filter(o => o !== "ALL");
-  const displayLabel = value === "ALL" ? allLabel : (value.length > 16 ? value.slice(0, 15) + "…" : value);
+  const filtered = q ? options.filter(o => o !== "ALL" && getLabel(o).toLowerCase().includes(q)) : options.filter(o => o !== "ALL");
+  const rawLabel = value === "ALL" ? allLabel : getLabel(value);
+  const displayLabel = rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
 
   return (
     <div className="relative" ref={ref} data-testid={testId}>
@@ -129,7 +133,7 @@ function SearchableSelect({ value, onValueChange, options, placeholder, allLabel
             </div>
           </div>
           <div className="max-h-[220px] overflow-y-auto py-1">
-            {!q && (
+            {!q && !hideAll && (
               <button
                 className={`flex items-center w-full px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer ${value === "ALL" ? "text-foreground font-medium" : "text-muted-foreground"}`}
                 onClick={() => { onValueChange("ALL"); setOpen(false); }}
@@ -144,10 +148,10 @@ function SearchableSelect({ value, onValueChange, options, placeholder, allLabel
                 key={opt}
                 className={`flex items-center w-full px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer text-left ${value === opt ? "text-foreground font-medium" : "text-muted-foreground"}`}
                 onClick={() => { onValueChange(opt); setOpen(false); }}
-                data-testid={`${testId}-option-${opt.replace(/\s+/g, "-").toLowerCase()}`}
+                data-testid={`${testId}-option-${getLabel(opt).replace(/\s+/g, "-").toLowerCase()}`}
               >
                 {value === opt && <Check className="mr-1.5 h-3 w-3 text-[#00D657] shrink-0" />}
-                <span className="truncate">{opt}</span>
+                <span className="truncate">{getLabel(opt)}</span>
               </button>
             ))}
             {filtered.length === 0 && q && (
@@ -601,16 +605,15 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Stage</span>
-                  <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as FunnelStage | "ALL")}>
-                    <SelectTrigger className="h-8 w-[120px] rounded-xl text-xs" data-testid="select-stage"><SelectValue placeholder="All stages" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-stage-all">All stages</SelectItem>
-                      <SelectItem value="TOFU" data-testid="option-stage-tofu">TOFU</SelectItem>
-                      <SelectItem value="MOFU" data-testid="option-stage-mofu">MOFU</SelectItem>
-                      <SelectItem value="BOFU" data-testid="option-stage-bofu">BOFU</SelectItem>
-                      <SelectItem value="UNKNOWN" data-testid="option-stage-unknown">UNKNOWN</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={stageFilter}
+                    onValueChange={(v) => setStageFilter(v as FunnelStage | "ALL")}
+                    options={["TOFU", "MOFU", "BOFU", "UNKNOWN"]}
+                    placeholder="stages"
+                    allLabel="All stages"
+                    width="w-[120px]"
+                    testId="select-stage"
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Type</span>
@@ -637,14 +640,17 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Channel</span>
-                  <Select value={dimension} onValueChange={(v) => setDimension(v as typeof dimension)}>
-                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-channel-dimension"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="utmChannel">UTM Channel</SelectItem>
-                      <SelectItem value="productFranchise">Product</SelectItem>
-                      <SelectItem value="contentType">Content Type</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={dimension}
+                    onValueChange={(v) => setDimension(v as typeof dimension)}
+                    options={["utmChannel", "productFranchise", "contentType"]}
+                    placeholder="dimensions"
+                    allLabel="UTM Channel"
+                    width="w-[130px]"
+                    testId="select-channel-dimension"
+                    hideAll
+                    labelMap={{ utmChannel: "UTM Channel", productFranchise: "Product", contentType: "Content Type" }}
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Product</span>
