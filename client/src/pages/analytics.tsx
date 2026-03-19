@@ -804,16 +804,16 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
-          <Tabs defaultValue="cta-analysis" className="w-full">
+          <Tabs defaultValue="by-content-type" className="w-full">
             <TabsList className="grid w-full grid-cols-3 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+              <TabsTrigger value="by-content-type" className="rounded-xl" data-testid="tab-by-content-type">
+                <BarChart3 className="mr-2 h-4 w-4" />By Content Type
+              </TabsTrigger>
               <TabsTrigger value="cta-analysis" className="rounded-xl" data-testid="tab-cta-analysis">
                 <Filter className="mr-2 h-4 w-4" />CTA Analysis
               </TabsTrigger>
               <TabsTrigger value="top-content" className="rounded-xl" data-testid="tab-top-content">
                 <TableIcon className="mr-2 h-4 w-4" />Top content
-              </TabsTrigger>
-              <TabsTrigger value="by-content-type" className="rounded-xl" data-testid="tab-by-content-type">
-                <BarChart3 className="mr-2 h-4 w-4" />By Content Type
               </TabsTrigger>
             </TabsList>
 
