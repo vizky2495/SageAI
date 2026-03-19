@@ -753,14 +753,14 @@ export default function AnalyticsPage() {
             const rawData = mixTab === "channel" ? dimensionData : mixTab === "product" ? productMixData : industryMixData;
             const searchLower = mixSearch.trim().toLowerCase();
             const searchedData = searchLower ? rawData.filter(d => d.key.toLowerCase().includes(searchLower)) : rawData;
-            const getConvRate = (d: { sqos: number; views: number }) => d.views > 0 ? (d.sqos / d.views) * 100 : 0;
+            const getConvRate = (d: { sqos: number; leads: number }) => d.leads > 0 ? (d.sqos / d.leads) * 100 : 0;
             const sortedData = [...searchedData].sort((a, b) => {
               let aVal: number, bVal: number;
               if (mixSortCol === "convRate") { aVal = getConvRate(a); bVal = getConvRate(b); }
               else { aVal = a[mixSortCol]; bVal = b[mixSortCol]; }
               return mixSortDir === "desc" ? bVal - aVal : aVal - bVal;
             });
-            const convRates = sortedData.filter(d => d.views > 0).map(d => getConvRate(d)).sort((a, b) => a - b);
+            const convRates = sortedData.filter(d => d.leads > 0).map(d => getConvRate(d)).sort((a, b) => a - b);
             const q1Threshold = convRates.length >= 4 ? convRates[Math.floor(convRates.length * 0.25)] : 0;
             const q3Threshold = convRates.length >= 4 ? convRates[Math.floor(convRates.length * 0.75)] : Infinity;
             const expandedSet = mixTab === "channel" ? expandedChannels : mixTab === "product" ? expandedProducts : expandedIndustries;
@@ -794,7 +794,7 @@ export default function AnalyticsPage() {
               { col: "leads", label: "Leads" },
               { col: "downloads", label: "Downloads" },
               { col: "sqos", label: "SQOs" },
-              { col: "convRate", label: "Conv." },
+              { col: "convRate", label: "Lead → SQO" },
             ];
 
             return (
@@ -864,8 +864,8 @@ export default function AnalyticsPage() {
                         const total = d.tofu + d.mofu + d.bofu;
                         const activeStage = stageExpand?.key === d.key ? (["TOFU", "MOFU", "BOFU"] as const).find(s => stageExpand?.stage === s) : undefined;
                         const conv = getConvRate(d);
-                        const convStr = d.views > 0 ? `${conv.toFixed(1)}%` : "—";
-                        const convColor = d.views > 0 && convRates.length >= 4
+                        const convStr = d.leads > 0 ? `${conv.toFixed(1)}%` : "—";
+                        const convColor = d.leads > 0 && convRates.length >= 4
                           ? conv >= q3Threshold ? "text-[#00D657] font-semibold" : conv <= q1Threshold ? "text-amber-400" : ""
                           : "";
                         const viewsPerAsset = d.count > 0 ? (d.views / d.count).toFixed(1) : "—";
@@ -960,7 +960,6 @@ export default function AnalyticsPage() {
 
                                     <div className="flex flex-wrap gap-3">
                                       {[
-                                        { label: "Conv. Rate", value: convStr, highlight: d.views > 0 && conv >= q3Threshold },
                                         { label: "Views / Asset", value: viewsPerAsset, highlight: false },
                                         { label: "SQOs / Asset", value: sqosPerAsset, highlight: false },
                                         { label: "Lead → SQO", value: leadToSqo, highlight: false },
