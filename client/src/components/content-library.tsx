@@ -1231,6 +1231,13 @@ function ContentCard({
             e.dataTransfer.setDragImage(ghost, 0, 0);
             requestAnimationFrame(() => document.body.removeChild(ghost));
           }}
+          onDrag={(e) => {
+            if (e.clientY === 0 && e.clientX === 0) return;
+            const edge = 80;
+            const speed = 18;
+            if (e.clientY < edge) window.scrollBy(0, -speed);
+            else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, speed);
+          }}
           onMouseEnter={() => {
             setHovered(true);
             if (!compareMode) {
@@ -1455,6 +1462,13 @@ function ContentCard({
           document.body.appendChild(ghost);
           e.dataTransfer.setDragImage(ghost, 0, 0);
           requestAnimationFrame(() => document.body.removeChild(ghost));
+        }}
+        onDrag={(e) => {
+          if (e.clientY === 0 && e.clientX === 0) return;
+          const edge = 80;
+          const speed = 18;
+          if (e.clientY < edge) window.scrollBy(0, -speed);
+          else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, speed);
         }}
         onMouseEnter={() => {
           setHovered(true);
