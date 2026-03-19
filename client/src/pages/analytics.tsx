@@ -1358,7 +1358,7 @@ export default function AnalyticsPage() {
                             <span className="inline-flex items-center gap-1">
                               {h.label}
                               {ctSortCol === h.col && (
-                                <span className="text-[10px]">{ctSortDir === "asc" ? "↑" : "↓"}</span>
+                                <span className="text-[10px] text-[#00D657]">{ctSortDir === "asc" ? "▲" : "▼"}</span>
                               )}
                             </span>
                           </TableHead>
