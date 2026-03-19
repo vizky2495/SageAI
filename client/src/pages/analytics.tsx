@@ -17,6 +17,9 @@ import {
   ArrowRight,
   Plug,
   Upload,
+  ChevronDown,
+  Check,
+  X,
 } from "lucide-react";
 import {
   Bar,
@@ -106,8 +109,8 @@ export default function AnalyticsPage() {
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
   const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
 
-  const PROMOTED_TYPES = ["Email", "Blog", "PDF / Whitepaper", "Video"];
-  const [selectedContentType, setSelectedContentType] = useState<string>(PROMOTED_TYPES[0]);
+  const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
+  const [ctDropdownOpen, setCtDropdownOpen] = useState(false);
   const [ctSortCol, setCtSortCol] = useState<"sqos" | "pageViews" | "downloads" | "newContacts" | "content" | "stage" | "utmChannel" | "productFranchise">("sqos");
   const [ctSortDir, setCtSortDir] = useState<"asc" | "desc">("desc");
   const [ctPage, setCtPage] = useState(0);
@@ -140,21 +143,23 @@ export default function AnalyticsPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rows]);
 
-  const matchContentType = (ct: string, target: string): boolean => {
-    const low = ct.toLowerCase().trim();
-    const tgt = target.toLowerCase().trim();
-    if (tgt === "pdf / whitepaper") {
-      return low.includes("pdf") || low.includes("whitepaper") || low.includes("white paper");
-    }
-    if (tgt === "email") return low === "email" || low.includes("email ");
-    if (tgt === "blog") return low === "blog" || low.includes("blog ");
-    if (tgt === "video") return low === "video" || low.includes("video ");
-    return low === tgt;
-  };
-
   const ctFiltered = useMemo(() => {
-    return filtered.filter((r) => matchContentType(r.contentType || "", selectedContentType));
-  }, [filtered, selectedContentType]);
+    if (selectedContentTypes.length === 0) return filtered;
+    const selected = new Set(selectedContentTypes.map(t => t.toLowerCase()));
+    return filtered.filter((r) => {
+      const ct = (r.contentType || "").toLowerCase().trim();
+      return selected.has(ct);
+    });
+  }, [filtered, selectedContentTypes]);
+
+  const toggleContentType = (type: string) => {
+    setSelectedContentTypes(prev => {
+      const exists = prev.includes(type);
+      const next = exists ? prev.filter(t => t !== type) : [...prev, type];
+      setCtPage(0);
+      return next;
+    });
+  };
 
   const ctSummaryStats = useMemo(() => ({
     assets: ctFiltered.length,
@@ -887,27 +892,83 @@ export default function AnalyticsPage() {
 
             <TabsContent value="by-content-type" className="mt-4 space-y-4">
               <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-content-type-selector">
-                <div className="flex flex-wrap items-center gap-2">
-                  {PROMOTED_TYPES.map((t) => (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative" ref={(el) => { if (el) el.dataset.ctDropdown = "true"; }}>
                     <button
-                      key={t}
-                      onClick={() => { setSelectedContentType(t); setCtPage(0); }}
-                      className={`px-4 py-1.5 rounded-xl text-sm font-medium border transition-colors ${selectedContentType === t ? "bg-[#00D657]/15 border-[#00D657]/40 text-[#00D657]" : "bg-card/60 border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
-                      data-testid={`tab-ct-${t.replace(/[\s\/]+/g, "-").toLowerCase()}`}
+                      onClick={() => setCtDropdownOpen(o => !o)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-card/60 hover:bg-muted/50 text-sm font-medium transition-colors min-w-[200px]"
+                      data-testid="select-ct-dropdown-trigger"
                     >
-                      {t}
+                      <span className="flex-1 text-left truncate">
+                        {selectedContentTypes.length === 0
+                          ? "All Content Types"
+                          : selectedContentTypes.length === 1
+                            ? selectedContentTypes[0]
+                            : `${selectedContentTypes.length} types selected`}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${ctDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
-                  ))}
-                  <Select value={PROMOTED_TYPES.includes(selectedContentType) ? "__dropdown__" : selectedContentType} onValueChange={(v) => { if (v !== "__dropdown__") { setSelectedContentType(v); setCtPage(0); } }}>
-                    <SelectTrigger className="w-[180px] rounded-xl border bg-card/60 h-9 text-sm" data-testid="select-ct-all-types">
-                      <SelectValue placeholder="All types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allContentTypes.filter(t => !PROMOTED_TYPES.map(p => p.toLowerCase()).includes(t.toLowerCase())).map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {ctDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setCtDropdownOpen(false)} />
+                        <div className="absolute top-full left-0 mt-1 z-50 w-[260px] max-h-[320px] overflow-auto rounded-xl border bg-popover p-1 shadow-lg">
+                          <button
+                            onClick={() => { setSelectedContentTypes([]); setCtPage(0); }}
+                            className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-muted/50 transition-colors ${selectedContentTypes.length === 0 ? "text-[#00D657] font-medium" : "text-muted-foreground"}`}
+                            data-testid="ct-option-all"
+                          >
+                            <div className={`h-4 w-4 rounded border flex items-center justify-center ${selectedContentTypes.length === 0 ? "bg-[#00D657] border-[#00D657]" : "border-border"}`}>
+                              {selectedContentTypes.length === 0 && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            All Content Types
+                          </button>
+                          <div className="h-px bg-border/50 my-1" />
+                          {allContentTypes.map((t) => {
+                            const checked = selectedContentTypes.includes(t);
+                            return (
+                              <button
+                                key={t}
+                                onClick={() => toggleContentType(t)}
+                                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-muted/50 transition-colors ${checked ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                                data-testid={`ct-option-${t.replace(/[\s\/]+/g, "-").toLowerCase()}`}
+                              >
+                                <div className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${checked ? "bg-[#00D657] border-[#00D657]" : "border-border"}`}>
+                                  {checked && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {selectedContentTypes.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedContentTypes.map((t) => (
+                        <span
+                          key={t}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#00D657]/10 border border-[#00D657]/30 text-xs font-medium text-[#00D657]"
+                        >
+                          {t}
+                          <button
+                            onClick={() => toggleContentType(t)}
+                            className="hover:text-foreground transition-colors ml-0.5"
+                            data-testid={`ct-remove-${t.replace(/[\s\/]+/g, "-").toLowerCase()}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
                       ))}
-                    </SelectContent>
-                  </Select>
+                      <button
+                        onClick={() => { setSelectedContentTypes([]); setCtPage(0); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+                        data-testid="ct-clear-all"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -999,7 +1060,7 @@ export default function AnalyticsPage() {
 
               <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ct-top-assets-table">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm font-medium">Content Assets — {selectedContentType}</div>
+                  <div className="text-sm font-medium">Content Assets{selectedContentTypes.length > 0 ? ` — ${selectedContentTypes.join(", ")}` : ""}</div>
                   <Badge variant="secondary" className="rounded-xl">{ctSortedAssets.length} assets</Badge>
                 </div>
                 <div className="overflow-auto">
@@ -1048,7 +1109,7 @@ export default function AnalyticsPage() {
                       {ctPagedAssets.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
-                            No assets found for "{selectedContentType}"
+                            No assets found{selectedContentTypes.length > 0 ? ` for "${selectedContentTypes.join(", ")}"` : ""}
                           </TableCell>
                         </TableRow>
                       )}
