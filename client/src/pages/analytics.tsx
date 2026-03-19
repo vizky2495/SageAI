@@ -818,8 +818,8 @@ export default function AnalyticsPage() {
                               <td className="text-right px-3 py-2.5 tabular-nums font-semibold">{formatCompact(d.sqos)}</td>
                               <td className="px-3 py-2.5">
                                 {total > 0 ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="flex gap-px h-[14px] rounded-md overflow-hidden flex-1 min-w-[80px]">
+                                  <div className="group/pill relative">
+                                    <div className="flex gap-px h-[20px] rounded-md overflow-hidden min-w-[100px]">
                                       {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
                                         const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
                                         const pct = (val / total) * 100;
@@ -827,14 +827,32 @@ export default function AnalyticsPage() {
                                         return (
                                           <div
                                             key={stage}
-                                            className="h-full"
-                                            style={{ width: `${pct}%`, backgroundColor: stageColors[stage] }}
-                                            title={`${stage}: ${val} (${Math.round(pct)}%)`}
-                                          />
+                                            className="h-full flex items-center justify-center"
+                                            style={{ width: `${pct}%`, backgroundColor: stageColors[stage], minWidth: val > 0 ? "24px" : 0 }}
+                                          >
+                                            <span className="text-[9px] font-bold text-white leading-none drop-shadow-sm">{val}</span>
+                                          </div>
                                         );
                                       })}
                                     </div>
-                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap w-[42px] text-right">{d.tofu}/{d.mofu}/{d.bofu}</span>
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/pill:block z-50">
+                                      <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-[11px] whitespace-nowrap">
+                                        <div className="font-medium mb-1">{d.key} — {total} content</div>
+                                        {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                                          const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
+                                          if (val === 0) return null;
+                                          const pct = Math.round((val / total) * 100);
+                                          return (
+                                            <div key={stage} className="flex items-center gap-2 py-0.5">
+                                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: stageColors[stage] }} />
+                                              <span>{stage}</span>
+                                              <span className="font-semibold ml-auto pl-3">{val}</span>
+                                              <span className="text-muted-foreground">({pct}%)</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
