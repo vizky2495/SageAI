@@ -592,12 +592,12 @@ export default function AnalyticsPage() {
               )}
             </div>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm font-medium" data-testid="text-filters">Filters & views</div>
-              </div>
+            <Card className="rounded-2xl border bg-card/70 px-4 py-2.5 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="flex items-center gap-1.5 mr-1">
+                  <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium" data-testid="text-filters">Filters</span>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Stage</span>
                   <Select value={stageFilter} onValueChange={(v) => setStageFilter(v as FunnelStage | "ALL")}>
