@@ -214,6 +214,8 @@ export default function AnalyticsPage() {
   const [showAllIndustries, setShowAllIndustries] = useState(false);
   const [mixTab, setMixTab] = useState<"channel" | "product" | "industry">("channel");
   const [mixSearch, setMixSearch] = useState("");
+  const [mixSortCol, setMixSortCol] = useState<"count" | "views" | "leads" | "downloads" | "sqos" | "convRate">("sqos");
+  const [mixSortDir, setMixSortDir] = useState<"asc" | "desc">("desc");
 
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [ctDropdownOpen, setCtDropdownOpen] = useState(false);
@@ -745,7 +747,17 @@ export default function AnalyticsPage() {
             ];
             const rawData = mixTab === "channel" ? dimensionData : mixTab === "product" ? productMixData : industryMixData;
             const searchLower = mixSearch.trim().toLowerCase();
-            const activeData = searchLower ? rawData.filter(d => d.key.toLowerCase().includes(searchLower)) : rawData;
+            const searchedData = searchLower ? rawData.filter(d => d.key.toLowerCase().includes(searchLower)) : rawData;
+            const getConvRate = (d: { sqos: number; views: number }) => d.views > 0 ? (d.sqos / d.views) * 100 : 0;
+            const sortedData = [...searchedData].sort((a, b) => {
+              let aVal: number, bVal: number;
+              if (mixSortCol === "convRate") { aVal = getConvRate(a); bVal = getConvRate(b); }
+              else { aVal = a[mixSortCol]; bVal = b[mixSortCol]; }
+              return mixSortDir === "desc" ? bVal - aVal : aVal - bVal;
+            });
+            const convRates = sortedData.filter(d => d.views > 0).map(d => getConvRate(d)).sort((a, b) => a - b);
+            const q1Threshold = convRates.length >= 4 ? convRates[Math.floor(convRates.length * 0.25)] : 0;
+            const q3Threshold = convRates.length >= 4 ? convRates[Math.floor(convRates.length * 0.75)] : Infinity;
             const expandedSet = mixTab === "channel" ? expandedChannels : mixTab === "product" ? expandedProducts : expandedIndustries;
             const setExpandedSet = mixTab === "channel" ? setExpandedChannels : mixTab === "product" ? setExpandedProducts : setExpandedIndustries;
             const showAll = mixTab === "channel" ? showAllChannels : mixTab === "product" ? showAllProducts : showAllIndustries;
@@ -766,7 +778,19 @@ export default function AnalyticsPage() {
               else setIndustryStageExpand(null);
             };
             const stageContentIds = mixTab === "channel" ? channelStageContentIds : mixTab === "product" ? productStageContentIds : industryStageContentIds;
-            const visible = searchLower ? activeData : (showAll ? activeData : activeData.slice(0, 8));
+            const visible = searchLower ? sortedData : (showAll ? sortedData : sortedData.slice(0, 8));
+            const handleMixSort = (col: typeof mixSortCol) => {
+              if (mixSortCol === col) setMixSortDir(d => d === "asc" ? "desc" : "asc");
+              else { setMixSortCol(col); setMixSortDir("desc"); }
+            };
+            const mixHeaders: { col: typeof mixSortCol; label: string }[] = [
+              { col: "count", label: "Assets" },
+              { col: "views", label: "Page Views" },
+              { col: "leads", label: "Leads" },
+              { col: "downloads", label: "Downloads" },
+              { col: "sqos", label: "SQOs" },
+              { col: "convRate", label: "Conv." },
+            ];
 
             return (
               <Card className="rounded-2xl border bg-card/70 shadow-sm backdrop-blur overflow-hidden" data-testid="card-mix-panel">
@@ -812,11 +836,19 @@ export default function AnalyticsPage() {
                     <thead>
                       <tr className="border-b border-border/30 text-muted-foreground">
                         <th className="text-left font-medium px-4 py-2.5 min-w-[200px]">Name</th>
-                        <th className="text-right font-medium px-3 py-2.5 whitespace-nowrap">Assets</th>
-                        <th className="text-right font-medium px-3 py-2.5 whitespace-nowrap">Page Views</th>
-                        <th className="text-right font-medium px-3 py-2.5 whitespace-nowrap">Leads</th>
-                        <th className="text-right font-medium px-3 py-2.5 whitespace-nowrap">Downloads</th>
-                        <th className="text-right font-medium px-3 py-2.5 whitespace-nowrap">SQOs</th>
+                        {mixHeaders.map((h) => (
+                          <th
+                            key={h.col}
+                            className="text-right font-medium px-3 py-2.5 whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors"
+                            onClick={() => handleMixSort(h.col)}
+                            data-testid={`mix-th-${h.col}`}
+                          >
+                            <span className="inline-flex items-center gap-1 justify-end">
+                              {h.label}
+                              {mixSortCol === h.col && <span className="text-[10px] text-[#00D657]">{mixSortDir === "asc" ? "▲" : "▼"}</span>}
+                            </span>
+                          </th>
+                        ))}
                         <th className="font-medium px-3 py-2.5 min-w-[140px]">Stage Split</th>
                       </tr>
                     </thead>
@@ -826,16 +858,24 @@ export default function AnalyticsPage() {
                         const isExpanded = expandedSet.has(d.key);
                         const total = d.tofu + d.mofu + d.bofu;
                         const activeStage = stageExpand?.key === d.key ? (["TOFU", "MOFU", "BOFU"] as const).find(s => stageExpand?.stage === s) : undefined;
+                        const conv = getConvRate(d);
+                        const convStr = d.views > 0 ? `${conv.toFixed(1)}%` : "—";
+                        const convColor = d.views > 0 && convRates.length >= 4
+                          ? conv >= q3Threshold ? "text-[#00D657] font-semibold" : conv <= q1Threshold ? "text-amber-400" : ""
+                          : "";
+                        const viewsPerAsset = d.count > 0 ? (d.views / d.count).toFixed(1) : "—";
+                        const sqosPerAsset = d.count > 0 ? (d.sqos / d.count).toFixed(1) : "—";
+                        const leadToSqo = d.leads > 0 ? `${((d.sqos / d.leads) * 100).toFixed(1)}%` : "—";
                         return (
                           <React.Fragment key={d.key}>
                             <tr
-                              className={`border-b border-border/20 transition-colors cursor-pointer ${isExpanded ? "bg-card/80" : "hover:bg-muted/20"}`}
+                              className={`border-b border-border/20 transition-colors cursor-pointer ${isExpanded ? "bg-muted/15" : "hover:bg-muted/10"}`}
                               onClick={() => toggleSet(expandedSet, d.key, setExpandedSet)}
                               data-testid={`row-${mixTab}-${slug}`}
                             >
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-2">
-                                  <ChevronRight className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                  <ChevronRight className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
                                   <span className="font-medium truncate max-w-[260px]" title={d.key}>{d.key}</span>
                                 </div>
                               </td>
@@ -844,6 +884,7 @@ export default function AnalyticsPage() {
                               <td className="text-right px-3 py-2.5 tabular-nums">{formatCompact(d.leads)}</td>
                               <td className="text-right px-3 py-2.5 tabular-nums">{formatCompact(d.downloads)}</td>
                               <td className="text-right px-3 py-2.5 tabular-nums font-semibold">{formatCompact(d.sqos)}</td>
+                              <td className={`text-right px-3 py-2.5 tabular-nums ${convColor}`}>{convStr}</td>
                               <td className="px-3 py-2.5">
                                 {total > 0 ? (
                                   <div className="group/pill relative">
@@ -890,60 +931,76 @@ export default function AnalyticsPage() {
 
                             {isExpanded && (
                               <tr data-testid={`expanded-${mixTab}-${slug}`}>
-                                <td colSpan={7} className="px-4 py-2 bg-muted/10">
-                                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                                    {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
-                                      const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
-                                      if (val === 0) return null;
-                                      const active = activeStage === stage;
-                                      return (
-                                        <button
-                                          key={stage}
-                                          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors cursor-pointer hover:opacity-80 ${active ? "ring-1 ring-offset-1" : ""}`}
-                                          style={{ backgroundColor: stageColors[stage] + "20", color: stageColors[stage] }}
-                                          onClick={(e) => { e.stopPropagation(); setStageExpand(d.key, stage); }}
-                                          data-testid={`btn-${mixTab}-stage-${slug}-${stage.toLowerCase()}`}
-                                        >
-                                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageColors[stage] }} />
-                                          {val} {stage}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-
-                                  {activeStage && (
-                                    <div className="rounded-xl border bg-card/40 p-3" data-testid={`drilldown-${mixTab}-${slug}-${activeStage.toLowerCase()}`}>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <Badge className="text-xs" style={{ backgroundColor: stageColors[activeStage] + "20", color: stageColors[activeStage] }}>{activeStage}</Badge>
-                                          <span className="text-xs text-muted-foreground">{stageContentIds.length} content {stageContentIds.length === 1 ? "asset" : "assets"}</span>
-                                        </div>
-                                        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); clearStageExpand(); }} data-testid={`btn-close-${mixTab}-drilldown`}>Close</button>
-                                      </div>
-                                      <div className="max-h-[180px] overflow-y-auto space-y-1">
-                                        {stageContentIds.map((item, idx) => (
-                                          <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixTab}-drilldown-item-${idx}`}>
-                                            <button
-                                              className="min-w-0 flex-1 font-medium break-all text-left text-[#00D657] hover:underline cursor-pointer"
-                                              title={`View ${item.content} in Content Library`}
-                                              onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content)}`); }}
-                                              data-testid={`link-content-${idx}`}
-                                            >{item.content}</button>
-                                            <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                              {mixTab === "channel" && item.product && <span>{item.product}</span>}
-                                              {mixTab === "product" && item.channel && <span>{item.channel}</span>}
-                                              {mixTab === "industry" && item.channel && <span>{item.channel}</span>}
-                                              {item.views > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>)}
-                                              {item.leads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.leads)} leads</span></>)}
-                                              {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} PDFs</span></>)}
-                                              {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
-                                            </div>
-                                          </div>
-                                        ))}
-                                        {stageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
-                                      </div>
+                                <td colSpan={8} className="px-4 py-3 bg-muted/[0.07] border-b border-border/20">
+                                  <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                                        const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
+                                        if (val === 0) return null;
+                                        const active = activeStage === stage;
+                                        return (
+                                          <button
+                                            key={stage}
+                                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors cursor-pointer hover:opacity-80 ${active ? "ring-1 ring-offset-1" : ""}`}
+                                            style={{ backgroundColor: stageColors[stage] + "20", color: stageColors[stage] }}
+                                            onClick={(e) => { e.stopPropagation(); setStageExpand(d.key, stage); }}
+                                            data-testid={`btn-${mixTab}-stage-${slug}-${stage.toLowerCase()}`}
+                                          >
+                                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageColors[stage] }} />
+                                            {val} {stage}
+                                          </button>
+                                        );
+                                      })}
                                     </div>
-                                  )}
+
+                                    <div className="flex flex-wrap gap-3">
+                                      {[
+                                        { label: "Conv. Rate", value: convStr, highlight: d.views > 0 && conv >= q3Threshold },
+                                        { label: "Views / Asset", value: viewsPerAsset, highlight: false },
+                                        { label: "SQOs / Asset", value: sqosPerAsset, highlight: false },
+                                        { label: "Lead → SQO", value: leadToSqo, highlight: false },
+                                      ].map((m) => (
+                                        <div key={m.label} className="rounded-lg border border-border/30 bg-card/40 px-3 py-2 min-w-[100px]" data-testid={`mix-metric-${m.label.replace(/[\s\/→]+/g, "-").toLowerCase()}`}>
+                                          <div className={`text-sm font-semibold tabular-nums ${m.highlight ? "text-[#00D657]" : ""}`}>{m.value}</div>
+                                          <div className="text-[10px] text-muted-foreground mt-0.5">{m.label}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {activeStage && (
+                                      <div className="rounded-xl border bg-card/40 p-3" data-testid={`drilldown-${mixTab}-${slug}-${activeStage.toLowerCase()}`}>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2">
+                                            <Badge className="text-xs" style={{ backgroundColor: stageColors[activeStage] + "20", color: stageColors[activeStage] }}>{activeStage}</Badge>
+                                            <span className="text-xs text-muted-foreground">{stageContentIds.length} content {stageContentIds.length === 1 ? "asset" : "assets"}</span>
+                                          </div>
+                                          <button className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); clearStageExpand(); }} data-testid={`btn-close-${mixTab}-drilldown`}>Close</button>
+                                        </div>
+                                        <div className="max-h-[180px] overflow-y-auto space-y-1">
+                                          {stageContentIds.map((item, idx) => (
+                                            <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixTab}-drilldown-item-${idx}`}>
+                                              <button
+                                                className="min-w-0 flex-1 font-medium break-all text-left text-[#00D657] hover:underline cursor-pointer"
+                                                title={`View ${item.content} in Content Library`}
+                                                onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content)}`); }}
+                                                data-testid={`link-content-${idx}`}
+                                              >{item.content}</button>
+                                              <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
+                                                {mixTab === "channel" && item.product && <span>{item.product}</span>}
+                                                {mixTab === "product" && item.channel && <span>{item.channel}</span>}
+                                                {mixTab === "industry" && item.channel && <span>{item.channel}</span>}
+                                                {item.views > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>)}
+                                                {item.leads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.leads)} leads</span></>)}
+                                                {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} PDFs</span></>)}
+                                                {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
+                                              </div>
+                                            </div>
+                                          ))}
+                                          {stageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             )}
@@ -954,19 +1011,19 @@ export default function AnalyticsPage() {
                   </table>
                 </div>
 
-                {activeData.length === 0 && searchLower && (
+                {sortedData.length === 0 && searchLower && (
                   <div className="px-4 py-8 text-center text-xs text-muted-foreground" data-testid="mix-search-empty">
                     No {mixTab}s matching "{mixSearch.trim()}"
                   </div>
                 )}
-                {!searchLower && activeData.length > 8 && (
+                {!searchLower && sortedData.length > 8 && (
                   <div className="border-t border-border/30 px-4 py-2">
                     <button
                       className="w-full text-center text-xs text-[#00D657] hover:underline py-1 cursor-pointer"
                       onClick={() => setShowAll((v: boolean) => !v)}
                       data-testid={`btn-view-all-${mixTab}`}
                     >
-                      {showAll ? "Show top 8" : `View all ${activeData.length}`}
+                      {showAll ? "Show top 8" : `View all ${sortedData.length}`}
                     </button>
                   </div>
                 )}

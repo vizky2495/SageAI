@@ -1,0 +1,64 @@
+# Improve Channel / Product / Industry Mix View — Replit Prompt
+
+## Context
+The Deep Dive Analytics section has a tabbed view (Channel | Product | Industry) showing a table with expandable rows. Each row shows: Name, Assets, Page Views, Leads, Downloads, SQOs, and a Stage Split stacked bar. Clicking a row expands it to show TOFU/MOFU/BOFU badge pills. This expanded state needs to be more useful.
+
+## Changes Needed
+
+### 1. Make Column Headers Sortable
+- All numeric columns (Assets, Page Views, Leads, Downloads, SQOs) should be sortable by clicking the column header
+- Show a sort direction arrow (▲/▼) next to the active sort column
+- Default sort: SQOs descending
+- Clicking the same column toggles between ascending and descending
+
+### 2. Add Conversion Rate Column
+- Add a new column called "Conv. Rate" between SQOs and Stage Split
+- Calculate as: (SQOs / Page Views) × 100, displayed as a percentage (e.g., "12.3%")
+- If Page Views is 0, show "—" instead of a percentage
+- This column should also be sortable
+- Highlight rows with unusually high conversion rates (top quartile) with a subtle green tint or green text on the percentage, and unusually low rates (bottom quartile) with amber/orange text — this makes efficiency stand out at a glance
+
+### 3. Enrich the Expanded Row
+When a row is expanded, show more than just the stage pills. Redesign the expanded area to include:
+
+**A. Efficiency Metrics Row** — a small row of inline stat cards:
+- Conversion Rate: SQOs / Page Views as percentage
+- Views per Asset: Page Views / Assets (shows content efficiency)
+- SQOs per Asset: SQOs / Assets (shows which products/channels generate more value per piece of content)
+- Lead-to-SQO Rate: SQOs / Leads as percentage (shows lead quality)
+
+Style these as compact inline metrics — small number with a label below, arranged horizontally. Not full stat cards, just subtle inline stats within the expanded row.
+
+**B. Monthly Trend Mini-Chart** (if time-series data exists in the engagement data):
+- Show a small sparkline or compact line chart showing Page Views and SQOs over the last 6-12 months for this specific channel/product/industry
+- If time-series data is not available in the current data model, skip this and add a placeholder note: "Trend data available when time-series engagement data is uploaded"
+- Keep the chart small — roughly 300px wide × 100px tall, inline within the expanded row
+
+**C. Keep the Stage Split Pills** — the existing TOFU/MOFU/BOFU badges should remain but move them to sit alongside the efficiency metrics, not as the sole expanded content
+
+### 4. Layout of Expanded Row
+```
+┌─────────────────────────────────────────────────────────┐
+│  ▼ Accounting    56    4.7K    4.5K    33    3.9K  82.9%│  ← main row
+├─────────────────────────────────────────────────────────┤
+│  ● 21 TOFU  ● 7 MOFU  ● 28 BOFU                       │
+│                                                         │
+│  Conv. Rate    Views/Asset    SQOs/Asset    Lead→SQO    │
+│    82.9%         83.9          69.6          86.7%       │
+│                                                         │
+│  [Monthly Trend Chart ~~~~~~~~]                         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 5. Visual Polish
+- Add subtle row hover effect (slightly lighter background) on non-expanded rows to indicate they're clickable
+- The expanded section should have a slightly different background shade (e.g., #141414) to visually separate it from the collapsed rows
+- Animate the expand/collapse with a smooth height transition (200-300ms ease)
+- Keep the existing dark theme and Sage branding
+
+## Do NOT Change
+- Keep the tab navigation (Channel | Product | Industry) with counts as-is
+- Keep the search functionality as-is
+- Keep the Stage Split stacked bar column as-is
+- Keep the existing stage badge colors (green for TOFU, teal for MOFU, purple for BOFU)
