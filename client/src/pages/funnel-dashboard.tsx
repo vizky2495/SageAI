@@ -579,8 +579,6 @@ export default function FunnelDashboard() {
             </div>
           )}
 
-          <RecentFeedbackSection />
-
           <div className="grid gap-4 md:grid-cols-2">
             <Link href="/analytics" data-testid="link-analytics-page-from-performance">
               <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
