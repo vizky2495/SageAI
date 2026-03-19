@@ -106,6 +106,13 @@ export default function AnalyticsPage() {
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
   const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
 
+  const PROMOTED_TYPES = ["Email", "Blog", "PDF / Whitepaper", "Video"];
+  const [selectedContentType, setSelectedContentType] = useState<string>(PROMOTED_TYPES[0]);
+  const [ctSortCol, setCtSortCol] = useState<"sqos" | "pageViews" | "downloads" | "newContacts" | "content" | "stage" | "utmChannel" | "productFranchise">("sqos");
+  const [ctSortDir, setCtSortDir] = useState<"asc" | "desc">("desc");
+  const [ctPage, setCtPage] = useState(0);
+  const CT_PAGE_SIZE = 20;
+
   const campaignList = useMemo(() => {
     const s = new Set<string>();
     for (const r of rows) {
@@ -124,6 +131,90 @@ export default function AnalyticsPage() {
     }
     return result;
   }, [rows, stageFilter, contentTypeFilter, campaignFilter]);
+
+  const allContentTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.contentType) set.add(r.contentType);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  const matchContentType = (ct: string, target: string): boolean => {
+    const low = ct.toLowerCase().trim();
+    const tgt = target.toLowerCase().trim();
+    if (tgt === "pdf / whitepaper") {
+      return low.includes("pdf") || low.includes("whitepaper") || low.includes("white paper");
+    }
+    if (tgt === "email") return low === "email" || low.includes("email ");
+    if (tgt === "blog") return low === "blog" || low.includes("blog ");
+    if (tgt === "video") return low === "video" || low.includes("video ");
+    return low === tgt;
+  };
+
+  const ctFiltered = useMemo(() => {
+    return filtered.filter((r) => matchContentType(r.contentType || "", selectedContentType));
+  }, [filtered, selectedContentType]);
+
+  const ctSummaryStats = useMemo(() => ({
+    assets: ctFiltered.length,
+    views: sum(ctFiltered, "pageViews"),
+    downloads: sum(ctFiltered, "downloads"),
+    sqos: sum(ctFiltered, "sqos"),
+  }), [ctFiltered]);
+
+  const ctStageData = useMemo(() => {
+    const stages: Record<string, { count: number; views: number; downloads: number; leads: number; sqos: number }> = {};
+    for (const s of ["TOFU", "MOFU", "BOFU", "UNKNOWN"]) {
+      stages[s] = { count: 0, views: 0, downloads: 0, leads: 0, sqos: 0 };
+    }
+    for (const r of ctFiltered) {
+      const s = stages[r.stage] || stages.UNKNOWN;
+      s.count += 1;
+      s.views += r.pageViews ?? 0;
+      s.downloads += r.downloads ?? 0;
+      s.leads += r.newContacts ?? 0;
+      s.sqos += r.sqos ?? 0;
+    }
+    return stages;
+  }, [ctFiltered]);
+
+  const ctSortedAssets = useMemo(() => {
+    const sorted = [...ctFiltered].sort((a, b) => {
+      let av: any, bv: any;
+      if (ctSortCol === "content") { av = a.content || ""; bv = b.content || ""; }
+      else if (ctSortCol === "stage") { av = a.stage; bv = b.stage; }
+      else if (ctSortCol === "utmChannel") { av = a.utmChannel || ""; bv = b.utmChannel || ""; }
+      else if (ctSortCol === "productFranchise") { av = a.productFranchise || ""; bv = b.productFranchise || ""; }
+      else { av = (a as any)[ctSortCol] ?? 0; bv = (b as any)[ctSortCol] ?? 0; }
+      if (typeof av === "string") return ctSortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return ctSortDir === "asc" ? av - bv : bv - av;
+    });
+    return sorted;
+  }, [ctFiltered, ctSortCol, ctSortDir]);
+
+  const ctTotalPages = Math.max(1, Math.ceil(ctSortedAssets.length / CT_PAGE_SIZE));
+  const ctSafePage = Math.min(ctPage, ctTotalPages - 1);
+  const ctPagedAssets = useMemo(() => ctSortedAssets.slice(ctSafePage * CT_PAGE_SIZE, (ctSafePage + 1) * CT_PAGE_SIZE), [ctSortedAssets, ctSafePage]);
+
+  const ctChannelBreakdown = useMemo(() => {
+    const roll = new Map<string, { channel: string; count: number; views: number; sqos: number }>();
+    for (const r of ctFiltered) {
+      const ch = r.utmChannel || "(unattributed)";
+      const cur = roll.get(ch) || { channel: ch, count: 0, views: 0, sqos: 0 };
+      cur.count += 1;
+      cur.views += r.pageViews ?? 0;
+      cur.sqos += r.sqos ?? 0;
+      roll.set(ch, cur);
+    }
+    return Array.from(roll.values()).sort((a, b) => b.views - a.views);
+  }, [ctFiltered]);
+
+  const handleCtSort = (col: typeof ctSortCol) => {
+    if (ctSortCol === col) setCtSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setCtSortCol(col); setCtSortDir("desc"); }
+    setCtPage(0);
+  };
 
   const byStage = useMemo(() => {
     const groups: Record<FunnelStage, NormalizedRow[]> = { TOFU: [], MOFU: [], BOFU: [], UNKNOWN: [] };
@@ -694,12 +785,15 @@ export default function AnalyticsPage() {
           </div>
 
           <Tabs defaultValue="cta-analysis" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+            <TabsList className="grid w-full grid-cols-3 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
               <TabsTrigger value="cta-analysis" className="rounded-xl" data-testid="tab-cta-analysis">
                 <Filter className="mr-2 h-4 w-4" />CTA Analysis
               </TabsTrigger>
               <TabsTrigger value="top-content" className="rounded-xl" data-testid="tab-top-content">
                 <TableIcon className="mr-2 h-4 w-4" />Top content
+              </TabsTrigger>
+              <TabsTrigger value="by-content-type" className="rounded-xl" data-testid="tab-by-content-type">
+                <BarChart3 className="mr-2 h-4 w-4" />By Content Type
               </TabsTrigger>
             </TabsList>
 
@@ -789,6 +883,220 @@ export default function AnalyticsPage() {
                   );
                 })}
               </div>
+            </TabsContent>
+
+            <TabsContent value="by-content-type" className="mt-4 space-y-4">
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-content-type-selector">
+                <div className="flex flex-wrap items-center gap-2">
+                  {PROMOTED_TYPES.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setSelectedContentType(t); setCtPage(0); }}
+                      className={`px-4 py-1.5 rounded-xl text-sm font-medium border transition-colors ${selectedContentType === t ? "bg-[#00D657]/15 border-[#00D657]/40 text-[#00D657]" : "bg-card/60 border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`tab-ct-${t.replace(/[\s\/]+/g, "-").toLowerCase()}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                  <Select value={PROMOTED_TYPES.includes(selectedContentType) ? "__dropdown__" : selectedContentType} onValueChange={(v) => { if (v !== "__dropdown__") { setSelectedContentType(v); setCtPage(0); } }}>
+                    <SelectTrigger className="w-[180px] rounded-xl border bg-card/60 h-9 text-sm" data-testid="select-ct-all-types">
+                      <SelectValue placeholder="All types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allContentTypes.filter(t => !PROMOTED_TYPES.map(p => p.toLowerCase()).includes(t.toLowerCase())).map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </Card>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="ct-summary-stats">
+                {[
+                  { label: "Total Assets", value: ctSummaryStats.assets, icon: "📄" },
+                  { label: "Page Views", value: ctSummaryStats.views, icon: "👁" },
+                  { label: "Downloads", value: ctSummaryStats.downloads, icon: "⬇" },
+                  { label: "SQOs", value: ctSummaryStats.sqos, icon: "🎯" },
+                ].map((stat) => (
+                  <Card key={stat.label} className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid={`ct-stat-${stat.label.replace(/\s+/g, "-").toLowerCase()}`}>
+                    <div className="text-2xl font-bold">{formatCompact(stat.value)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{stat.label}</div>
+                  </Card>
+                ))}
+              </div>
+
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ct-stage-distribution">
+                <div className="text-sm font-medium mb-3">Stage Distribution</div>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="flex gap-1 h-8 rounded-lg overflow-hidden border">
+                      {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                        const val = ctStageData[stage]?.count ?? 0;
+                        const known = (ctStageData.TOFU?.count ?? 0) + (ctStageData.MOFU?.count ?? 0) + (ctStageData.BOFU?.count ?? 0);
+                        const pctVal = known > 0 ? (val / known) * 100 : 0;
+                        if (pctVal === 0) return null;
+                        const colors: Record<string, string> = { TOFU: "bg-[#00D657]", MOFU: "bg-[#4ECDC4]", BOFU: "bg-[#9B59B6]" };
+                        return (
+                          <div
+                            key={stage}
+                            className={`${colors[stage]} flex items-center justify-center text-[10px] font-semibold text-white`}
+                            style={{ width: `${pctVal}%`, minWidth: pctVal > 0 ? "32px" : 0 }}
+                            data-testid={`ct-stage-bar-${stage.toLowerCase()}`}
+                          >
+                            {pctVal >= 8 ? `${stage} ${Math.round(pctVal)}%` : stage}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
+                      {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                        const val = ctStageData[stage]?.count ?? 0;
+                        if (val === 0) return null;
+                        const dots: Record<string, string> = { TOFU: "bg-[#00D657]", MOFU: "bg-[#4ECDC4]", BOFU: "bg-[#9B59B6]" };
+                        return (
+                          <span key={stage} className="flex items-center gap-1.5">
+                            <span className={`h-2 w-2 rounded-full ${dots[stage]}`} />
+                            {stage}: {val} assets
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Stage</TableHead>
+                            <TableHead className="text-right text-xs">Views</TableHead>
+                            <TableHead className="text-right text-xs">Downloads</TableHead>
+                            <TableHead className="text-right text-xs">Leads</TableHead>
+                            <TableHead className="text-right text-xs">SQOs</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                            const d = ctStageData[stage];
+                            if (!d || d.count === 0) return null;
+                            return (
+                              <TableRow key={stage} data-testid={`ct-stage-row-${stage.toLowerCase()}`}>
+                                <TableCell>
+                                  <Badge className={`text-[10px] ${stageMeta[stage as StageKey]?.tone || ""}`}>{stage}</Badge>
+                                </TableCell>
+                                <TableCell className="text-right text-sm">{formatCompact(d.views)}</TableCell>
+                                <TableCell className="text-right text-sm">{formatCompact(d.downloads)}</TableCell>
+                                <TableCell className="text-right text-sm">{formatCompact(d.leads)}</TableCell>
+                                <TableCell className="text-right text-sm font-[650]">{formatCompact(d.sqos)}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ct-top-assets-table">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm font-medium">Content Assets — {selectedContentType}</div>
+                  <Badge variant="secondary" className="rounded-xl">{ctSortedAssets.length} assets</Badge>
+                </div>
+                <div className="overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {([
+                          { col: "content" as const, label: "Asset Title" },
+                          { col: "stage" as const, label: "Stage" },
+                          { col: "utmChannel" as const, label: "Channel" },
+                          { col: "productFranchise" as const, label: "Product" },
+                          { col: "pageViews" as const, label: "Page Views" },
+                          { col: "downloads" as const, label: "Downloads" },
+                          { col: "newContacts" as const, label: "Leads" },
+                          { col: "sqos" as const, label: "SQOs" },
+                        ]).map((h) => (
+                          <TableHead
+                            key={h.col}
+                            className={`cursor-pointer select-none hover:text-foreground transition-colors ${h.col !== "content" && h.col !== "stage" && h.col !== "utmChannel" && h.col !== "productFranchise" ? "text-right" : ""}`}
+                            onClick={() => handleCtSort(h.col)}
+                            data-testid={`ct-th-${h.col}`}
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              {h.label}
+                              {ctSortCol === h.col && (
+                                <span className="text-[10px]">{ctSortDir === "asc" ? "↑" : "↓"}</span>
+                              )}
+                            </span>
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ctPagedAssets.map((r, idx) => (
+                        <TableRow key={`${r.content}-${idx}`} className="hover:bg-muted/30" data-testid={`ct-row-${idx}`}>
+                          <TableCell><div className="max-w-[260px] truncate text-sm font-medium">{r.content || "(untitled)"}</div></TableCell>
+                          <TableCell><Badge className={`text-[10px] ${stageMeta[r.stage as StageKey]?.tone || ""}`}>{r.stage}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{r.utmChannel || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{r.productFranchise || "—"}</TableCell>
+                          <TableCell className="text-right text-sm">{formatCompact(r.pageViews ?? 0)}</TableCell>
+                          <TableCell className="text-right text-sm">{formatCompact(r.downloads ?? 0)}</TableCell>
+                          <TableCell className="text-right text-sm">{formatCompact(r.newContacts ?? 0)}</TableCell>
+                          <TableCell className="text-right text-sm font-[650]">{formatCompact(r.sqos ?? 0)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {ctPagedAssets.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                            No assets found for "{selectedContentType}"
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                {ctTotalPages > 1 && (
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
+                    <div className="text-xs text-muted-foreground">
+                      Page {ctSafePage + 1} of {ctTotalPages} ({ctSortedAssets.length} assets)
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" disabled={ctSafePage === 0} onClick={() => setCtPage(p => Math.max(0, p - 1))} data-testid="ct-page-prev">Prev</Button>
+                      <Button variant="outline" size="sm" disabled={ctSafePage >= ctTotalPages - 1} onClick={() => setCtPage(p => p + 1)} data-testid="ct-page-next">Next</Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ct-channel-breakdown">
+                <div className="text-sm font-medium mb-3">Channel Breakdown</div>
+                <div className="space-y-2">
+                  {ctChannelBreakdown.map((ch) => {
+                    const maxViews = ctChannelBreakdown[0]?.views || 1;
+                    return (
+                      <div key={ch.channel} className="flex items-center gap-3" data-testid={`ct-channel-${ch.channel.replace(/\s+/g, "-").toLowerCase()}`}>
+                        <div className="w-[140px] truncate text-sm font-medium shrink-0">{ch.channel}</div>
+                        <div className="flex-1 h-6 rounded-lg overflow-hidden bg-muted/30 border relative">
+                          <div
+                            className="h-full bg-[#00D657]/25 rounded-lg transition-all"
+                            style={{ width: `${Math.max((ch.views / maxViews) * 100, 2)}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center px-2 text-[10px] font-medium">
+                            {formatCompact(ch.views)} views
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                          <span>{ch.count} assets</span>
+                          <span className="font-medium text-foreground">{formatCompact(ch.sqos)} SQOs</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {ctChannelBreakdown.length === 0 && (
+                    <div className="text-center text-sm text-muted-foreground py-6">No channel data for this content type.</div>
+                  )}
+                </div>
+              </Card>
             </TabsContent>
           </Tabs>
         </motion.div>
