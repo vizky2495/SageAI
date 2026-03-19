@@ -614,23 +614,6 @@ export default function FunnelDashboard() {
               </Card>
             </Link>
 
-            <Link href="/content-library" data-testid="link-content-comparison-from-performance">
-              <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl border bg-card shadow-sm">
-                    <ArrowLeftRight className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-[650]">Content Comparison</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      Compare 2–5 content pieces side-by-side with AI-powered resonance analysis
-                    </div>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-foreground" />
-                </div>
-              </Card>
-            </Link>
-
             <Link href="/reports" data-testid="link-my-reports-from-performance">
               <Card className="group rounded-2xl border bg-card/70 p-5 shadow-sm backdrop-blur transition hover:shadow-md hover:border-primary/30 cursor-pointer h-full">
                 <div className="flex items-center gap-3">
