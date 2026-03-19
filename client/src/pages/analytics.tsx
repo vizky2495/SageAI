@@ -117,6 +117,7 @@ export default function AnalyticsPage() {
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [showAllIndustries, setShowAllIndustries] = useState(false);
   const [mixTab, setMixTab] = useState<"channel" | "product" | "industry">("channel");
+  const [mixSearch, setMixSearch] = useState("");
 
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [ctDropdownOpen, setCtDropdownOpen] = useState(false);
@@ -617,7 +618,9 @@ export default function AnalyticsPage() {
               { id: "product", label: "Product", count: productMixData.length },
               { id: "industry", label: "Industry", count: industryMixData.length },
             ];
-            const activeData = mixTab === "channel" ? dimensionData : mixTab === "product" ? productMixData : industryMixData;
+            const rawData = mixTab === "channel" ? dimensionData : mixTab === "product" ? productMixData : industryMixData;
+            const searchLower = mixSearch.trim().toLowerCase();
+            const activeData = searchLower ? rawData.filter(d => d.key.toLowerCase().includes(searchLower)) : rawData;
             const expandedSet = mixTab === "channel" ? expandedChannels : mixTab === "product" ? expandedProducts : expandedIndustries;
             const setExpandedSet = mixTab === "channel" ? setExpandedChannels : mixTab === "product" ? setExpandedProducts : setExpandedIndustries;
             const showAll = mixTab === "channel" ? showAllChannels : mixTab === "product" ? showAllProducts : showAllIndustries;
@@ -638,23 +641,45 @@ export default function AnalyticsPage() {
               else setIndustryStageExpand(null);
             };
             const stageContentIds = mixTab === "channel" ? channelStageContentIds : mixTab === "product" ? productStageContentIds : industryStageContentIds;
-            const visible = showAll ? activeData : activeData.slice(0, 8);
+            const visible = searchLower ? activeData : (showAll ? activeData : activeData.slice(0, 8));
 
             return (
               <Card className="rounded-2xl border bg-card/70 shadow-sm backdrop-blur overflow-hidden" data-testid="card-mix-panel">
-                <div className="flex items-center gap-1 border-b border-border/40 px-1 pt-1">
-                  {tabs.map((t) => (
-                    <button
-                      key={t.id}
-                      className={`relative px-4 py-2.5 text-xs font-medium transition-colors cursor-pointer rounded-t-xl ${mixTab === t.id ? "text-foreground bg-card/80" : "text-muted-foreground hover:text-foreground"}`}
-                      onClick={() => setMixTab(t.id)}
-                      data-testid={`tab-mix-${t.id}`}
-                    >
-                      {t.label}
-                      <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0 rounded-md">{t.count}</Badge>
-                      {mixTab === t.id && <div className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[#00D657]" />}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between border-b border-border/40 px-1 pt-1">
+                  <div className="flex items-center gap-1">
+                    {tabs.map((t) => (
+                      <button
+                        key={t.id}
+                        className={`relative px-4 py-2.5 text-xs font-medium transition-colors cursor-pointer rounded-t-xl ${mixTab === t.id ? "text-foreground bg-card/80" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => { setMixTab(t.id); setMixSearch(""); }}
+                        data-testid={`tab-mix-${t.id}`}
+                      >
+                        {t.label}
+                        <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0 rounded-md">{t.count}</Badge>
+                        {mixTab === t.id && <div className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[#00D657]" />}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative mr-2 mb-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      value={mixSearch}
+                      onChange={(e) => setMixSearch(e.target.value)}
+                      placeholder={`Search ${mixTab}s...`}
+                      className="h-8 w-[200px] rounded-lg border bg-card/60 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-[#00D657]/40"
+                      data-testid="input-mix-search"
+                    />
+                    {mixSearch && (
+                      <button
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                        onClick={() => setMixSearch("")}
+                        data-testid="btn-clear-mix-search"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -777,7 +802,12 @@ export default function AnalyticsPage() {
                   </table>
                 </div>
 
-                {activeData.length > 8 && (
+                {activeData.length === 0 && searchLower && (
+                  <div className="px-4 py-8 text-center text-xs text-muted-foreground" data-testid="mix-search-empty">
+                    No {mixTab}s matching "{mixSearch.trim()}"
+                  </div>
+                )}
+                {!searchLower && activeData.length > 8 && (
                   <div className="border-t border-border/30 px-4 py-2">
                     <button
                       className="w-full text-center text-xs text-[#00D657] hover:underline py-1 cursor-pointer"
