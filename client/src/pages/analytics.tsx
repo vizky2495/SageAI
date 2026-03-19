@@ -1111,7 +1111,7 @@ export default function AnalyticsPage() {
                     <TableBody>
                       {ctPagedAssets.map((r, idx) => (
                         <TableRow key={`${r.content}-${idx}`} className="hover:bg-muted/30" data-testid={`ct-row-${idx}`}>
-                          <TableCell><div className="max-w-[260px] truncate text-sm font-medium">{r.content || "(untitled)"}</div></TableCell>
+                          <TableCell><div className="min-w-[300px] text-sm font-medium break-all">{r.content || "(untitled)"}</div></TableCell>
                           <TableCell><Badge className={`text-[10px] ${stageMeta[r.stage as StageKey]?.tone || ""}`}>{r.stage}</Badge></TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.utmChannel || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.productFranchise || "—"}</TableCell>
