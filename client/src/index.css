@@ -322,6 +322,14 @@
     border-radius: 3px;
   }
 
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   @keyframes hub-glow {
     0%, 100% { opacity: 0.5; transform: scaleX(1); }
     50% { opacity: 1; transform: scaleX(1.05); }
