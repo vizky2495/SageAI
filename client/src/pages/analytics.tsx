@@ -987,10 +987,9 @@ export default function AnalyticsPage() {
                                               <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
                                                 {mixTab === "channel" && item.product && <span>{item.product}</span>}
                                                 {mixTab === "product" && item.channel && <span>{item.channel}</span>}
-                                                {mixTab === "industry" && item.channel && <span>{item.channel}</span>}
                                                 {item.views > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>)}
                                                 {item.leads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.leads)} leads</span></>)}
-                                                {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} PDFs</span></>)}
+                                                {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} downloads</span></>)}
                                                 {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
                                               </div>
                                             </div>
