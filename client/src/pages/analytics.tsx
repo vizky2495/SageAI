@@ -18,6 +18,7 @@ import {
   Plug,
   Upload,
   ChevronDown,
+  ChevronRight,
   Check,
   X,
   Search,
@@ -109,6 +110,12 @@ export default function AnalyticsPage() {
   const [campaignFilter, setCampaignFilter] = useState<string>("ALL");
   const [industryStageExpand, setIndustryStageExpand] = useState<{ industry: string; stage: string } | null>(null);
   const [channelStageExpand, setChannelStageExpand] = useState<{ channel: string; stage: string } | null>(null);
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set());
+  const [showAllChannels, setShowAllChannels] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [showAllIndustries, setShowAllIndustries] = useState(false);
 
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [ctDropdownOpen, setCtDropdownOpen] = useState(false);
@@ -276,10 +283,10 @@ export default function AnalyticsPage() {
   }, [byStage, uploadDiagnostics]);
 
   const dimensionData = useMemo(() => {
-    const roll = new Map<string, { key: string; count: number; engaged: number; views: number; newUsers: number; returningUsers: number; contacts: number; mqls: number; qdcs: number; sqos: number; tofu: number; mofu: number; bofu: number }>();
+    const roll = new Map<string, { key: string; count: number; engaged: number; views: number; newUsers: number; returningUsers: number; contacts: number; mqls: number; qdcs: number; sqos: number; downloads: number; leads: number; tofu: number; mofu: number; bofu: number }>();
     for (const r of filtered) {
       const key = (r[dimension] as string | undefined) || "(unattributed)";
-      const cur = roll.get(key) || { key, count: 0, engaged: 0, views: 0, newUsers: 0, returningUsers: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, tofu: 0, mofu: 0, bofu: 0 };
+      const cur = roll.get(key) || { key, count: 0, engaged: 0, views: 0, newUsers: 0, returningUsers: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, downloads: 0, leads: 0, tofu: 0, mofu: 0, bofu: 0 };
       cur.count += 1;
       cur.engaged += r.engagedSessions ?? 0;
       cur.views += r.pageViews ?? 0;
@@ -289,14 +296,15 @@ export default function AnalyticsPage() {
       cur.mqls += r.mqls ?? 0;
       cur.qdcs += r.qdcs ?? 0;
       cur.sqos += r.sqos ?? 0;
+      cur.downloads += r.downloads ?? 0;
+      cur.leads += r.newContacts ?? 0;
       if (r.stage === "TOFU") cur.tofu += 1;
       else if (r.stage === "MOFU") cur.mofu += 1;
       else if (r.stage === "BOFU") cur.bofu += 1;
       roll.set(key, cur);
     }
     return Array.from(roll.values())
-      .sort((a, b) => b.sqos + b.mqls + b.contacts + b.newUsers + b.views + b.engaged - (a.sqos + a.mqls + a.contacts + a.newUsers + a.views + a.engaged))
-      .slice(0, 10);
+      .sort((a, b) => b.sqos + b.mqls + b.contacts + b.newUsers + b.views + b.engaged - (a.sqos + a.mqls + a.contacts + a.newUsers + a.views + a.engaged));
   }, [filtered, dimension]);
 
   const productList = useMemo(() => {
@@ -306,23 +314,25 @@ export default function AnalyticsPage() {
   }, [rows]);
 
   const productMixData = useMemo(() => {
-    const roll = new Map<string, { key: string; count: number; views: number; contacts: number; mqls: number; qdcs: number; sqos: number; tofu: number; mofu: number; bofu: number }>();
+    const roll = new Map<string, { key: string; count: number; views: number; contacts: number; mqls: number; qdcs: number; sqos: number; downloads: number; leads: number; tofu: number; mofu: number; bofu: number }>();
     const source = productFilter === "ALL" ? filtered : filtered.filter((r) => r.productFranchise === productFilter);
     for (const r of source) {
       const key = r.productFranchise || "(unattributed)";
-      const cur = roll.get(key) || { key, count: 0, views: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, tofu: 0, mofu: 0, bofu: 0 };
+      const cur = roll.get(key) || { key, count: 0, views: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, downloads: 0, leads: 0, tofu: 0, mofu: 0, bofu: 0 };
       cur.count += 1;
       cur.views += r.pageViews ?? 0;
       cur.contacts += r.formSubmissions ?? r.newContacts ?? 0;
       cur.mqls += r.mqls ?? 0;
       cur.qdcs += r.qdcs ?? 0;
       cur.sqos += r.sqos ?? 0;
+      cur.downloads += r.downloads ?? 0;
+      cur.leads += r.newContacts ?? 0;
       if (r.stage === "TOFU") cur.tofu += 1;
       else if (r.stage === "MOFU") cur.mofu += 1;
       else if (r.stage === "BOFU") cur.bofu += 1;
       roll.set(key, cur);
     }
-    return Array.from(roll.values()).sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls)).slice(0, 12);
+    return Array.from(roll.values()).sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls));
   }, [filtered, productFilter]);
 
   const productStageContentIds = useMemo(() => {
@@ -350,23 +360,25 @@ export default function AnalyticsPage() {
   }, [rows]);
 
   const industryMixData = useMemo(() => {
-    const roll = new Map<string, { key: string; count: number; views: number; contacts: number; mqls: number; qdcs: number; sqos: number; tofu: number; mofu: number; bofu: number }>();
+    const roll = new Map<string, { key: string; count: number; views: number; contacts: number; mqls: number; qdcs: number; sqos: number; downloads: number; leads: number; tofu: number; mofu: number; bofu: number }>();
     const source = industryFilter === "ALL" ? filtered : filtered.filter((r) => r.industry === industryFilter);
     for (const r of source) {
       const key = r.industry || "(unattributed)";
-      const cur = roll.get(key) || { key, count: 0, views: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, tofu: 0, mofu: 0, bofu: 0 };
+      const cur = roll.get(key) || { key, count: 0, views: 0, contacts: 0, mqls: 0, qdcs: 0, sqos: 0, downloads: 0, leads: 0, tofu: 0, mofu: 0, bofu: 0 };
       cur.count += 1;
       cur.views += r.pageViews ?? 0;
       cur.contacts += r.formSubmissions ?? r.newContacts ?? 0;
       cur.mqls += r.mqls ?? 0;
       cur.qdcs += r.qdcs ?? 0;
       cur.sqos += r.sqos ?? 0;
+      cur.downloads += r.downloads ?? 0;
+      cur.leads += r.newContacts ?? 0;
       if (r.stage === "TOFU") cur.tofu += 1;
       else if (r.stage === "MOFU") cur.mofu += 1;
       else if (r.stage === "BOFU") cur.bofu += 1;
       roll.set(key, cur);
     }
-    return Array.from(roll.values()).sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls)).slice(0, 12);
+    return Array.from(roll.values()).sort((a, b) => b.count + b.sqos + b.mqls - (a.count + a.sqos + a.mqls));
   }, [filtered, industryFilter]);
 
   const industryStageContentIds = useMemo(() => {
@@ -594,223 +606,244 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-channel-mix">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium" data-testid="text-channel-mix-title">Channel mix</div>
-                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-channel-mix-subtitle">Breakdown by UTM channel.</div>
-                </div>
-                <Badge variant="secondary" className="rounded-xl" data-testid="badge-channel-count">{dimensionData.length} {dimensionData.length === 1 ? "channel" : "channels"}</Badge>
-              </div>
-              <Separator className="my-3" />
-              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
-                {dimensionData.map((d) => {
-                  const isExpanded = (s: string) => channelStageExpand?.channel === d.key && channelStageExpand?.stage === s;
-                  const toggleStage = (s: string, e: React.MouseEvent) => { e.stopPropagation(); setChannelStageExpand(isExpanded(s) ? null : { channel: d.key, stage: s }); };
-                  const stageButtons = [
-                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
-                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
-                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
-                  ];
-                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
-                  return (
-                    <div key={d.key}>
-                      <div className="w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden" data-testid={`row-channel-${d.key.replace(/\s+/g, "-").toLowerCase()}`}>
-                        <div className="flex items-center justify-between gap-2">
+          {(() => {
+            const toggleSet = (set: Set<string>, key: string, setter: (s: Set<string>) => void) => {
+              const next = new Set(set);
+              if (next.has(key)) next.delete(key); else next.add(key);
+              setter(next);
+            };
+            const stageColors = { TOFU: "#00D657", MOFU: "#4ECDC4", BOFU: "#9B59B6" };
+            const MixAccordionCard = ({ d, isCardExpanded, onToggleCard, stageExpandState, onToggleStage, onCloseStage, stageContentIds, mixType }: {
+              d: { key: string; count: number; views: number; sqos: number; downloads: number; leads: number; tofu: number; mofu: number; bofu: number };
+              isCardExpanded: boolean;
+              onToggleCard: () => void;
+              stageExpandState: { key: string; stage: string } | null;
+              onToggleStage: (stage: string, e: React.MouseEvent) => void;
+              onCloseStage: () => void;
+              stageContentIds: { content: string; product?: string; channel?: string; cta?: string; views: number; sqos: number }[];
+              mixType: string;
+            }) => {
+              const slug = d.key.replace(/[\s\/]+/g, "-").toLowerCase();
+              const total = d.tofu + d.mofu + d.bofu;
+              const isStageExpanded = (s: string) => stageExpandState?.key === d.key && stageExpandState?.stage === s;
+              const expandedStageData = (["TOFU", "MOFU", "BOFU"] as const).find(s => isStageExpanded(s));
+              return (
+                <div key={d.key}>
+                  <div
+                    className={`w-full rounded-xl border transition-all cursor-pointer overflow-hidden ${isCardExpanded ? "bg-card/80 shadow-md border-border" : "bg-card/60 hover:shadow hover:bg-card/80"}`}
+                    data-testid={`row-${mixType}-${slug}`}
+                  >
+                    <div className="px-3 py-2.5" onClick={onToggleCard}>
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isCardExpanded ? "rotate-90" : ""}`} />
+                        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                           <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                            {uploadDiagnostics ? (
-                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            ) : (
-                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            )}
+                          <div className="flex items-center gap-2 text-xs shrink-0">
+                            <span className="text-muted-foreground">{d.count} assets</span>
+                            <span className="font-semibold text-foreground">{formatCompact(d.sqos)} SQOs</span>
                           </div>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>{d.count} assets</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          {stageButtons.map((sb) => (
-                            <button key={sb.stage} className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`} onClick={(e) => toggleStage(sb.stage, e)} title={`Show ${sb.stage} content IDs for ${d.key}`} data-testid={`btn-channel-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}>
-                              {sb.count} {sb.stage}
-                            </button>
-                          ))}
                         </div>
                       </div>
-                      {expandedStage && (
-                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-channel-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
-                              <span className="text-xs text-muted-foreground">{channelStageContentIds.length} content {channelStageContentIds.length === 1 ? "asset" : "assets"}</span>
-                            </div>
-                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setChannelStageExpand(null)} data-testid="btn-close-channel-drilldown">Close</button>
-                          </div>
-                          <div className="max-h-[200px] overflow-y-auto space-y-1">
-                            {channelStageContentIds.map((item, idx) => (
-                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`channel-drilldown-item-${idx}`}>
-                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
-                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                  {item.product && <span>{item.product}</span>}
-                                  {item.cta && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.cta}</span></>)}
-                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
-                                </div>
-                              </div>
-                            ))}
-                            {channelStageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-product-mix">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium" data-testid="text-product-mix-title">Product mix</div>
-                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-product-mix-subtitle">Breakdown by PRODUCT_FRANCHISE__C.</div>
-                </div>
-                <Badge variant="secondary" className="rounded-xl" data-testid="badge-product-count">{productMixData.length} {productMixData.length === 1 ? "product" : "products"}</Badge>
-              </div>
-              <Separator className="my-3" />
-              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
-                {productMixData.map((d) => {
-                  const isExpanded = (s: string) => productStageExpand?.product === d.key && productStageExpand?.stage === s;
-                  const toggleStage = (s: string, e: React.MouseEvent) => { e.stopPropagation(); setProductStageExpand(isExpanded(s) ? null : { product: d.key, stage: s }); };
-                  const stageButtons = [
-                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
-                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
-                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
-                  ];
-                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
-                  return (
-                    <div key={d.key}>
-                      <div className={`w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden ${productFilter === d.key ? "ring-1 ring-primary/40" : ""}`} onClick={() => setProductFilter(d.key === productFilter ? "ALL" : d.key)} data-testid={`row-product-${d.key.replace(/\s+/g, "-").toLowerCase()}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                            {uploadDiagnostics ? (
-                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            ) : (
-                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            )}
+                    {isCardExpanded && (
+                      <div className="px-3 pb-3 border-t border-border/30">
+                        <div className="grid grid-cols-3 gap-2 mt-3 mb-3">
+                          <div className="rounded-lg bg-muted/30 px-2.5 py-2 text-center">
+                            <div className="text-sm font-semibold">{formatCompact(d.views)}</div>
+                            <div className="text-[10px] text-muted-foreground">Page Views</div>
+                          </div>
+                          <div className="rounded-lg bg-muted/30 px-2.5 py-2 text-center">
+                            <div className="text-sm font-semibold">{formatCompact(d.leads)}</div>
+                            <div className="text-[10px] text-muted-foreground">Leads</div>
+                          </div>
+                          <div className="rounded-lg bg-muted/30 px-2.5 py-2 text-center">
+                            <div className="text-sm font-semibold">{formatCompact(d.downloads)}</div>
+                            <div className="text-[10px] text-muted-foreground">Downloads</div>
                           </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>{d.count} assets</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          {stageButtons.map((sb) => (
-                            <button key={sb.stage} className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`} onClick={(e) => toggleStage(sb.stage, e)} title={`Show ${sb.stage} content IDs for ${d.key}`} data-testid={`btn-product-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}>
-                              {sb.count} {sb.stage}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {expandedStage && (
-                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
-                              <span className="text-xs text-muted-foreground">{productStageContentIds.length} content {productStageContentIds.length === 1 ? "asset" : "assets"}</span>
-                            </div>
-                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setProductStageExpand(null)} data-testid="btn-close-product-drilldown">Close</button>
-                          </div>
-                          <div className="max-h-[200px] overflow-y-auto space-y-1">
-                            {productStageContentIds.map((item, idx) => (
-                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`product-drilldown-item-${idx}`}>
-                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
-                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                  {item.channel && <span>{item.channel}</span>}
-                                  {item.cta && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.cta}</span></>)}
-                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
-                                </div>
-                              </div>
-                            ))}
-                            {productStageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
 
-            <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-industry-mix">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium" data-testid="text-industry-mix-title">Industry mix</div>
-                  <div className="mt-1 text-xs text-muted-foreground" data-testid="text-industry-mix-subtitle">Breakdown by industry / vertical.</div>
-                </div>
-                <Badge variant="secondary" className="rounded-xl" data-testid="badge-industry-count">{industryMixData.length} {industryMixData.length === 1 ? "industry" : "industries"}</Badge>
-              </div>
-              <Separator className="my-3" />
-              <div className="grid gap-2 max-h-[420px] overflow-y-auto pr-1">
-                {industryMixData.map((d) => {
-                  const isExpanded = (s: string) => industryStageExpand?.industry === d.key && industryStageExpand?.stage === s;
-                  const toggleStage = (s: string, e: React.MouseEvent) => { e.stopPropagation(); setIndustryStageExpand(isExpanded(s) ? null : { industry: d.key, stage: s }); };
-                  const stageButtons = [
-                    { stage: "TOFU", count: d.tofu, color: "text-emerald-400", activeColor: "bg-emerald-400/20 ring-1 ring-emerald-400/40" },
-                    { stage: "MOFU", count: d.mofu, color: "text-sky-400", activeColor: "bg-sky-400/20 ring-1 ring-sky-400/40" },
-                    { stage: "BOFU", count: d.bofu, color: "text-orange-400", activeColor: "bg-orange-400/20 ring-1 ring-orange-400/40" },
-                  ];
-                  const expandedStage = stageButtons.find((sb) => isExpanded(sb.stage));
-                  return (
-                    <div key={d.key}>
-                      <div className={`w-full rounded-xl border bg-card/60 px-3 py-2.5 text-left transition hover:shadow hover:bg-card/80 cursor-pointer overflow-hidden ${industryFilter === d.key ? "ring-1 ring-primary/40" : ""}`} onClick={() => setIndustryFilter(d.key === industryFilter ? "ALL" : d.key)} data-testid={`row-industry-${d.key.replace(/\s+/g, "-").toLowerCase()}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-sm font-medium">{d.key}</div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                            {uploadDiagnostics ? (
-                              <><span>{formatCompact(d.views)} views</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            ) : (
-                              <><span>{formatCompact(d.mqls)} MQLs</span><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(d.sqos)} SQOs</span></>
-                            )}
+                        <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Stage Distribution</div>
+                        {total > 0 && (
+                          <div className="flex gap-0.5 h-5 rounded-lg overflow-hidden mb-2">
+                            {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                              const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
+                              const pct = (val / total) * 100;
+                              if (pct === 0) return null;
+                              return (
+                                <div
+                                  key={stage}
+                                  className="flex items-center justify-center text-[9px] font-semibold text-white"
+                                  style={{ width: `${pct}%`, backgroundColor: stageColors[stage] }}
+                                >
+                                  {pct >= 15 ? `${Math.round(pct)}%` : ""}
+                                </div>
+                              );
+                            })}
                           </div>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>{d.count} assets</span>
-                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                          {stageButtons.map((sb) => (
-                            <button key={sb.stage} className={`rounded-lg px-1.5 py-0.5 transition-colors cursor-pointer hover:bg-muted/50 ${sb.color} ${isExpanded(sb.stage) ? sb.activeColor : ""}`} onClick={(e) => toggleStage(sb.stage, e)} title={`Show ${sb.stage} content IDs for ${d.key}`} data-testid={`btn-industry-stage-${d.key.replace(/\s+/g, "-").toLowerCase()}-${sb.stage.toLowerCase()}`}>
-                              {sb.count} {sb.stage}
-                            </button>
-                          ))}
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                            const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
+                            if (val === 0) return null;
+                            const active = isStageExpanded(stage);
+                            return (
+                              <button
+                                key={stage}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer hover:opacity-80 ${active ? "ring-1 ring-offset-1" : ""}`}
+                                style={{ backgroundColor: stageColors[stage] + "20", color: stageColors[stage], ...(active ? { ringColor: stageColors[stage] } : {}) }}
+                                onClick={(e) => onToggleStage(stage, e)}
+                                data-testid={`btn-${mixType}-stage-${slug}-${stage.toLowerCase()}`}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageColors[stage] }} />
+                                {val} {stage}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                      {expandedStage && (
-                        <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-industry-${d.key.replace(/\s+/g, "-").toLowerCase()}-${expandedStage.stage.toLowerCase()}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className={`text-xs ${expandedStage.color} border-current/20`}>{expandedStage.stage}</Badge>
-                              <span className="text-xs text-muted-foreground">{industryStageContentIds.length} content {industryStageContentIds.length === 1 ? "asset" : "assets"}</span>
-                            </div>
-                            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setIndustryStageExpand(null)} data-testid="btn-close-industry-drilldown">Close</button>
-                          </div>
-                          <div className="max-h-[200px] overflow-y-auto space-y-1">
-                            {industryStageContentIds.map((item, idx) => (
-                              <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`industry-drilldown-item-${idx}`}>
-                                <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
-                                <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                  {item.product && <span>{item.product}</span>}
-                                  {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
-                                  {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
-                                </div>
-                              </div>
-                            ))}
-                            {industryStageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
-                          </div>
+                    )}
+                  </div>
+
+                  {isCardExpanded && expandedStageData && (
+                    <div className="mt-1 mb-1 ml-3 rounded-xl border bg-card/40 p-3" data-testid={`drilldown-${mixType}-${slug}-${expandedStageData.toLowerCase()}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="text-xs" style={{ backgroundColor: stageColors[expandedStageData] + "20", color: stageColors[expandedStageData] }}>{expandedStageData}</Badge>
+                          <span className="text-xs text-muted-foreground">{stageContentIds.length} content {stageContentIds.length === 1 ? "asset" : "assets"}</span>
                         </div>
-                      )}
+                        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={onCloseStage} data-testid={`btn-close-${mixType}-drilldown`}>Close</button>
+                      </div>
+                      <div className="max-h-[200px] overflow-y-auto space-y-1">
+                        {stageContentIds.map((item, idx) => (
+                          <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixType}-drilldown-item-${idx}`}>
+                            <div className="min-w-0 flex-1 truncate font-medium" title={item.content}>{item.content}</div>
+                            <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
+                              {item.product && <span>{item.product}</span>}
+                              {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
+                              {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
+                            </div>
+                          </div>
+                        ))}
+                        {stageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
+                      </div>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+              );
+            };
+            const visibleChannels = showAllChannels ? dimensionData : dimensionData.slice(0, 5);
+            const visibleProducts = showAllProducts ? productMixData : productMixData.slice(0, 5);
+            const visibleIndustries = showAllIndustries ? industryMixData : industryMixData.slice(0, 5);
+            return (
+              <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-channel-mix">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium" data-testid="text-channel-mix-title">Channel Mix</div>
+                      <div className="mt-1 text-xs text-muted-foreground" data-testid="text-channel-mix-subtitle">Breakdown by UTM channel.</div>
+                    </div>
+                    <Badge variant="secondary" className="rounded-xl" data-testid="badge-channel-count">{dimensionData.length} channels</Badge>
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="grid gap-2 max-h-[520px] overflow-y-auto pr-1">
+                    {visibleChannels.map((d) => (
+                      <MixAccordionCard
+                        key={d.key}
+                        d={d}
+                        isCardExpanded={expandedChannels.has(d.key)}
+                        onToggleCard={() => toggleSet(expandedChannels, d.key, setExpandedChannels)}
+                        stageExpandState={channelStageExpand ? { key: channelStageExpand.channel, stage: channelStageExpand.stage } : null}
+                        onToggleStage={(stage, e) => { e.stopPropagation(); setChannelStageExpand(channelStageExpand?.channel === d.key && channelStageExpand?.stage === stage ? null : { channel: d.key, stage }); }}
+                        onCloseStage={() => setChannelStageExpand(null)}
+                        stageContentIds={channelStageContentIds}
+                        mixType="channel"
+                      />
+                    ))}
+                  </div>
+                  {dimensionData.length > 5 && (
+                    <button
+                      className="mt-2 w-full text-center text-xs text-[#00D657] hover:underline py-1.5 cursor-pointer"
+                      onClick={() => setShowAllChannels(v => !v)}
+                      data-testid="btn-view-all-channels"
+                    >
+                      {showAllChannels ? "Show less" : `View all ${dimensionData.length} channels`}
+                    </button>
+                  )}
+                </Card>
+
+                <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-product-mix">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium" data-testid="text-product-mix-title">Product Mix</div>
+                      <div className="mt-1 text-xs text-muted-foreground" data-testid="text-product-mix-subtitle">Breakdown by product franchise.</div>
+                    </div>
+                    <Badge variant="secondary" className="rounded-xl" data-testid="badge-product-count">{productMixData.length} products</Badge>
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="grid gap-2 max-h-[520px] overflow-y-auto pr-1">
+                    {visibleProducts.map((d) => (
+                      <MixAccordionCard
+                        key={d.key}
+                        d={d}
+                        isCardExpanded={expandedProducts.has(d.key)}
+                        onToggleCard={() => toggleSet(expandedProducts, d.key, setExpandedProducts)}
+                        stageExpandState={productStageExpand ? { key: productStageExpand.product, stage: productStageExpand.stage } : null}
+                        onToggleStage={(stage, e) => { e.stopPropagation(); setProductStageExpand(productStageExpand?.product === d.key && productStageExpand?.stage === stage ? null : { product: d.key, stage }); }}
+                        onCloseStage={() => setProductStageExpand(null)}
+                        stageContentIds={productStageContentIds}
+                        mixType="product"
+                      />
+                    ))}
+                  </div>
+                  {productMixData.length > 5 && (
+                    <button
+                      className="mt-2 w-full text-center text-xs text-[#00D657] hover:underline py-1.5 cursor-pointer"
+                      onClick={() => setShowAllProducts(v => !v)}
+                      data-testid="btn-view-all-products"
+                    >
+                      {showAllProducts ? "Show less" : `View all ${productMixData.length} products`}
+                    </button>
+                  )}
+                </Card>
+
+                <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-hidden" data-testid="card-industry-mix">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium" data-testid="text-industry-mix-title">Industry Mix</div>
+                      <div className="mt-1 text-xs text-muted-foreground" data-testid="text-industry-mix-subtitle">Breakdown by industry / vertical.</div>
+                    </div>
+                    <Badge variant="secondary" className="rounded-xl" data-testid="badge-industry-count">{industryMixData.length} industries</Badge>
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="grid gap-2 max-h-[520px] overflow-y-auto pr-1">
+                    {visibleIndustries.map((d) => (
+                      <MixAccordionCard
+                        key={d.key}
+                        d={d}
+                        isCardExpanded={expandedIndustries.has(d.key)}
+                        onToggleCard={() => toggleSet(expandedIndustries, d.key, setExpandedIndustries)}
+                        stageExpandState={industryStageExpand ? { key: industryStageExpand.industry, stage: industryStageExpand.stage } : null}
+                        onToggleStage={(stage, e) => { e.stopPropagation(); setIndustryStageExpand(industryStageExpand?.industry === d.key && industryStageExpand?.stage === stage ? null : { industry: d.key, stage }); }}
+                        onCloseStage={() => setIndustryStageExpand(null)}
+                        stageContentIds={industryStageContentIds}
+                        mixType="industry"
+                      />
+                    ))}
+                  </div>
+                  {industryMixData.length > 5 && (
+                    <button
+                      className="mt-2 w-full text-center text-xs text-[#00D657] hover:underline py-1.5 cursor-pointer"
+                      onClick={() => setShowAllIndustries(v => !v)}
+                      data-testid="btn-view-all-industries"
+                    >
+                      {showAllIndustries ? "Show less" : `View all ${industryMixData.length} industries`}
+                    </button>
+                  )}
+                </Card>
               </div>
-            </Card>
-          </div>
+            );
+          })()}
 
           <Tabs defaultValue="by-content-type" className="w-full">
             <TabsList className="grid w-full grid-cols-3 rounded-2xl border bg-card/60 p-1 shadow-sm backdrop-blur">
