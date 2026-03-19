@@ -1063,7 +1063,7 @@ export default function AnalyticsPage() {
                                 <TableRow key={`${r.content}-${idx}`} className="hover:bg-muted/30" data-testid={`row-top-${s.toLowerCase()}-${idx}`}>
                                   <TableCell>
                                     <button
-                                      className="max-w-[220px] truncate text-sm font-medium text-left text-[#00D657] hover:underline cursor-pointer"
+                                      className="text-xs font-medium text-left text-[#00D657] hover:underline cursor-pointer break-all leading-snug"
                                       title={`View ${r.content} in Content Library`}
                                       onClick={() => navigate(`/content-library?search=${encodeURIComponent(r.content || "")}`)}
                                       data-testid={`link-top-content-${s.toLowerCase()}-${idx}`}
