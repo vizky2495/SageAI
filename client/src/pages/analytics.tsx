@@ -598,7 +598,6 @@ export default function AnalyticsPage() {
               <div className="flex items-center gap-x-3 flex-nowrap min-w-max overflow-x-auto scrollbar-none" style={{ scrollBehavior: "smooth" }}>
                 <div className="flex items-center gap-1.5 mr-1">
                   <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-medium" data-testid="text-filters">Filters</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Stage</span>
