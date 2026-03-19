@@ -1271,7 +1271,14 @@ export default function AnalyticsPage() {
                     <TableBody>
                       {ctPagedAssets.map((r, idx) => (
                         <TableRow key={`${r.content}-${idx}`} className="hover:bg-muted/30" data-testid={`ct-row-${idx}`}>
-                          <TableCell><div className="min-w-[300px] text-sm font-medium break-all">{r.content || "(untitled)"}</div></TableCell>
+                          <TableCell>
+                            <button
+                              className="min-w-[300px] text-sm font-medium break-all text-left text-[#00D657] hover:underline cursor-pointer"
+                              title={`View ${r.content} in Content Library`}
+                              onClick={() => navigate(`/content-library?search=${encodeURIComponent(r.content || "")}`)}
+                              data-testid={`link-ct-content-${idx}`}
+                            >{r.content || "(untitled)"}</button>
+                          </TableCell>
                           <TableCell><Badge className={`text-[10px] ${stageMeta[r.stage as StageKey]?.tone || ""}`}>{r.stage}</Badge></TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.utmChannel || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{r.productFranchise || "—"}</TableCell>
