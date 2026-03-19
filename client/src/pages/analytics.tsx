@@ -891,9 +891,9 @@ export default function AnalyticsPage() {
             </TabsContent>
 
             <TabsContent value="by-content-type" className="mt-4 space-y-4">
-              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-content-type-selector">
+              <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur overflow-visible relative z-20" data-testid="card-content-type-selector">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="relative" ref={(el) => { if (el) el.dataset.ctDropdown = "true"; }}>
+                  <div className="relative">
                     <button
                       onClick={() => setCtDropdownOpen(o => !o)}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-card/60 hover:bg-muted/50 text-sm font-medium transition-colors min-w-[200px]"
