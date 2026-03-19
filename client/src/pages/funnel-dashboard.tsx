@@ -464,54 +464,54 @@ export default function FunnelDashboard() {
 
           {rows.length > 0 && (
             <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="card-funnel-chart">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <div>
                   <div className="text-sm font-medium" data-testid="text-funnel-chart-title">Funnel progression</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {uploadDiagnostics ? "Content assets, page views, downloads, and leads by stage" : "Key metrics across the funnel"}
                   </div>
                 </div>
-                <Badge variant="secondary" className="rounded-xl">
-                  <TrendingUp className="mr-1.5 h-3 w-3" />
+                <Badge variant="secondary" className="rounded-xl text-[10px] px-2 py-0.5">
+                  <TrendingUp className="mr-1 h-3 w-3" />
                   {byStageAll.TOFU.length + byStageAll.MOFU.length + byStageAll.BOFU.length} classified
                 </Badge>
               </div>
-              <div className="h-[260px]" data-testid="chart-funnel">
+              <div className="h-[180px]" data-testid="chart-funnel">
                 {uploadDiagnostics ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
-                      <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
+                    <BarChart data={funnelSeries} margin={{ left: 0, right: 12, top: 4, bottom: 0 }} barCategoryGap="35%" barGap={2}>
+                      <CartesianGrid strokeDasharray="4 4" opacity={0.08} vertical={false} />
+                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis tickLine={false} axisLine={false} fontSize={10} width={48} tickFormatter={(v: number) => formatCompact(v)} tick={{ fill: "hsl(var(--muted-foreground))" }} tickCount={4} />
                       <ReTooltip
-                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                        contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
-                        labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
-                        formatter={(value: number) => formatCompact(value)}
+                        cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 11, color: "hsl(var(--foreground))", padding: "6px 10px" }}
+                        labelStyle={{ color: "hsl(var(--muted-foreground))", fontWeight: 600, marginBottom: 2, fontSize: 10 }}
+                        formatter={(value: unknown, name: string) => { const n = typeof value === "number" ? value : Number(value ?? 0); return [n.toLocaleString(), name]; }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                      <Bar dataKey="Content Assets" fill="#00D657" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Page Views" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Downloads" fill="#67E8F9" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Leads" fill="#006362" radius={[4, 4, 0, 0]} />
+                      <Legend iconSize={8} wrapperStyle={{ fontSize: 10, paddingTop: 0, lineHeight: "16px" }} />
+                      <Bar dataKey="Content Assets" fill="#00D657" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="Page Views" fill="#3B82F6" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="Downloads" fill="#67E8F9" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="Leads" fill="#006362" radius={[3, 3, 0, 0]} maxBarSize={28} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={funnelSeries} margin={{ left: 0, right: 16, top: 8, bottom: 4 }} barCategoryGap="20%">
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={12} />
-                      <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} tickFormatter={(v: number) => formatCompact(v)} />
+                    <BarChart data={funnelSeries} margin={{ left: 0, right: 12, top: 4, bottom: 0 }} barCategoryGap="35%" barGap={2}>
+                      <CartesianGrid strokeDasharray="4 4" opacity={0.08} vertical={false} />
+                      <XAxis dataKey="stage" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis tickLine={false} axisLine={false} fontSize={10} width={48} tickFormatter={(v: number) => formatCompact(v)} tick={{ fill: "hsl(var(--muted-foreground))" }} tickCount={4} />
                       <ReTooltip
-                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                        contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 12, fontSize: 12, color: "#fff" }}
-                        labelStyle={{ color: "#999", fontWeight: 600, marginBottom: 4 }}
-                        formatter={(value: number) => formatCompact(value)}
+                        cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 11, color: "hsl(var(--foreground))", padding: "6px 10px" }}
+                        labelStyle={{ color: "hsl(var(--muted-foreground))", fontWeight: 600, marginBottom: 2, fontSize: 10 }}
+                        formatter={(value: unknown, name: string) => { const n = typeof value === "number" ? value : Number(value ?? 0); return [n.toLocaleString(), name]; }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                      <Bar dataKey="Engaged Sessions" fill="#00D657" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="New Contacts" fill="#00A65C" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="MQLs" fill="#006362" radius={[4, 4, 0, 0]} />
+                      <Legend iconSize={8} wrapperStyle={{ fontSize: 10, paddingTop: 0, lineHeight: "16px" }} />
+                      <Bar dataKey="Engaged Sessions" fill="#00D657" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="New Contacts" fill="#00A65C" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="MQLs" fill="#006362" radius={[3, 3, 0, 0]} maxBarSize={28} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
