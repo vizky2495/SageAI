@@ -435,7 +435,7 @@ export default function AnalyticsPage() {
     const { product, stage } = productStageExpand;
     return filtered
       .filter((r) => (r.productFranchise || "(unattributed)") === product && r.stage === stage)
-      .map((r) => ({ content: r.content, channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0 }))
+      .map((r) => ({ content: r.content, channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0, downloads: r.downloads ?? 0, leads: r.newContacts ?? 0 }))
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
   }, [filtered, productStageExpand]);
 
@@ -444,7 +444,7 @@ export default function AnalyticsPage() {
     const { channel, stage } = channelStageExpand;
     return filtered
       .filter((r) => ((r[dimension] as string | undefined) || "(unattributed)") === channel && r.stage === stage)
-      .map((r) => ({ content: r.content, product: r.productFranchise || "", channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0 }))
+      .map((r) => ({ content: r.content, product: r.productFranchise || "", channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0, downloads: r.downloads ?? 0, leads: r.newContacts ?? 0 }))
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
   }, [filtered, channelStageExpand, dimension]);
 
@@ -481,7 +481,7 @@ export default function AnalyticsPage() {
     const { industry, stage } = industryStageExpand;
     return filtered
       .filter((r) => (r.industry || "(unattributed)") === industry && r.stage === stage)
-      .map((r) => ({ content: r.content, product: r.productFranchise || "", channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0 }))
+      .map((r) => ({ content: r.content, product: r.productFranchise || "", channel: r.utmChannel || "", cta: r.cta || "", views: r.pageViews ?? 0, contacts: r.formSubmissions ?? r.newContacts ?? 0, mqls: r.mqls ?? 0, sqos: r.sqos ?? 0, downloads: r.downloads ?? 0, leads: r.newContacts ?? 0 }))
       .sort((a, b) => b.sqos + b.mqls + b.views - (a.sqos + a.mqls + a.views));
   }, [filtered, industryStageExpand]);
 
@@ -877,8 +877,12 @@ export default function AnalyticsPage() {
                                           <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixTab}-drilldown-item-${idx}`}>
                                             <div className="min-w-0 flex-1 font-medium break-all" title={item.content}>{item.content}</div>
                                             <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                              {item.product && <span>{item.product}</span>}
-                                              {item.channel && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{item.channel}</span></>)}
+                                              {mixTab === "channel" && item.product && <span>{item.product}</span>}
+                                              {mixTab === "product" && item.channel && <span>{item.channel}</span>}
+                                              {mixTab === "industry" && item.channel && <span>{item.channel}</span>}
+                                              {item.views > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>)}
+                                              {item.leads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.leads)} leads</span></>)}
+                                              {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} PDFs</span></>)}
                                               {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
                                             </div>
                                           </div>
