@@ -1,6 +1,6 @@
 import TopNav from "@/components/top-nav";
 import PageChat from "@/components/page-chat";
-import AiInsightsBar from "@/components/ai-insights-bar";
+
 import JourneyUpload from "@/components/journey-upload";
 import JourneyMap from "@/components/journey-map";
 import { useMemo, useState } from "react";
@@ -555,8 +555,6 @@ export default function AnalyticsPage() {
               </div>
             </Card>
           </header>
-
-          <AiInsightsBar page="analytics" />
 
           <div className="mt-4 mb-4">
             <Button
