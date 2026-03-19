@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Check,
   X,
+  Search,
 } from "lucide-react";
 import {
   Bar,
@@ -115,6 +116,7 @@ export default function AnalyticsPage() {
   const [ctSortCol, setCtSortCol] = useState<"sqos" | "pageViews" | "downloads" | "newContacts" | "content" | "stage" | "utmChannel" | "productFranchise">("sqos");
   const [ctSortDir, setCtSortDir] = useState<"asc" | "desc">("desc");
   const [ctPage, setCtPage] = useState(0);
+  const [ctAssetSearch, setCtAssetSearch] = useState("");
   const CT_PAGE_SIZE = 20;
 
   const campaignList = useMemo(() => {
@@ -185,8 +187,14 @@ export default function AnalyticsPage() {
     return stages;
   }, [ctFiltered]);
 
+  const ctSearchFiltered = useMemo(() => {
+    if (!ctAssetSearch.trim()) return ctFiltered;
+    const q = ctAssetSearch.trim().toLowerCase();
+    return ctFiltered.filter(r => (r.content || "").toLowerCase().includes(q));
+  }, [ctFiltered, ctAssetSearch]);
+
   const ctSortedAssets = useMemo(() => {
-    const sorted = [...ctFiltered].sort((a, b) => {
+    const sorted = [...ctSearchFiltered].sort((a, b) => {
       let av: any, bv: any;
       if (ctSortCol === "content") { av = a.content || ""; bv = b.content || ""; }
       else if (ctSortCol === "stage") { av = a.stage; bv = b.stage; }
@@ -197,7 +205,7 @@ export default function AnalyticsPage() {
       return ctSortDir === "asc" ? av - bv : bv - av;
     });
     return sorted;
-  }, [ctFiltered, ctSortCol, ctSortDir]);
+  }, [ctSearchFiltered, ctSortCol, ctSortDir]);
 
   const ctTotalPages = Math.max(1, Math.ceil(ctSortedAssets.length / CT_PAGE_SIZE));
   const ctSafePage = Math.min(ctPage, ctTotalPages - 1);
@@ -1076,7 +1084,25 @@ export default function AnalyticsPage() {
               <Card className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid="ct-top-assets-table">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-sm font-medium">Content Assets{selectedContentTypes.length > 0 ? ` — ${selectedContentTypes.join(", ")}` : ""}</div>
-                  <Badge variant="secondary" className="rounded-xl">{ctSortedAssets.length} assets</Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={ctAssetSearch}
+                        onChange={(e) => { setCtAssetSearch(e.target.value); setCtPage(0); }}
+                        placeholder="Search assets..."
+                        className="h-8 w-[200px] rounded-lg border bg-card/60 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#00D657]/50"
+                        data-testid="input-ct-asset-search"
+                      />
+                      {ctAssetSearch && (
+                        <button onClick={() => { setCtAssetSearch(""); setCtPage(0); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="rounded-xl">{ctSortedAssets.length} assets</Badge>
+                  </div>
                 </div>
                 <div className="overflow-auto">
                   <Table>
@@ -1124,7 +1150,7 @@ export default function AnalyticsPage() {
                       {ctPagedAssets.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
-                            No assets found{selectedContentTypes.length > 0 ? ` for "${selectedContentTypes.join(", ")}"` : ""}
+                            No assets found{ctAssetSearch ? ` matching "${ctAssetSearch}"` : selectedContentTypes.length > 0 ? ` for "${selectedContentTypes.join(", ")}"` : ""}
                           </TableCell>
                         </TableRow>
                       )}
