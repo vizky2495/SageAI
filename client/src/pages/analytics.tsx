@@ -111,6 +111,7 @@ export default function AnalyticsPage() {
 
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
   const [ctDropdownOpen, setCtDropdownOpen] = useState(false);
+  const [showCtaCharts, setShowCtaCharts] = useState(false);
   const [ctSortCol, setCtSortCol] = useState<"sqos" | "pageViews" | "downloads" | "newContacts" | "content" | "stage" | "utmChannel" | "productFranchise">("sqos");
   const [ctSortDir, setCtSortDir] = useState<"asc" | "desc">("desc");
   const [ctPage, setCtPage] = useState(0);
@@ -537,38 +538,52 @@ export default function AnalyticsPage() {
 
           <AiInsightsBar page="analytics" />
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-3 mb-4">
-            {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((stage) => {
-              const stageColors: Record<string, string> = { TOFU: "hsl(var(--chart-1))", MOFU: "hsl(var(--chart-2))", BOFU: "hsl(var(--chart-3))" };
-              const data = ctaByStage[stage];
-              const chartHeight = Math.max(200, data.length * 32 + 40);
-              return (
-                <Card key={stage} className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid={`card-cta-${stage.toLowerCase()}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium" data-testid={`text-cta-stage-title-${stage.toLowerCase()}`}>{stage} — CTA Breakdown</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Count of content IDs per CTA type</div>
-                    </div>
-                    <Badge variant="secondary" className="rounded-xl" data-testid={`badge-cta-stage-${stage.toLowerCase()}`}>{data.reduce((s, d) => s + d.count, 0)} assets</Badge>
-                  </div>
-                  <div className="mt-3" style={{ height: chartHeight }} data-testid={`chart-cta-${stage.toLowerCase()}`}>
-                    {data.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data} layout="vertical" barCategoryGap={4} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
-                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} horizontal={false} />
-                          <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
-                          <YAxis type="category" dataKey="cta" tickLine={false} axisLine={false} width={120} tick={{ fontSize: 11 }} />
-                          <ReTooltip formatter={(value: number) => [value, "Content IDs"]} />
-                          <Bar dataKey="count" name="Content IDs" fill={stageColors[stage]} radius={[0, 6, 6, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No CTA data for {stage}</div>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
+          <div className="mt-4 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCtaCharts(v => !v)}
+              className="rounded-xl border bg-card/60 hover:bg-muted/50"
+              data-testid="btn-toggle-cta-charts"
+            >
+              <ChevronDown className={`h-4 w-4 mr-2 transition-transform ${showCtaCharts ? "rotate-180" : ""}`} />
+              {showCtaCharts ? "Hide" : "Show"} CTA Breakdown by Stage
+            </Button>
+            {showCtaCharts && (
+              <div className="mt-3 grid gap-4 lg:grid-cols-3">
+                {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((stage) => {
+                  const stageColors: Record<string, string> = { TOFU: "hsl(var(--chart-1))", MOFU: "hsl(var(--chart-2))", BOFU: "hsl(var(--chart-3))" };
+                  const data = ctaByStage[stage];
+                  const chartHeight = Math.max(200, data.length * 32 + 40);
+                  return (
+                    <Card key={stage} className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid={`card-cta-${stage.toLowerCase()}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-medium" data-testid={`text-cta-stage-title-${stage.toLowerCase()}`}>{stage} — CTA Breakdown</div>
+                          <div className="mt-1 text-xs text-muted-foreground">Count of content IDs per CTA type</div>
+                        </div>
+                        <Badge variant="secondary" className="rounded-xl" data-testid={`badge-cta-stage-${stage.toLowerCase()}`}>{data.reduce((s, d) => s + d.count, 0)} assets</Badge>
+                      </div>
+                      <div className="mt-3" style={{ height: chartHeight }} data-testid={`chart-cta-${stage.toLowerCase()}`}>
+                        {data.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={data} layout="vertical" barCategoryGap={4} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
+                              <CartesianGrid strokeDasharray="3 3" opacity={0.2} horizontal={false} />
+                              <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                              <YAxis type="category" dataKey="cta" tickLine={false} axisLine={false} width={120} tick={{ fontSize: 11 }} />
+                              <ReTooltip formatter={(value: number) => [value, "Content IDs"]} />
+                              <Bar dataKey="count" name="Content IDs" fill={stageColors[stage]} radius={[0, 6, 6, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No CTA data for {stage}</div>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
