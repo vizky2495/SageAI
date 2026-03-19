@@ -3,7 +3,7 @@ import PageChat from "@/components/page-chat";
 
 import JourneyUpload from "@/components/journey-upload";
 import JourneyMap from "@/components/journey-map";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch, queryClient } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -65,6 +65,99 @@ import {
   type TopContentRow,
   type TopByStage,
 } from "@/hooks/use-funnel-data";
+
+function SearchableSelect({ value, onValueChange, options, placeholder, allLabel, width = "w-[130px]", testId }: {
+  value: string;
+  onValueChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+  allLabel: string;
+  width?: string;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      setSearch("");
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q ? options.filter(o => o !== "ALL" && o.toLowerCase().includes(q)) : options.filter(o => o !== "ALL");
+  const displayLabel = value === "ALL" ? allLabel : (value.length > 16 ? value.slice(0, 15) + "…" : value);
+
+  return (
+    <div className="relative" ref={ref} data-testid={testId}>
+      <button
+        type="button"
+        className={`flex items-center justify-between h-8 ${width} rounded-xl border bg-background px-3 text-xs cursor-pointer hover:bg-muted/40 transition-colors`}
+        onClick={() => setOpen(!open)}
+        data-testid={`${testId}-trigger`}
+      >
+        <span className="truncate">{displayLabel}</span>
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 rounded-xl border bg-popover shadow-lg min-w-[200px] max-w-[280px] overflow-hidden" data-testid={`${testId}-dropdown`}>
+          <div className="p-1.5 border-b border-border/40">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${placeholder}...`}
+                className="w-full h-7 rounded-lg bg-muted/40 pl-7 pr-2 text-xs placeholder:text-muted-foreground/60 focus:outline-none"
+                data-testid={`${testId}-search`}
+              />
+            </div>
+          </div>
+          <div className="max-h-[220px] overflow-y-auto py-1">
+            {!q && (
+              <button
+                className={`flex items-center w-full px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer ${value === "ALL" ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                onClick={() => { onValueChange("ALL"); setOpen(false); }}
+                data-testid={`${testId}-option-all`}
+              >
+                {value === "ALL" && <Check className="mr-1.5 h-3 w-3 text-[#00D657]" />}
+                {allLabel}
+              </button>
+            )}
+            {filtered.map((opt) => (
+              <button
+                key={opt}
+                className={`flex items-center w-full px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer text-left ${value === opt ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                onClick={() => { onValueChange(opt); setOpen(false); }}
+                data-testid={`${testId}-option-${opt.replace(/\s+/g, "-").toLowerCase()}`}
+              >
+                {value === opt && <Check className="mr-1.5 h-3 w-3 text-[#00D657] shrink-0" />}
+                <span className="truncate">{opt}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && q && (
+              <div className="px-3 py-3 text-xs text-muted-foreground text-center">No matches</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AnalyticsPage() {
   const { rows, dataLoading, uploadDiagnostics } = useFunnelData();
@@ -502,16 +595,14 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Type</span>
-                  <Select value={contentTypeFilter} onValueChange={setContentTypeFilter}>
-                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-content-type"><SelectValue placeholder="All types" /></SelectTrigger>
-                    <SelectContent>
-                      {contentTypeOptions.map((opt) => (
-                        <SelectItem key={opt} value={opt} data-testid={`option-content-type-${opt.replace(/\s+/g, "-").toLowerCase()}`}>
-                          {opt === "ALL" ? "All types" : opt}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={contentTypeFilter}
+                    onValueChange={setContentTypeFilter}
+                    options={contentTypeOptions}
+                    placeholder="types"
+                    allLabel="All types"
+                    testId="select-content-type"
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Channel</span>
@@ -526,33 +617,37 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Product</span>
-                  <Select value={productFilter} onValueChange={setProductFilter}>
-                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-product-filter"><SelectValue placeholder="All products" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-product-all">All products</SelectItem>
-                      {productList.map((p) => (<SelectItem key={p} value={p} data-testid={`option-product-${p.replace(/\s+/g, "-").toLowerCase()}`}>{p}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={productFilter}
+                    onValueChange={setProductFilter}
+                    options={productList}
+                    placeholder="products"
+                    allLabel="All products"
+                    testId="select-product-filter"
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Industry</span>
-                  <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                    <SelectTrigger className="h-8 w-[130px] rounded-xl text-xs" data-testid="select-industry-filter"><SelectValue placeholder="All industries" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-industry-all">All industries</SelectItem>
-                      {industryList.map((ind) => (<SelectItem key={ind} value={ind} data-testid={`option-industry-${ind.replace(/\s+/g, "-").toLowerCase()}`}>{ind}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={industryFilter}
+                    onValueChange={setIndustryFilter}
+                    options={industryList}
+                    placeholder="industries"
+                    allLabel="All industries"
+                    testId="select-industry-filter"
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Campaign</span>
-                  <Select value={campaignFilter} onValueChange={setCampaignFilter}>
-                    <SelectTrigger className="h-8 w-[140px] rounded-xl text-xs" data-testid="select-campaign-filter"><SelectValue placeholder="All campaigns" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL" data-testid="option-campaign-all">All campaigns</SelectItem>
-                      {campaignList.map((c) => (<SelectItem key={c} value={c} data-testid={`option-campaign-${c.replace(/\s+/g, "-").toLowerCase()}`}>{c}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={campaignFilter}
+                    onValueChange={setCampaignFilter}
+                    options={campaignList}
+                    placeholder="campaigns"
+                    allLabel="All campaigns"
+                    width="w-[140px]"
+                    testId="select-campaign-filter"
+                  />
                 </div>
               </div>
             </Card>
