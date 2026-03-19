@@ -1938,8 +1938,9 @@ function StageCarousel({
 }
 
 export default function ContentLibrary() {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const initialSearch = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("search") || "" : "";
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, navigate] = useLocation();
   const [activeInlineChatId, setActiveInlineChatId] = useState<string | null>(null);

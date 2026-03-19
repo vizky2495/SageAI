@@ -222,7 +222,7 @@ export default function FunnelDashboard() {
     downloads: number;
     avgTime: number;
     stageBreakdown: { TOFU: number; MOFU: number; BOFU: number; UNKNOWN: number };
-    topAssets: { content: string; views: number; sqos: number }[];
+    topAssets: { content: string; views: number; sqos: number; leads: number; downloads: number }[];
   }
 
   const buildDrilldown = (items: typeof filtered, keyFn: (r: typeof filtered[0]) => string): DrilldownItem[] => {
@@ -248,8 +248,8 @@ export default function FunnelDashboard() {
       if (r.stage in cur.stageBreakdown) cur.stageBreakdown[r.stage as keyof typeof cur.stageBreakdown] += 1;
       const cid = r.content || r.id;
       const existing = cur.assetMap.get(cid);
-      if (existing) { existing.views += r.pageViews ?? 0; existing.sqos += r.sqos ?? 0; }
-      else cur.assetMap.set(cid, { content: cid, views: r.pageViews ?? 0, sqos: r.sqos ?? 0 });
+      if (existing) { existing.views += r.pageViews ?? 0; existing.sqos += r.sqos ?? 0; existing.leads += r.newContacts ?? 0; existing.downloads += r.downloads ?? 0; }
+      else cur.assetMap.set(cid, { content: cid, views: r.pageViews ?? 0, sqos: r.sqos ?? 0, leads: r.newContacts ?? 0, downloads: r.downloads ?? 0 });
     }
     return Array.from(roll.values()).map(c => ({
       key: c.key, count: c.count, views: c.views, sqos: c.sqos, leads: c.leads, downloads: c.downloads,
@@ -748,10 +748,18 @@ export default function FunnelDashboard() {
                   <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Top Assets</div>
                   <div className="space-y-1.5">
                     {drilldownOpen.item.topAssets.map((asset, i) => (
-                      <div key={asset.content} className="flex items-center justify-between rounded-lg border bg-card/60 px-3 py-2 text-xs" data-testid={`drilldown-asset-${i}`}>
-                        <div className="truncate font-medium max-w-[55%]" title={asset.content}>{asset.content}</div>
-                        <div className="flex items-center gap-3 text-muted-foreground shrink-0">
+                      <div key={asset.content} className="rounded-lg border bg-card/60 px-3 py-2 text-xs" data-testid={`drilldown-asset-${i}`}>
+                        <Link
+                          href={`/content-library?search=${encodeURIComponent(asset.content)}`}
+                          className="font-medium text-[#00D657] hover:underline break-all cursor-pointer"
+                          data-testid={`drilldown-asset-link-${i}`}
+                        >
+                          {asset.content}
+                        </Link>
+                        <div className="flex items-center gap-3 text-muted-foreground mt-1 flex-wrap">
                           <span>{formatCompact(asset.views)} views</span>
+                          <span>{formatCompact(asset.leads)} leads</span>
+                          <span>{formatCompact(asset.downloads)} downloads</span>
                           <span className="font-medium text-foreground">{formatCompact(asset.sqos)} SQOs</span>
                         </div>
                       </div>
