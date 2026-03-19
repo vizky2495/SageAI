@@ -934,41 +934,103 @@ export default function AnalyticsPage() {
                               </td>
                             </tr>
 
-                            {isExpanded && (
+                            {isExpanded && (() => {
+                              const stageEntries = (["TOFU", "MOFU", "BOFU"] as const)
+                                .map(s => ({ stage: s, val: s === "TOFU" ? d.tofu : s === "MOFU" ? d.mofu : d.bofu }))
+                                .filter(e => e.val > 0);
+                              const topItems = filtered
+                                .filter(r => {
+                                  if (mixTab === "channel") return (r.utmChannel || "(unattributed)") === d.key;
+                                  if (mixTab === "product") return (r.productFranchise || "(unattributed)") === d.key;
+                                  return (r.industry || "(unattributed)") === d.key;
+                                })
+                                .sort((a, b) => (b.sqos ?? 0) - (a.sqos ?? 0))
+                                .slice(0, 5);
+                              const topMaxViews = Math.max(...topItems.map(r => r.pageViews ?? 0), 1);
+                              return (
                               <tr data-testid={`expanded-${mixTab}-${slug}`}>
-                                <td colSpan={8} className="px-4 py-3 bg-muted/[0.07] border-b border-border/20">
-                                  <div className="space-y-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
-                                        const val = stage === "TOFU" ? d.tofu : stage === "MOFU" ? d.mofu : d.bofu;
-                                        if (val === 0) return null;
-                                        const active = activeStage === stage;
-                                        return (
-                                          <button
-                                            key={stage}
-                                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors cursor-pointer hover:opacity-80 ${active ? "ring-1 ring-offset-1" : ""}`}
-                                            style={{ backgroundColor: stageColors[stage] + "20", color: stageColors[stage] }}
-                                            onClick={(e) => { e.stopPropagation(); setStageExpand(d.key, stage); }}
-                                            data-testid={`btn-${mixTab}-stage-${slug}-${stage.toLowerCase()}`}
-                                          >
-                                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageColors[stage] }} />
-                                            {val} {stage}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                                <td colSpan={8} className="px-4 py-4 bg-muted/[0.04] border-b border-border/20">
+                                  <div className="space-y-4">
+                                    <div className="flex items-start gap-4">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-3 mb-3">
+                                          {stageEntries.map(({ stage, val }) => {
+                                            const active = activeStage === stage;
+                                            const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                            return (
+                                              <button
+                                                key={stage}
+                                                className={`group/stage relative rounded-xl px-3 py-2 transition-all cursor-pointer hover:scale-[1.02] ${active ? "ring-2 ring-offset-1 shadow-sm" : ""}`}
+                                                style={{ backgroundColor: stageColors[stage] + "12", ringColor: stageColors[stage] }}
+                                                onClick={(e) => { e.stopPropagation(); setStageExpand(d.key, stage); }}
+                                                data-testid={`btn-${mixTab}-stage-${slug}-${stage.toLowerCase()}`}
+                                              >
+                                                <div className="text-lg font-bold tabular-nums" style={{ color: stageColors[stage] }}>{val}</div>
+                                                <div className="text-[10px] text-muted-foreground">{stage} <span className="opacity-60">({pct}%)</span></div>
+                                                <div className="absolute bottom-0 left-1 right-1 h-[3px] rounded-full opacity-60" style={{ backgroundColor: stageColors[stage] }} />
+                                              </button>
+                                            );
+                                          })}
 
-                                    <div className="flex flex-wrap gap-3">
-                                      {[
-                                        { label: "Views / Asset", value: viewsPerAsset, highlight: false },
-                                        { label: "SQOs / Asset", value: sqosPerAsset, highlight: false },
-                                        { label: "Lead → SQO", value: leadToSqo, highlight: false },
-                                      ].map((m) => (
-                                        <div key={m.label} className="rounded-lg border border-border/30 bg-card/40 px-3 py-2 min-w-[100px]" data-testid={`mix-metric-${m.label.replace(/[\s\/→]+/g, "-").toLowerCase()}`}>
-                                          <div className={`text-sm font-semibold tabular-nums ${m.highlight ? "text-[#00D657]" : ""}`}>{m.value}</div>
-                                          <div className="text-[10px] text-muted-foreground mt-0.5">{m.label}</div>
+                                          <div className="ml-auto flex items-center gap-3">
+                                            {[
+                                              { label: "Views/Asset", value: viewsPerAsset, icon: "👁" },
+                                              { label: "SQOs/Asset", value: sqosPerAsset, icon: "🎯" },
+                                              { label: "Lead → SQO", value: leadToSqo, icon: "📈" },
+                                            ].map((m) => (
+                                              <div key={m.label} className="text-right" data-testid={`mix-metric-${m.label.replace(/[\s\/→]+/g, "-").toLowerCase()}`}>
+                                                <div className="text-sm font-semibold tabular-nums">{m.value}</div>
+                                                <div className="text-[10px] text-muted-foreground">{m.label}</div>
+                                              </div>
+                                            ))}
+                                          </div>
                                         </div>
-                                      ))}
+
+                                        {topItems.length > 0 && (
+                                          <div className="rounded-xl border border-border/30 bg-card/30 p-3">
+                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Top Performing Content</div>
+                                            <div className="space-y-2">
+                                              {topItems.map((item, idx) => {
+                                                const barPct = topMaxViews > 0 ? ((item.pageViews ?? 0) / topMaxViews) * 100 : 0;
+                                                return (
+                                                  <div key={`top-${item.content}-${idx}`} className="group/item" data-testid={`${mixTab}-top-item-${idx}`}>
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                      <span className="text-[10px] font-bold text-muted-foreground/50 w-4 shrink-0 tabular-nums">{idx + 1}</span>
+                                                      <button
+                                                        className="text-xs font-medium text-[#00D657] hover:underline cursor-pointer truncate max-w-[300px] text-left"
+                                                        title={`View ${item.content} in Content Library`}
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content || "")}`); }}
+                                                      >{item.content || "(untitled)"}</button>
+                                                      <div className="ml-auto flex items-center gap-3 text-[10px] text-muted-foreground shrink-0">
+                                                        <span>{formatCompact(item.pageViews ?? 0)} views</span>
+                                                        <span>{formatCompact(item.newContacts ?? 0)} leads</span>
+                                                        <span className="font-semibold text-foreground">{formatCompact(item.sqos ?? 0)} SQOs</span>
+                                                      </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="w-4 shrink-0" />
+                                                      <div className="flex-1 h-[6px] rounded-full bg-muted/30 overflow-hidden">
+                                                        <div
+                                                          className="h-full rounded-full transition-all duration-500"
+                                                          style={{
+                                                            width: `${Math.max(barPct, 2)}%`,
+                                                            background: `linear-gradient(90deg, ${stageColors[item.stage as keyof typeof stageColors] || "#00D657"}80, ${stageColors[item.stage as keyof typeof stageColors] || "#00D657"})`,
+                                                          }}
+                                                        />
+                                                      </div>
+                                                      <Badge className="text-[8px] px-1.5 py-0 border shrink-0" style={{
+                                                        backgroundColor: (stageColors[item.stage as keyof typeof stageColors] || "#888") + "15",
+                                                        color: stageColors[item.stage as keyof typeof stageColors] || "#888",
+                                                        borderColor: (stageColors[item.stage as keyof typeof stageColors] || "#888") + "30",
+                                                      }}>{item.stage}</Badge>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
 
                                     {activeStage && (
@@ -980,33 +1042,51 @@ export default function AnalyticsPage() {
                                           </div>
                                           <button className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); clearStageExpand(); }} data-testid={`btn-close-${mixTab}-drilldown`}>Close</button>
                                         </div>
-                                        <div className="max-h-[180px] overflow-y-auto space-y-1">
-                                          {stageContentIds.map((item, idx) => (
-                                            <div key={`${item.content}-${idx}`} className="flex items-center justify-between rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs" data-testid={`${mixTab}-drilldown-item-${idx}`}>
-                                              <button
-                                                className="min-w-0 flex-1 font-medium break-all text-left text-[#00D657] hover:underline cursor-pointer"
-                                                title={`View ${item.content} in Content Library`}
-                                                onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content)}`); }}
-                                                data-testid={`link-content-${idx}`}
-                                              >{item.content}</button>
-                                              <div className="flex items-center gap-2 text-muted-foreground shrink-0 ml-2">
-                                                {mixTab === "channel" && item.product && <span>{item.product}</span>}
-                                                {mixTab === "product" && item.channel && <span>{item.channel}</span>}
-                                                {item.views > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.views)} views</span></>)}
-                                                {item.leads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.leads)} leads</span></>)}
-                                                {item.downloads > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span>{formatCompact(item.downloads)} downloads</span></>)}
-                                                {item.sqos > 0 && (<><span className="h-1 w-1 rounded-full bg-muted-foreground/40" /><span className="font-medium text-foreground">{formatCompact(item.sqos)} SQOs</span></>)}
-                                              </div>
-                                            </div>
-                                          ))}
-                                          {stageContentIds.length === 0 && (<div className="text-center text-xs text-muted-foreground py-3">No content assets found.</div>)}
+                                        <div className="max-h-[200px] overflow-y-auto">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="text-muted-foreground border-b border-border/20">
+                                                <th className="text-left font-medium py-1.5 px-2">Content</th>
+                                                {mixTab === "channel" && <th className="text-left font-medium py-1.5 px-2">Product</th>}
+                                                {mixTab === "product" && <th className="text-left font-medium py-1.5 px-2">Channel</th>}
+                                                <th className="text-right font-medium py-1.5 px-2">Views</th>
+                                                <th className="text-right font-medium py-1.5 px-2">Leads</th>
+                                                <th className="text-right font-medium py-1.5 px-2">Downloads</th>
+                                                <th className="text-right font-medium py-1.5 px-2">SQOs</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {stageContentIds.map((item, idx) => (
+                                                <tr key={`${item.content}-${idx}`} className="border-b border-border/10 hover:bg-muted/10 transition-colors" data-testid={`${mixTab}-drilldown-item-${idx}`}>
+                                                  <td className="py-1.5 px-2">
+                                                    <button
+                                                      className="font-medium text-[#00D657] hover:underline cursor-pointer text-left truncate max-w-[280px] block"
+                                                      title={`View ${item.content} in Content Library`}
+                                                      onClick={(e) => { e.stopPropagation(); navigate(`/content-library?search=${encodeURIComponent(item.content)}`); }}
+                                                      data-testid={`link-content-${idx}`}
+                                                    >{item.content}</button>
+                                                  </td>
+                                                  {mixTab === "channel" && <td className="py-1.5 px-2 text-muted-foreground">{item.product || "—"}</td>}
+                                                  {mixTab === "product" && <td className="py-1.5 px-2 text-muted-foreground">{item.channel || "—"}</td>}
+                                                  <td className="text-right py-1.5 px-2 tabular-nums">{item.views > 0 ? formatCompact(item.views) : "—"}</td>
+                                                  <td className="text-right py-1.5 px-2 tabular-nums">{item.leads > 0 ? formatCompact(item.leads) : "—"}</td>
+                                                  <td className="text-right py-1.5 px-2 tabular-nums">{item.downloads > 0 ? formatCompact(item.downloads) : "—"}</td>
+                                                  <td className="text-right py-1.5 px-2 tabular-nums font-semibold">{item.sqos > 0 ? formatCompact(item.sqos) : "—"}</td>
+                                                </tr>
+                                              ))}
+                                              {stageContentIds.length === 0 && (
+                                                <tr><td colSpan={6} className="text-center text-muted-foreground py-3">No content assets found.</td></tr>
+                                              )}
+                                            </tbody>
+                                          </table>
                                         </div>
                                       </div>
                                     )}
                                   </div>
                                 </td>
                               </tr>
-                            )}
+                              );
+                            })()}
                           </React.Fragment>
                         );
                       })}
