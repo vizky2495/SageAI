@@ -16,6 +16,13 @@ import {
   ArrowLeftRight,
   MessageSquarePlus,
   ExternalLink,
+  X,
+  Eye,
+  Download,
+  Users,
+  Clock,
+  FileText,
+  ChevronRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/lib/queryClient";
@@ -206,35 +213,56 @@ export default function FunnelDashboard() {
     ];
   }, [tofuEngaged, tofuNewContacts, mofuBase, mofuNewContacts, mofuMqls, bofuSqos, uploadDiagnostics, byStageAll]);
 
-  const topChannels = useMemo(() => {
-    const roll = new Map<string, { key: string; count: number; views: number; sqos: number }>();
-    for (const r of filtered) {
-      const key = r.utmChannel || "(unattributed)";
-      const cur = roll.get(key) || { key, count: 0, views: 0, sqos: 0 };
-      cur.count += 1;
-      cur.views += r.pageViews ?? 0;
-      cur.sqos += r.sqos ?? 0;
-      roll.set(key, cur);
-    }
-    return Array.from(roll.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [filtered]);
+  interface DrilldownItem {
+    key: string;
+    count: number;
+    views: number;
+    sqos: number;
+    leads: number;
+    downloads: number;
+    avgTime: number;
+    stageBreakdown: { TOFU: number; MOFU: number; BOFU: number; UNKNOWN: number };
+    topAssets: { content: string; views: number; sqos: number }[];
+  }
 
-  const topProducts = useMemo(() => {
-    const roll = new Map<string, { key: string; count: number; views: number; sqos: number }>();
-    for (const r of filtered) {
-      const key = r.productFranchise || "(unattributed)";
-      const cur = roll.get(key) || { key, count: 0, views: 0, sqos: 0 };
+  const buildDrilldown = (items: typeof filtered, keyFn: (r: typeof filtered[0]) => string): DrilldownItem[] => {
+    const roll = new Map<string, {
+      key: string; count: number; views: number; sqos: number; leads: number; downloads: number;
+      timeTotal: number; timeCount: number;
+      stageBreakdown: { TOFU: number; MOFU: number; BOFU: number; UNKNOWN: number };
+      assetMap: Map<string, { content: string; views: number; sqos: number }>;
+    }>();
+    for (const r of items) {
+      const key = keyFn(r);
+      let cur = roll.get(key);
+      if (!cur) {
+        cur = { key, count: 0, views: 0, sqos: 0, leads: 0, downloads: 0, timeTotal: 0, timeCount: 0, stageBreakdown: { TOFU: 0, MOFU: 0, BOFU: 0, UNKNOWN: 0 }, assetMap: new Map() };
+        roll.set(key, cur);
+      }
       cur.count += 1;
       cur.views += r.pageViews ?? 0;
       cur.sqos += r.sqos ?? 0;
-      roll.set(key, cur);
+      cur.leads += r.newContacts ?? 0;
+      cur.downloads += r.downloads ?? 0;
+      if (typeof r.timeSpentSeconds === "number") { cur.timeTotal += r.timeSpentSeconds; cur.timeCount += 1; }
+      if (r.stage in cur.stageBreakdown) cur.stageBreakdown[r.stage as keyof typeof cur.stageBreakdown] += 1;
+      const cid = r.content || r.id;
+      const existing = cur.assetMap.get(cid);
+      if (existing) { existing.views += r.pageViews ?? 0; existing.sqos += r.sqos ?? 0; }
+      else cur.assetMap.set(cid, { content: cid, views: r.pageViews ?? 0, sqos: r.sqos ?? 0 });
     }
-    return Array.from(roll.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [filtered]);
+    return Array.from(roll.values()).map(c => ({
+      key: c.key, count: c.count, views: c.views, sqos: c.sqos, leads: c.leads, downloads: c.downloads,
+      avgTime: c.timeCount > 0 ? Math.round(c.timeTotal / c.timeCount) : 0,
+      stageBreakdown: c.stageBreakdown,
+      topAssets: Array.from(c.assetMap.values()).sort((a, b) => b.views - a.views).slice(0, 5),
+    })).sort((a, b) => b.count - a.count).slice(0, 5);
+  };
+
+  const topChannels = useMemo(() => buildDrilldown(filtered, r => r.utmChannel || "(unattributed)"), [filtered]);
+  const topProducts = useMemo(() => buildDrilldown(filtered, r => r.productFranchise || "(unattributed)"), [filtered]);
+
+  const [drilldownOpen, setDrilldownOpen] = useState<{ type: "channel" | "product"; item: DrilldownItem } | null>(null);
 
   if (dataLoading) {
     return (
@@ -500,14 +528,20 @@ export default function FunnelDashboard() {
                 </div>
                 <div className="grid gap-2">
                   {topChannels.map((ch) => (
-                    <div key={ch.key} className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2 text-sm" data-testid={`overview-channel-${ch.key.replace(/\s+/g, "-").toLowerCase()}`}>
+                    <button
+                      key={ch.key}
+                      onClick={() => setDrilldownOpen({ type: "channel", item: ch })}
+                      className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2 text-sm w-full text-left hover:bg-card/90 hover:border-primary/30 transition-colors cursor-pointer group"
+                      data-testid={`overview-channel-${ch.key.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
                       <div className="truncate font-medium">{ch.key}</div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-2">
                         <span>{ch.count} assets</span>
                         <span>{formatCompact(ch.views)} views</span>
                         <span className="font-medium text-foreground">{formatCompact(ch.sqos)} SQOs</span>
+                        <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <Link href="/analytics" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pt-2 border-t border-border/30" data-testid="link-view-all-channels">
@@ -522,14 +556,20 @@ export default function FunnelDashboard() {
                 </div>
                 <div className="grid gap-2">
                   {topProducts.map((p) => (
-                    <div key={p.key} className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2 text-sm" data-testid={`overview-product-${p.key.replace(/\s+/g, "-").toLowerCase()}`}>
+                    <button
+                      key={p.key}
+                      onClick={() => setDrilldownOpen({ type: "product", item: p })}
+                      className="flex items-center justify-between rounded-xl border bg-card/60 px-3 py-2 text-sm w-full text-left hover:bg-card/90 hover:border-primary/30 transition-colors cursor-pointer group"
+                      data-testid={`overview-product-${p.key.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
                       <div className="truncate font-medium">{p.key}</div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-2">
                         <span>{p.count} assets</span>
                         <span>{formatCompact(p.views)} views</span>
                         <span className="font-medium text-foreground">{formatCompact(p.sqos)} SQOs</span>
+                        <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <Link href="/analytics" className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pt-2 border-t border-border/30" data-testid="link-view-all-products">
@@ -612,6 +652,167 @@ export default function FunnelDashboard() {
           </div>
         </motion.div>
       </div>
+
+      {drilldownOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${drilldownOpen.type === "channel" ? "Channel" : "Product"} details: ${drilldownOpen.item.key}`}
+          onKeyDown={(e) => { if (e.key === "Escape") setDrilldownOpen(null); }}
+          data-testid="drilldown-overlay"
+        >
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDrilldownOpen(null)} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2 }}
+            className="relative z-10 w-full max-w-lg mx-4 rounded-2xl border bg-card shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+            data-testid={`drilldown-popup-${drilldownOpen.type}`}
+            tabIndex={-1}
+            ref={(el) => el?.focus()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b bg-card/80 backdrop-blur shrink-0">
+              <div>
+                <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                  {drilldownOpen.type === "channel" ? "Channel" : "Product"}
+                </div>
+                <div className="text-lg font-semibold mt-0.5">{drilldownOpen.item.key}</div>
+              </div>
+              <button
+                onClick={() => setDrilldownOpen(null)}
+                className="grid h-8 w-8 place-items-center rounded-lg hover:bg-muted transition-colors"
+                aria-label="Close drilldown"
+                data-testid="button-close-drilldown"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5 space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-assets">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <FileText className="h-3.5 w-3.5" /> Assets
+                  </div>
+                  <div className="text-xl font-semibold">{drilldownOpen.item.count}</div>
+                </div>
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-views">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <Eye className="h-3.5 w-3.5" /> Page Views
+                  </div>
+                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.views)}</div>
+                </div>
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-leads">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <Users className="h-3.5 w-3.5" /> Leads
+                  </div>
+                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.leads)}</div>
+                </div>
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-sqos">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <TrendingUp className="h-3.5 w-3.5" /> SQOs
+                  </div>
+                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.sqos)}</div>
+                </div>
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-downloads">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <Download className="h-3.5 w-3.5" /> Downloads
+                  </div>
+                  <div className="text-xl font-semibold">{formatCompact(drilldownOpen.item.downloads)}</div>
+                </div>
+                <div className="rounded-xl border bg-card/60 p-3" data-testid="drilldown-stat-avgtime">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <Clock className="h-3.5 w-3.5" /> Avg Time
+                  </div>
+                  <div className="text-xl font-semibold">
+                    {drilldownOpen.item.avgTime > 0
+                      ? drilldownOpen.item.avgTime >= 60
+                        ? `${Math.floor(drilldownOpen.item.avgTime / 60)}m ${drilldownOpen.item.avgTime % 60}s`
+                        : `${drilldownOpen.item.avgTime}s`
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Funnel Breakdown</div>
+                <div className="flex gap-1 h-6 rounded-lg overflow-hidden border">
+                  {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                    const val = drilldownOpen.item.stageBreakdown[stage];
+                    const knownTotal = drilldownOpen.item.stageBreakdown.TOFU + drilldownOpen.item.stageBreakdown.MOFU + drilldownOpen.item.stageBreakdown.BOFU;
+                    const pctVal = knownTotal > 0 ? (val / knownTotal) * 100 : 0;
+                    if (pctVal === 0) return null;
+                    const colors = { TOFU: "bg-[#00D657]", MOFU: "bg-[#4ECDC4]", BOFU: "bg-[#9B59B6]" };
+                    return (
+                      <div
+                        key={stage}
+                        className={`${colors[stage]} flex items-center justify-center text-[10px] font-semibold text-white`}
+                        style={{ width: `${pctVal}%`, minWidth: pctVal > 0 ? "28px" : 0 }}
+                        title={`${stage}: ${val} (${Math.round(pctVal)}%)`}
+                        data-testid={`drilldown-stage-bar-${stage.toLowerCase()}`}
+                      >
+                        {pctVal >= 10 ? `${stage} ${Math.round(pctVal)}%` : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
+                  {(["TOFU", "MOFU", "BOFU"] as const).map((stage) => {
+                    const val = drilldownOpen.item.stageBreakdown[stage];
+                    if (val === 0) return null;
+                    const dotColors = { TOFU: "bg-[#00D657]", MOFU: "bg-[#4ECDC4]", BOFU: "bg-[#9B59B6]" };
+                    return (
+                      <span key={stage} className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${dotColors[stage]}`} />
+                        {stage} {val}
+                      </span>
+                    );
+                  })}
+                  {drilldownOpen.item.stageBreakdown.UNKNOWN > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                      Unclassified {drilldownOpen.item.stageBreakdown.UNKNOWN}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {drilldownOpen.item.topAssets.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Top Assets</div>
+                  <div className="space-y-1.5">
+                    {drilldownOpen.item.topAssets.map((asset, i) => (
+                      <div key={asset.content} className="flex items-center justify-between rounded-lg border bg-card/60 px-3 py-2 text-xs" data-testid={`drilldown-asset-${i}`}>
+                        <div className="truncate font-medium max-w-[55%]" title={asset.content}>{asset.content}</div>
+                        <div className="flex items-center gap-3 text-muted-foreground shrink-0">
+                          <span>{formatCompact(asset.views)} views</span>
+                          <span className="font-medium text-foreground">{formatCompact(asset.sqos)} SQOs</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {drilldownOpen.item.count > 0 && (
+                <div className="pt-1">
+                  <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Conversion Rate</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold">
+                      {drilldownOpen.item.views > 0
+                        ? ((drilldownOpen.item.sqos / drilldownOpen.item.views) * 100).toFixed(2)
+                        : "0.00"}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">Views → SQOs</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <PageChat
         agent="cia"
