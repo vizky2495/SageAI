@@ -43,6 +43,10 @@ export type TopContentRow = {
   channel: string;
   value: number;
   newContacts: number;
+  pageViews: number;
+  downloads: number;
+  leads: number;
+  sqos: number;
 };
 
 export type TopByStage = Record<StageKey, TopContentRow[]>;

@@ -359,20 +359,22 @@ export default function AnalyticsPage() {
   const topByStage: TopByStage = useMemo(() => {
     const compute = (stage: StageKey) => {
       const base = byStage[stage];
-      const metricKey: keyof NormalizedRow = uploadDiagnostics
+      const metricKey: keyof NormalizedRow = stage === "TOFU"
         ? "pageViews"
-        : stage === "TOFU"
-          ? (sum(base, "newUsers") ? "newUsers" : "newContacts")
-          : stage === "MOFU" ? "mqls" : "sqos";
+        : stage === "MOFU" ? "newContacts" : "sqos";
 
-      const roll = new Map<string, { row: NormalizedRow; value: number; newContacts: number }>();
+      const roll = new Map<string, { row: NormalizedRow; value: number; newContacts: number; pageViews: number; downloads: number; leads: number; sqos: number }>();
       for (const r of base) {
         const k = r.content || "(no content)";
         const v = typeof r[metricKey] === "number" ? (r[metricKey] as number) : 0;
         const nc = typeof r.newContacts === "number" ? r.newContacts : 0;
+        const pv = typeof r.pageViews === "number" ? r.pageViews : 0;
+        const dl = typeof r.downloads === "number" ? r.downloads : 0;
+        const ld = typeof r.newContacts === "number" ? r.newContacts : 0;
+        const sq = typeof r.sqos === "number" ? r.sqos : 0;
         const prev = roll.get(k);
-        if (!prev) roll.set(k, { row: r, value: v, newContacts: nc });
-        else roll.set(k, { row: prev.row, value: prev.value + v, newContacts: prev.newContacts + nc });
+        if (!prev) roll.set(k, { row: r, value: v, newContacts: nc, pageViews: pv, downloads: dl, leads: ld, sqos: sq });
+        else roll.set(k, { row: prev.row, value: prev.value + v, newContacts: prev.newContacts + nc, pageViews: prev.pageViews + pv, downloads: prev.downloads + dl, leads: prev.leads + ld, sqos: prev.sqos + sq });
       }
 
       return Array.from(roll.values())
@@ -384,10 +386,14 @@ export default function AnalyticsPage() {
           channel: x.row.utmChannel || "—",
           value: x.value,
           newContacts: x.newContacts,
+          pageViews: x.pageViews,
+          downloads: x.downloads,
+          leads: x.leads,
+          sqos: x.sqos,
         }));
     };
     return { TOFU: compute("TOFU"), MOFU: compute("MOFU"), BOFU: compute("BOFU") };
-  }, [byStage, uploadDiagnostics]);
+  }, [byStage]);
 
   const dimensionData = useMemo(() => {
     const roll = new Map<string, { key: string; count: number; engaged: number; views: number; newUsers: number; returningUsers: number; contacts: number; mqls: number; qdcs: number; sqos: number; downloads: number; leads: number; tofu: number; mofu: number; bofu: number }>();
@@ -1028,35 +1034,44 @@ export default function AnalyticsPage() {
             <TabsContent value="top-content" className="mt-4">
               <div className="grid gap-4 lg:grid-cols-3">
                 {(["TOFU", "MOFU", "BOFU"] as StageKey[]).map((s) => {
-                  const metricLabel = uploadDiagnostics ? "Page Views" : s === "TOFU" ? "Engaged Sessions" : s === "MOFU" ? "MQLs" : "SQOs";
+                  const stageMetrics = s === "TOFU"
+                    ? { primary: "Page Views" as const, secondary: "Downloads" as const, getPrimary: (r: TopContentRow) => r.pageViews, getSecondary: (r: TopContentRow) => r.downloads }
+                    : s === "MOFU"
+                      ? { primary: "Leads" as const, secondary: "Downloads" as const, getPrimary: (r: TopContentRow) => r.leads, getSecondary: (r: TopContentRow) => r.downloads }
+                      : { primary: "SQOs" as const, secondary: "Leads" as const, getPrimary: (r: TopContentRow) => r.sqos, getSecondary: (r: TopContentRow) => r.leads };
                   return (
                     <Card key={s} className="rounded-2xl border bg-card/70 p-4 shadow-sm backdrop-blur" data-testid={`card-top-${s.toLowerCase()}`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="text-sm font-medium" data-testid={`text-top-title-${s.toLowerCase()}`}>Top {s} content</div>
-                          <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-top-subtitle-${s.toLowerCase()}`}>Ranked by {metricLabel}.</div>
+                          <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-top-subtitle-${s.toLowerCase()}`}>Ranked by {stageMetrics.primary}.</div>
                         </div>
-                        <Badge className={`border ${stageMeta[s].tone}`} data-testid={`badge-top-${s.toLowerCase()}`}>{metricLabel}</Badge>
+                        <Badge className={`border ${stageMeta[s].tone}`} data-testid={`badge-top-${s.toLowerCase()}`}>{stageMetrics.primary}</Badge>
                       </div>
                       <div className="mt-3">
                         <div className="rounded-2xl border bg-card/60">
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-[46%]">Content</TableHead>
-                                <TableHead className="w-[26%]">Product</TableHead>
-                                <TableHead className="text-right">Value</TableHead>
+                                <TableHead className="w-[40%]">Content</TableHead>
+                                <TableHead className="text-right">{stageMetrics.primary}</TableHead>
+                                <TableHead className="text-right">{stageMetrics.secondary}</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {topByStage[s].map((r: TopContentRow, idx: number) => (
                                 <TableRow key={`${r.content}-${idx}`} className="hover:bg-muted/30" data-testid={`row-top-${s.toLowerCase()}-${idx}`}>
                                   <TableCell>
-                                    <div className="max-w-[240px] truncate text-sm font-medium" data-testid={`text-content-${s.toLowerCase()}-${idx}`}>{r.content}</div>
+                                    <button
+                                      className="max-w-[220px] truncate text-sm font-medium text-left text-[#00D657] hover:underline cursor-pointer"
+                                      title={`View ${r.content} in Content Library`}
+                                      onClick={() => navigate(`/content-library?search=${encodeURIComponent(r.content || "")}`)}
+                                      data-testid={`link-top-content-${s.toLowerCase()}-${idx}`}
+                                    >{r.content}</button>
                                     <div className="mt-0.5 text-xs text-muted-foreground" data-testid={`text-channel-${s.toLowerCase()}-${idx}`}>{r.channel}</div>
                                   </TableCell>
-                                  <TableCell className="text-sm" data-testid={`text-product-${s.toLowerCase()}-${idx}`}>{r.product}</TableCell>
-                                  <TableCell className="text-right text-sm font-[650]" data-testid={`text-value-${s.toLowerCase()}-${idx}`}>{formatCompact(r.value)}</TableCell>
+                                  <TableCell className="text-right text-sm font-[650]" data-testid={`text-primary-${s.toLowerCase()}-${idx}`}>{formatCompact(stageMetrics.getPrimary(r))}</TableCell>
+                                  <TableCell className="text-right text-sm text-muted-foreground" data-testid={`text-secondary-${s.toLowerCase()}-${idx}`}>{formatCompact(stageMetrics.getSecondary(r))}</TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
