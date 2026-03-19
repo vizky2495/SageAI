@@ -748,7 +748,6 @@ export default function AnalyticsPage() {
             const tabs: { id: "channel" | "product" | "industry"; label: string; count: number }[] = [
               { id: "channel", label: "Channel", count: dimensionData.length },
               { id: "product", label: "Product", count: productMixData.length },
-              { id: "industry", label: "Industry", count: industryMixData.length },
             ];
             const rawData = mixTab === "channel" ? dimensionData : mixTab === "product" ? productMixData : industryMixData;
             const searchLower = mixSearch.trim().toLowerCase();
